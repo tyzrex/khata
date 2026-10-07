@@ -1,12 +1,8 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
-import { config } from "dotenv";
 import { getPool } from "@/db/client";
 import { importTransactions } from "@/db/ledger";
 import { seedSampleBook } from "@/db/shares";
-
-config({ path: ".env" });
-config({ path: ".env.local" });
 
 if (!process.env.DATABASE_URL && process.env.DATABASE_URL_UNPOOLED) {
   process.env.DATABASE_URL = process.env.DATABASE_URL_UNPOOLED;

@@ -4,20 +4,22 @@ A personal NPR ledger. It runs as a Next.js app, stores entries in Neon Postgres
 
 ## Run locally
 
+This project uses [Bun](https://bun.sh) (1.4+) as its package manager and script runner. Node 20.9+ is still needed because Next.js builds and serves under Node.
+
 ```bash
-npm install
+bun install
 cp .env.example .env.local
 # paste your Neon URLs into .env.local
-npm run db:migrate
-npm run db:seed
-npm run dev
+bun run db:migrate
+bun run db:seed
+bun run dev
 ```
 
 Open [http://127.0.0.1:3847](http://127.0.0.1:3847).
 
-`npm run db:seed` loads `seed/week-of-2026-10-05.json`. For the week of 5–11 October 2026 that file is **NPR 820 spent** and **NPR 3,600 credited** (income 1,600 + the NIMB transfer 2,000). Running the seed again updates those rows instead of duplicating them.
+`bun run db:seed` loads `seed/week-of-2026-10-05.json`. For the week of 5–11 October 2026 that file is **NPR 820 spent** and **NPR 3,600 credited** (income 1,600 + the NIMB transfer 2,000). Running the seed again updates those rows instead of duplicating them.
 
-`npm test` checks that week math without a database.
+`bun run test` checks that week math without a database.
 
 ## Neon
 
@@ -30,15 +32,15 @@ Open [http://127.0.0.1:3847](http://127.0.0.1:3847).
 Apply the schema:
 
 ```bash
-npm run db:migrate
+bun run db:migrate
 ```
 
-That runs the SQL in `drizzle/`. Generate a new migration after a schema change with `npm run db:generate`, then migrate again.
+That runs the SQL in `drizzle/`. Generate a new migration after a schema change with `bun run db:generate`, then migrate again.
 
 Optional sample data, once `DATABASE_URL` is set:
 
 ```bash
-npm run db:seed
+bun run db:seed
 ```
 
 The seed script falls back to `DATABASE_URL_UNPOOLED` if `DATABASE_URL` is empty.
@@ -49,13 +51,13 @@ Khata uses [Better Auth](https://www.better-auth.com). Email and password work w
 
 Sessions are httpOnly cookies (`better-auth.session_token`, prefixed `__Secure-` on HTTPS), `SameSite=Lax`, and `Secure` in production. Better Auth checks the request origin on sign-in and sign-up. The signed cookie cache lasts five minutes so most page loads skip a database read. A route still calls `getSession` before it reads the ledger.
 
-Every ledger and share row stores `user_id`. Queries only return the signed-in account. `npm run db:seed` writes rows with a null owner; the first account that signs in adopts those rows. A second account gets its own empty book. The sample week uses stable ids, so only one account can hold that sample.
+Every ledger and share row stores `user_id`. Queries only return the signed-in account. `bun run db:seed` writes rows with a null owner; the first account that signs in adopts those rows. A second account gets its own empty book. The sample week uses stable ids, so only one account can hold that sample.
 
 Password reset email is not wired up. Add an email sender later if you want reset links. Until then, keep the password, or sign in with Google using the same verified address (Google is a trusted provider for account linking).
 
 ## Deploy on Vercel
 
-`vercel.json` sets the build command to `npm run build`. That runs Next.js and then Serwist, which writes `public/sw.js`. Vercel’s default Next.js command is only `next build`, so leave this override in place or the service worker will be missing. Migrations are not part of the build. A deploy can succeed before the database exists; the app will answer 503 until the tables are there.
+`vercel.json` sets the install command to `bun install --frozen-lockfile` and the build command to `bun run build`. That runs Next.js and then Serwist, which writes `public/sw.js`. Vercel’s default Next.js command is only `next build`, so leave this override in place or the service worker will be missing. Migrations are not part of the build. A deploy can succeed before the database exists; the app will answer 503 until the tables are there.
 
 In the Vercel project, set:
 
@@ -75,8 +77,8 @@ Node 20.9 or newer. The app uses `node-postgres`. On Vercel Fluid, `attachDataba
 Apply the schema from a machine that has the Neon URLs. A variable already in the shell wins over `.env.local`, so a local file does not point this at the wrong database:
 
 ```bash
-DATABASE_URL_UNPOOLED='postgresql://USER:PASSWORD@ep-example.region.aws.neon.tech/neondb?sslmode=require' npm run db:migrate
-DATABASE_URL='postgresql://USER:PASSWORD@ep-example-pooler.region.aws.neon.tech/neondb?sslmode=require' npm run db:seed
+DATABASE_URL_UNPOOLED='postgresql://USER:PASSWORD@ep-example.region.aws.neon.tech/neondb?sslmode=require' bun run db:migrate
+DATABASE_URL='postgresql://USER:PASSWORD@ep-example-pooler.region.aws.neon.tech/neondb?sslmode=require' bun run db:seed
 ```
 
 `db:migrate` applies `drizzle/0000_pink_husk.sql` (categories, transactions), `drizzle/0001_share_book.sql` (people, groups, splits, settlements), and `drizzle/0002_sparkling_colonel_america.sql` (Better Auth tables, plus `user_id` on the ledger). `db:seed` is idempotent: bank rows upsert on `externalId`, and the sample share book upserts on its stable ids. Those seeded rows stay unowned until the first sign-in claims them.
@@ -94,7 +96,7 @@ There is no Neon URL in this workspace. The commands above are what to run once 
    - `http://127.0.0.1:3847/api/auth/callback/google`
    - `http://localhost:3847/api/auth/callback/google`
    - `https://YOUR_PRODUCTION_DOMAIN/api/auth/callback/google`
-4. Copy the client id and secret into `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` locally and on Vercel. Restart `npm run dev` after changing `.env.local`.
+4. Copy the client id and secret into `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` locally and on Vercel. Restart `bun run dev` after changing `.env.local`.
 5. Set `BETTER_AUTH_URL` to the origin you actually open. Locally that is `http://127.0.0.1:3847` if you follow the link above. A mismatch here makes Google’s redirect fail.
 6. Preview deployments each have their own host. Leave `BETTER_AUTH_URL` empty on the Preview environment. Add that preview origin and `https://<preview-host>/api/auth/callback/google` in Google Cloud if you need Google on that URL, or use a stable branch alias.
 
@@ -157,7 +159,7 @@ People, groups, shared expenses, and settlements live in their own tables. They 
 - Equal, exact, shares, and percent splits. Amounts are stored in paisa so a split always adds up to the total.
 - Balances are per person: you owe, you are owed, and what other people owe each other. A simplified list shows the fewest payments with the same nets.
 - A settlement can point at one bank transaction. Cine Mark is linked to the two Nabil charges the same way, without merging those charges into the share total.
-- `npm run db:seed` and **Load sample week** load both the bank week and Biker Gang (You, Sameer, Anita, Rajan).
+- `bun run db:seed` and **Load sample week** load both the bank week and Biker Gang (You, Sameer, Anita, Rajan).
 
 After the sample, you owe Anita NPR 2,000, Sameer owes you NPR 1,425, and Rajan owes you NPR 300.
 
@@ -175,7 +177,7 @@ Members see the group's expenses, balances, and members, and can add or edit sha
 
 Optional env vars: `RESEND_API_KEY` and `INVITE_FROM_EMAIL` (for example `Khata <invites@your-domain.example>`). Without a key the invite link is still created and can be shared by hand.
 
-Migration `0003_multi_user_invites` adds `group_invites`, `group_user_access`, and `people.linked_user_id`, and backfills owner rows for existing groups. Run `npm run db:migrate`.
+Migration `0003_multi_user_invites` adds `group_invites`, `group_user_access`, and `people.linked_user_id`, and backfills owner rows for existing groups. Run `bun run db:migrate`.
 
 ## Other routes
 
