@@ -3,19 +3,25 @@ import { redirect } from "next/navigation";
 import { LoginForm } from "@/components/login-form";
 import { Mark } from "@/components/mark";
 import { googleAuthEnabled } from "@/lib/auth";
+import { safeNext } from "@/lib/return-path";
 import { readPageSession } from "@/lib/session";
 
-export default function LoginPage() {
+type Props = { searchParams: Promise<{ next?: string | string[] }> };
+
+export default function LoginPage({ searchParams }: Props) {
   return (
     <Suspense fallback={<LoginFallback />}>
-      <LoginGate />
+      <LoginGate searchParams={searchParams} />
     </Suspense>
   );
 }
 
-async function LoginGate() {
+async function LoginGate({ searchParams }: Props) {
   const session = await readPageSession();
-  if (session) redirect("/");
+  if (session) {
+    const { next } = await searchParams;
+    redirect(safeNext(Array.isArray(next) ? next[0] : next));
+  }
   return <LoginForm googleEnabled={googleAuthEnabled()} />;
 }
 

@@ -82,6 +82,20 @@ export function useShares() {
     createGroup: (name: string, memberIds: string[]) => send("/api/groups", "POST", { name, memberIds }),
     updateGroup: (id: string, input: { name?: string; memberIds?: string[] }) => send(`/api/groups/${id}`, "PATCH", input),
     deleteGroup: (id: string) => send(`/api/groups/${id}`, "DELETE"),
+    createInvite: async (groupId: string, input: { email?: string; personId?: string }) => {
+      const response = await fetch(`/api/groups/${groupId}/invite`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(input),
+      });
+      if (response.status === 401) {
+        router.push("/login");
+        throw new Error("Sign in required.");
+      }
+      const body = (await readBody(response)) as { error?: string; url?: string; emailSent?: boolean } | null;
+      if (!response.ok || !body?.url) throw new Error(body?.error ?? "Could not create that invite.");
+      return { url: body.url, emailSent: Boolean(body.emailSent) };
+    },
     saveExpense: (input: unknown, id?: string) => send(id ? `/api/shared-expenses/${id}` : "/api/shared-expenses", id ? "PATCH" : "POST", input),
     deleteExpense: (id: string) => send(`/api/shared-expenses/${id}`, "DELETE"),
     saveSettlement: (input: unknown) => send("/api/settlements", "POST", input),

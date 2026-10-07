@@ -45,6 +45,7 @@ export function ShareExpenseDialog({
   transactions,
   expense,
   groupId,
+  groupLocked = false,
   onOpenChange,
   onSave,
   onDelete,
@@ -55,6 +56,7 @@ export function ShareExpenseDialog({
   transactions: TransactionDto[];
   expense?: Expense;
   groupId?: string | null;
+  groupLocked?: boolean;
   onOpenChange: (open: boolean) => void;
   onSave: (input: unknown, id?: string) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
@@ -154,14 +156,16 @@ export function ShareExpenseDialog({
 
   const bankLines = [...transactions].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 12);
   const peopleItems = Object.fromEntries(book.people.map((person) => [person.id, person.name]));
-  const groupItems = { none: "No group", ...Object.fromEntries(book.groups.map((group) => [group.id, group.name])) };
+  const groupItems = { ...(groupLocked ? {} : { none: "No group" }), ...Object.fromEntries(book.groups.map((group) => [group.id, group.name])) };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[88dvh] overflow-y-auto sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>{expense ? "Edit shared expense" : "Shared expense"}</DialogTitle>
-          <DialogDescription>The bank ledger stays separate. Linking a line only marks that it paid this split.</DialogDescription>
+          <DialogDescription>
+            {groupLocked ? "Everyone in the group sees this expense and the updated balances." : "The bank ledger stays separate. Linking a line only marks that it paid this split."}
+          </DialogDescription>
         </DialogHeader>
         <form onSubmit={(event) => void submit(event)}>
           <FieldGroup>
@@ -202,7 +206,7 @@ export function ShareExpenseDialog({
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="none">No group</SelectItem>
+                    {groupLocked ? null : <SelectItem value="none">No group</SelectItem>}
                     {book.groups.map((group) => (
                       <SelectItem key={group.id} value={group.id}>
                         {group.name}
