@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -27,6 +28,7 @@ export function Ledger({
   onFilter,
   onEdit,
   onAdd,
+  links,
 }: {
   transactions: TransactionDto[];
   categories: CategoryDto[];
@@ -35,6 +37,7 @@ export function Ledger({
   onFilter: (filters: LedgerFilters) => void;
   onEdit: (transaction: TransactionDto) => void;
   onAdd: () => void;
+  links: { transactionId: string; kind: "settlement" | "expense"; title: string; shareAmount: number; bankAmount: number | null }[];
 }) {
   const [query, setQuery] = useState(filters.q);
   const [syncedQuery, setSyncedQuery] = useState(filters.q);
@@ -55,8 +58,8 @@ export function Ledger({
     <div className="rise">
       <div className="flex items-end justify-between gap-3">
         <div>
-          <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Ledger</p>
-          <h1 className="figure mt-2 text-4xl">Every line</h1>
+          <h1 className="text-lg font-medium tracking-tight">Ledger</h1>
+          <p className="text-sm text-muted-foreground">Bank and cash lines. Shared splits stay in their own book.</p>
         </div>
         <Button type="button" className="h-10 px-4" onClick={onAdd}>
           Add entry
@@ -66,6 +69,7 @@ export function Ledger({
       <div className="mt-6 grid gap-3 md:grid-cols-[1.4fr_repeat(4,minmax(0,0.7fr))]">
         <Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search merchant, note, account" className="h-10" aria-label="Search entries" />
         <Select
+          items={{ all: "All types", expense: "Expense", income: "Income", transfer: "Transfer" }}
           value={filters.type || "all"}
           onValueChange={(value) => onFilter({ ...filters, type: value && value !== "all" ? (value as TxType) : "" })}
         >
@@ -81,7 +85,11 @@ export function Ledger({
             ))}
           </SelectContent>
         </Select>
-        <Select value={filters.category || "all"} onValueChange={(value) => onFilter({ ...filters, category: !value || value === "all" ? "" : value })}>
+        <Select
+          items={{ all: "All categories", ...Object.fromEntries(categories.map((category) => [category.name, category.name])) }}
+          value={filters.category || "all"}
+          onValueChange={(value) => onFilter({ ...filters, category: !value || value === "all" ? "" : value })}
+        >
           <SelectTrigger className="w-full" aria-label="Filter by category">
             <SelectValue placeholder="Category" />
           </SelectTrigger>
@@ -127,6 +135,19 @@ export function Ledger({
                             {transaction.account}
                           </span>
                           {transaction.note ? <span className="mt-1 block text-xs leading-5 text-muted-foreground">{transaction.note}</span> : null}
+                          {links
+                            .filter((link) => link.transactionId === transaction.id)
+                            .map((link) => (
+                              <span key={link.kind + link.title} className="mt-1.5 flex flex-wrap items-center gap-2">
+                                <Badge variant="outline">{link.kind === "settlement" ? "Settlement" : "Shared"}</Badge>
+                                <span className="text-xs text-muted-foreground">
+                                  {link.title}
+                                  {link.kind === "settlement" && link.bankAmount != null && link.bankAmount !== link.shareAmount
+                                    ? ` · book ${formatNpr(link.shareAmount)}`
+                                    : ""}
+                                </span>
+                              </span>
+                            ))}
                         </span>
                         <span className={incoming ? "figure shrink-0 text-sm text-credit" : "figure shrink-0 text-sm"}>
                           {formatNpr(transaction.amount, incoming ? "in" : "out")}

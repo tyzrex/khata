@@ -73,12 +73,11 @@ export function SyncView({
 
   return (
     <div className="rise max-w-2xl">
-      <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Sync</p>
-      <h1 className="figure mt-2 text-4xl">Bring in the day</h1>
-      <p className="mt-4 text-sm leading-6 text-muted-foreground">
-        A daily routine can POST bank and Splitwise lines to <code className="text-foreground">/api/import</code>. Rows
-        that share an <code className="text-foreground">externalId</code> — a Gmail message id, for example — are updated
-        in place, so running the sync twice does not double-charge the book.
+      <h1 className="text-lg font-medium tracking-tight">Sync</h1>
+      <p className="mt-2 text-sm leading-6 text-muted-foreground">
+        A daily routine can POST bank lines to <code className="text-foreground">/api/import</code>. Rows that share an{" "}
+        <code className="text-foreground">externalId</code> update in place. This import does not create friend splits. Link a
+        bank credit from Settle up when it matches a payment between people.
       </p>
       {passcodeRequired ? (
         <p className="mt-3 text-sm text-muted-foreground">

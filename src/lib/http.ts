@@ -1,5 +1,7 @@
 import { unstable_rethrow } from "next/navigation";
 import { connection } from "next/server";
+import { NotFoundError } from "@/db/shares";
+import { ShareInputError } from "@/lib/split";
 
 export async function beginRequest() {
   await connection();
@@ -7,6 +9,12 @@ export async function beginRequest() {
 
 export function badRequest(message: string, details?: unknown) {
   return Response.json(details === undefined ? { error: message } : { error: message, details }, { status: 400 });
+}
+
+export function shareError(error: unknown) {
+  if (error instanceof ShareInputError) return badRequest(error.message);
+  if (error instanceof NotFoundError) return Response.json({ error: error.message }, { status: 404 });
+  return jsonError(error);
 }
 
 export function jsonError(error: unknown) {

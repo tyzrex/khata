@@ -112,13 +112,26 @@ The response is `{ "created": 0, "updated": 6, "invalid": [] }` after a second r
 
 Credits on the dashboard are income plus transfers. Spend is expenses only. That is why the sample week shows 820 spent and 3,600 credited, and a net of 2,780.
 
-The NIMB line is a transfer: “LAW/NIBL transfer”, with a note that Sameer paid 2,018 on Splitwise against a 2,000 bank credit.
+The NIMB line is a transfer: “LAW/NIBL transfer”. The share book records Sameer’s settlement as NPR 2,018 and links it to that bank credit of NPR 2,000. The NPR 18 gap stays on the bank line.
+
+## Friends, groups, and settling
+
+People, groups, shared expenses, and settlements live in their own tables. They do not change spent or credited totals.
+
+- Equal, exact, shares, and percent splits. Amounts are stored in paisa so a split always adds up to the total.
+- Balances are per person: you owe, you are owed, and what other people owe each other. A simplified list shows the fewest payments with the same nets.
+- A settlement can point at one bank transaction. Cine Mark is linked to the two Nabil charges the same way, without merging those charges into the share total.
+- `npm run db:seed` and **Load sample week** load both the bank week and Biker Gang (You, Sameer, Anita, Rajan).
+
+After the sample, you owe Anita NPR 2,000, Sameer owes you NPR 1,425, and Rajan owes you NPR 300.
 
 ## Other routes
 
 - `GET/POST /api/transactions` and `PATCH/DELETE /api/transactions/:id`
 - `GET/POST /api/categories` and `PATCH/DELETE /api/categories/:id`
 - `GET /api/summary` — this week and this month in `Asia/Kathmandu`
-- `POST /api/seed` — same file as `npm run db:seed`, from the Sync button
+- `POST /api/seed` — bank week plus the sample share book
+- `GET /api/shares` — people, groups, balances, expenses, settlements
+- `POST /api/people`, `POST /api/groups`, `POST /api/shared-expenses`, `POST /api/settlements`
 
 Default categories: Food, Transport, Parking, Entertainment, Shopping, Bills, Health, Transfer, Income, Other. They are editable. A category that still has entries cannot be deleted; rename it instead.

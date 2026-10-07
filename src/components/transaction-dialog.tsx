@@ -162,6 +162,7 @@ export function TransactionDialog({
             <div className="grid gap-1.5">
               <Label htmlFor="tx-type">Type</Label>
               <Select
+                items={{ expense: "Expense", income: "Income", transfer: "Transfer" }}
                 value={draft.type}
                 onValueChange={(value) => {
                   if (value !== "expense" && value !== "income" && value !== "transfer") return;
@@ -205,7 +206,11 @@ export function TransactionDialog({
           <div className="grid grid-cols-2 gap-3">
             <div className="grid gap-1.5">
               <Label htmlFor="tx-category">Category</Label>
-              <Select value={draft.category} onValueChange={(value) => value && setDraft({ ...draft, category: value })}>
+              <Select
+                items={Object.fromEntries(names.map((category) => [category.name, category.name]))}
+                value={draft.category}
+                onValueChange={(value) => value && setDraft({ ...draft, category: value })}
+              >
                 <SelectTrigger id="tx-category" className="w-full">
                   <SelectValue />
                 </SelectTrigger>
@@ -220,7 +225,7 @@ export function TransactionDialog({
             </div>
             <div className="grid gap-1.5">
               <Label htmlFor="tx-account">Account</Label>
-              <Select value={draft.account} onValueChange={(value) => value && setDraft({ ...draft, account: value })}>
+              <Select items={Object.fromEntries(ACCOUNTS.map((account) => [account, account]))} value={draft.account} onValueChange={(value) => value && setDraft({ ...draft, account: value })}>
                 <SelectTrigger id="tx-account" className="w-full">
                   <SelectValue />
                 </SelectTrigger>

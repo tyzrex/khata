@@ -71,8 +71,8 @@ export function CategoriesView({
     <div className="rise">
       <div className="flex items-end justify-between gap-3">
         <div>
-          <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Categories</p>
-          <h1 className="figure mt-2 text-4xl">How money is named</h1>
+          <h1 className="text-lg font-medium tracking-tight">Categories</h1>
+          <p className="text-sm text-muted-foreground">Names for the bank ledger.</p>
         </div>
         <Button type="button" className="h-10 px-4" onClick={() => start()}>
           Add category
@@ -109,7 +109,11 @@ export function CategoriesView({
             </div>
             <div className="grid gap-1.5">
               <Label htmlFor="cat-kind">Kind</Label>
-              <Select value={draft.kind} onValueChange={(value) => value && setDraft({ ...draft, kind: value as CategoryKind })}>
+              <Select
+                items={Object.fromEntries(CATEGORY_KINDS.map((kind) => [kind, kind]))}
+                value={draft.kind}
+                onValueChange={(value) => value && setDraft({ ...draft, kind: value as CategoryKind })}
+              >
                 <SelectTrigger id="cat-kind" className="w-full">
                   <SelectValue />
                 </SelectTrigger>

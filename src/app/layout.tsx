@@ -1,20 +1,20 @@
 import type { Metadata, Viewport } from "next";
-import { Fraunces, Outfit } from "next/font/google";
+import { Geist, Geist_Mono } from "next/font/google";
 import { Providers } from "@/components/providers";
 import "./globals.css";
 
-const outfit = Outfit({
+const geist = Geist({
   subsets: ["latin"],
-  variable: "--font-outfit",
+  variable: "--font-geist",
 });
 
-const fraunces = Fraunces({
+const geistMono = Geist_Mono({
   subsets: ["latin"],
-  variable: "--font-fraunces",
+  variable: "--font-geist-mono",
 });
 
 const title = "Khata";
-const description = "A personal NPR ledger for spending, income, and transfers.";
+const description = "A personal NPR ledger, with friends, groups, and settle-up.";
 
 export const metadata: Metadata = {
   applicationName: title,
@@ -39,8 +39,8 @@ export const metadata: Metadata = {
 
 export const viewport: Viewport = {
   themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#f4efe6" },
-    { media: "(prefers-color-scheme: dark)", color: "#141210" },
+    { media: "(prefers-color-scheme: light)", color: "#f6f6f7" },
+    { media: "(prefers-color-scheme: dark)", color: "#111113" },
   ],
   width: "device-width",
   initialScale: 1,
@@ -48,7 +48,7 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="en" className={`${outfit.variable} ${fraunces.variable} h-full antialiased`} suppressHydrationWarning>
+    <html lang="en" className={`${geist.variable} ${geistMono.variable} h-full antialiased`} suppressHydrationWarning>
       <body className="min-h-full">
         <Providers>{children}</Providers>
       </body>
