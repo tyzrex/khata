@@ -1,0 +1,76 @@
+{
+  "transactions": [
+    {
+      "externalId": "nabil-cine-300",
+      "date": "2026-10-06",
+      "type": "expense",
+      "amount": 300,
+      "currency": "NPR",
+      "category": "Entertainment",
+      "merchant": "Cine Mark Movies",
+      "account": "Nabil",
+      "note": "",
+      "source": "gmail"
+    },
+    {
+      "externalId": "nabil-cine-375",
+      "date": "2026-10-06",
+      "type": "expense",
+      "amount": 375,
+      "currency": "NPR",
+      "category": "Entertainment",
+      "merchant": "Cine Mark Movies",
+      "account": "Nabil",
+      "note": "",
+      "source": "gmail"
+    },
+    {
+      "externalId": "nabil-parking-50",
+      "date": "2026-10-06",
+      "type": "expense",
+      "amount": 50,
+      "currency": "NPR",
+      "category": "Parking",
+      "merchant": "Parking Hi Tech Build",
+      "account": "Nabil",
+      "note": "",
+      "source": "gmail"
+    },
+    {
+      "externalId": "nabil-tea-95",
+      "date": "2026-10-06",
+      "type": "expense",
+      "amount": 95,
+      "currency": "NPR",
+      "category": "Food",
+      "merchant": "Lawa Chiya Ghar",
+      "account": "Nabil",
+      "note": "",
+      "source": "gmail"
+    },
+    {
+      "externalId": "nimb-law-2000",
+      "date": "2026-10-06",
+      "type": "transfer",
+      "amount": 2000,
+      "currency": "NPR",
+      "category": "Transfer",
+      "merchant": "LAW/NIBL transfer",
+      "account": "NIMB",
+      "note": "Possible Splitwise settle. Sameer paid 2018 vs bank credit 2000.",
+      "source": "gmail"
+    },
+    {
+      "externalId": "nabil-nlife-1600",
+      "date": "2026-10-07",
+      "type": "income",
+      "amount": 1600,
+      "currency": "NPR",
+      "category": "Income",
+      "merchant": "Nepal Life agent commission",
+      "account": "Nabil",
+      "note": "",
+      "source": "gmail"
+    }
+  ]
+}
