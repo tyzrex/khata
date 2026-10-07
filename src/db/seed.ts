@@ -15,8 +15,8 @@ if (!process.env.DATABASE_URL && process.env.DATABASE_URL_UNPOOLED) {
 async function main() {
   const file = path.join(process.cwd(), "seed", "week-of-2026-10-05.json");
   const payload = JSON.parse(readFileSync(file, "utf8"));
-  const result = await importTransactions(payload);
-  await seedSampleBook();
+  const result = await importTransactions(null, payload);
+  await seedSampleBook(null);
   console.log(JSON.stringify({ ...result, shares: "seeded" }, null, 2));
   await getPool().end();
 }

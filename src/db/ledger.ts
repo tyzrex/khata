@@ -1,6 +1,10 @@
-import { and, asc, desc, eq, gte, ilike, lte, or } from "drizzle-orm";
+import { and, asc, desc, eq, gte, ilike, isNull, lte, or, type AnyColumn } from "drizzle-orm";
 import { getDb } from "@/db/client";
 import { categories, transactions, type TransactionRow } from "@/db/schema";
+
+function owned(column: AnyColumn, userId: string | null) {
+  return userId ? eq(column, userId) : isNull(column);
+}
 import { DEFAULT_CATEGORIES, type TxType } from "@/lib/constants";
 import { summarize, type LedgerAmount } from "@/lib/period";
 import { parseImportPayload, type ImportTransaction, type ManualTransaction } from "@/lib/schemas";
@@ -45,49 +49,56 @@ function toCategory(row: typeof categories.$inferSelect): CategoryDto {
   };
 }
 
-export async function ensureCategories() {
+export async function ensureCategories(userId: string | null) {
   const db = getDb();
   await db
     .insert(categories)
     .values(
       DEFAULT_CATEGORIES.map((category) => ({
         id: crypto.randomUUID(),
+        userId,
         name: category.name,
         kind: category.kind,
         color: category.color,
         sortOrder: category.sortOrder,
       })),
     )
-    .onConflictDoNothing({ target: categories.name });
+    .onConflictDoNothing({ target: [categories.userId, categories.name] });
 }
 
-async function ensureNamedCategory(name: string, kind: string) {
+async function ensureNamedCategory(userId: string, name: string, kind: string) {
   const db = getDb();
   const match = DEFAULT_CATEGORIES.find((category) => category.name === name);
   await db
     .insert(categories)
     .values({
       id: crypto.randomUUID(),
+      userId,
       name,
       kind: match?.kind ?? kind,
       color: match?.color ?? "#6f675e",
       sortOrder: match?.sortOrder ?? 200,
     })
-    .onConflictDoNothing({ target: categories.name });
+    .onConflictDoNothing({ target: [categories.userId, categories.name] });
 }
 
-export async function listCategories() {
-  await ensureCategories();
-  const rows = await getDb().select().from(categories).orderBy(asc(categories.sortOrder), asc(categories.name));
+export async function listCategories(userId: string) {
+  await ensureCategories(userId);
+  const rows = await getDb()
+    .select()
+    .from(categories)
+    .where(eq(categories.userId, userId))
+    .orderBy(asc(categories.sortOrder), asc(categories.name));
   return rows.map(toCategory);
 }
 
-export async function createCategory(input: { name: string; kind: CategoryDto["kind"]; color: string }) {
-  await ensureCategories();
+export async function createCategory(userId: string, input: { name: string; kind: CategoryDto["kind"]; color: string }) {
+  await ensureCategories(userId);
   const [row] = await getDb()
     .insert(categories)
     .values({
       id: crypto.randomUUID(),
+      userId,
       name: input.name,
       kind: input.kind,
       color: input.color,
@@ -97,39 +108,47 @@ export async function createCategory(input: { name: string; kind: CategoryDto["k
   return toCategory(row);
 }
 
-export async function updateCategory(id: string, input: { name: string; kind: CategoryDto["kind"]; color: string }) {
+export async function updateCategory(userId: string, id: string, input: { name: string; kind: CategoryDto["kind"]; color: string }) {
   const db = getDb();
-  const [current] = await db.select().from(categories).where(eq(categories.id, id)).limit(1);
+  const [current] = await db
+    .select()
+    .from(categories)
+    .where(and(eq(categories.id, id), eq(categories.userId, userId)))
+    .limit(1);
   if (!current) return null;
   const now = new Date();
   const [row] = await db.transaction(async (tx) => {
     const updated = await tx
       .update(categories)
       .set({ name: input.name, kind: input.kind, color: input.color, updatedAt: now })
-      .where(eq(categories.id, id))
+      .where(and(eq(categories.id, id), eq(categories.userId, userId)))
       .returning();
     if (current.name !== input.name) {
       await tx
         .update(transactions)
         .set({ categoryName: input.name, updatedAt: now })
-        .where(eq(transactions.categoryName, current.name));
+        .where(and(eq(transactions.categoryName, current.name), eq(transactions.userId, userId)));
     }
     return updated;
   });
   return row ? toCategory(row) : null;
 }
 
-export async function deleteCategory(id: string) {
+export async function deleteCategory(userId: string, id: string) {
   const db = getDb();
-  const [current] = await db.select().from(categories).where(eq(categories.id, id)).limit(1);
+  const [current] = await db
+    .select()
+    .from(categories)
+    .where(and(eq(categories.id, id), eq(categories.userId, userId)))
+    .limit(1);
   if (!current) return { status: "missing" as const };
   const [used] = await db
     .select({ id: transactions.id })
     .from(transactions)
-    .where(eq(transactions.categoryName, current.name))
+    .where(and(eq(transactions.categoryName, current.name), eq(transactions.userId, userId)))
     .limit(1);
   if (used) return { status: "used" as const, name: current.name };
-  await db.delete(categories).where(eq(categories.id, id));
+  await db.delete(categories).where(and(eq(categories.id, id), eq(categories.userId, userId)));
   return { status: "deleted" as const };
 }
 
@@ -141,24 +160,23 @@ export type TransactionFilters = {
   category?: string;
 };
 
-export async function listTransactions(filters: TransactionFilters = {}) {
-  await ensureCategories();
-  const clauses = [];
+export async function listTransactions(userId: string, filters: TransactionFilters = {}) {
+  await ensureCategories(userId);
+  const clauses = [eq(transactions.userId, userId)];
   if (filters.from) clauses.push(gte(transactions.date, filters.from));
   if (filters.to) clauses.push(lte(transactions.date, filters.to));
   if (filters.type) clauses.push(eq(transactions.type, filters.type));
   if (filters.category) clauses.push(eq(transactions.categoryName, filters.category));
   if (filters.q) {
     const pattern = `%${filters.q.replace(/[%_\\]/g, "")}%`;
-    clauses.push(
-      or(
-        ilike(transactions.merchant, pattern),
-        ilike(transactions.note, pattern),
-        ilike(transactions.account, pattern),
-        ilike(transactions.categoryName, pattern),
-        ilike(transactions.externalId, pattern),
-      ),
+    const search = or(
+      ilike(transactions.merchant, pattern),
+      ilike(transactions.note, pattern),
+      ilike(transactions.account, pattern),
+      ilike(transactions.categoryName, pattern),
+      ilike(transactions.externalId, pattern),
     );
+    if (search) clauses.push(search);
   }
   const rows = await getDb()
     .select()
@@ -168,9 +186,10 @@ export async function listTransactions(filters: TransactionFilters = {}) {
   return rows.map(toTransaction);
 }
 
-function transactionValues(input: ManualTransaction | ImportTransaction, externalId: string, source: string) {
+function transactionValues(userId: string | null, input: ManualTransaction | ImportTransaction, externalId: string, source: string) {
   const now = new Date();
   return {
+    userId,
     externalId,
     date: input.date,
     type: input.type,
@@ -185,20 +204,20 @@ function transactionValues(input: ManualTransaction | ImportTransaction, externa
   };
 }
 
-export async function createTransaction(input: ManualTransaction) {
-  await ensureNamedCategory(input.category, input.type);
+export async function createTransaction(userId: string, input: ManualTransaction) {
+  await ensureNamedCategory(userId, input.category, input.type);
   const [row] = await getDb()
     .insert(transactions)
     .values({
       id: crypto.randomUUID(),
-      ...transactionValues(input, `manual-${crypto.randomUUID()}`, "manual"),
+      ...transactionValues(userId, input, `manual-${crypto.randomUUID()}`, "manual"),
     })
     .returning();
   return toTransaction(row);
 }
 
-export async function updateTransaction(id: string, input: ManualTransaction) {
-  await ensureNamedCategory(input.category, input.type);
+export async function updateTransaction(userId: string, id: string, input: ManualTransaction) {
+  await ensureNamedCategory(userId, input.category, input.type);
   const [row] = await getDb()
     .update(transactions)
     .set({
@@ -212,20 +231,23 @@ export async function updateTransaction(id: string, input: ManualTransaction) {
       note: input.note,
       updatedAt: new Date(),
     })
-    .where(eq(transactions.id, id))
+    .where(and(eq(transactions.id, id), eq(transactions.userId, userId)))
     .returning();
   if (!row) return null;
   return toTransaction(row);
 }
 
-export async function deleteTransaction(id: string) {
-  const rows = await getDb().delete(transactions).where(eq(transactions.id, id)).returning({ id: transactions.id });
+export async function deleteTransaction(userId: string, id: string) {
+  const rows = await getDb()
+    .delete(transactions)
+    .where(and(eq(transactions.id, id), eq(transactions.userId, userId)))
+    .returning({ id: transactions.id });
   return rows.length > 0;
 }
 
-export async function importTransactions(payload: unknown): Promise<ImportResult> {
+export async function importTransactions(userId: string | null, payload: unknown): Promise<ImportResult> {
   const { rows, invalid } = parseImportPayload(payload);
-  await ensureCategories();
+  await ensureCategories(userId);
   let created = 0;
   let updated = 0;
   const db = getDb();
@@ -236,26 +258,30 @@ export async function importTransactions(payload: unknown): Promise<ImportResult
         .insert(categories)
         .values({
           id: crypto.randomUUID(),
+          userId,
           name: row.category,
           kind: row.type === "expense" ? "expense" : row.type === "income" ? "income" : "transfer",
           color: DEFAULT_CATEGORIES.find((category) => category.name === row.category)?.color ?? "#6f675e",
           sortOrder: DEFAULT_CATEGORIES.find((category) => category.name === row.category)?.sortOrder ?? 200,
         })
-        .onConflictDoNothing({ target: categories.name });
+        .onConflictDoNothing({ target: [categories.userId, categories.name] });
 
       const [existing] = await tx
         .select({ id: transactions.id })
         .from(transactions)
-        .where(eq(transactions.externalId, row.externalId))
+        .where(and(owned(transactions.userId, userId), eq(transactions.externalId, row.externalId)))
         .limit(1);
 
       if (existing) {
-        await tx.update(transactions).set(transactionValues(row, row.externalId, row.source)).where(eq(transactions.id, existing.id));
+        await tx
+          .update(transactions)
+          .set(transactionValues(userId, row, row.externalId, row.source))
+          .where(and(eq(transactions.id, existing.id), owned(transactions.userId, userId)));
         updated += 1;
       } else {
         await tx.insert(transactions).values({
           id: crypto.randomUUID(),
-          ...transactionValues(row, row.externalId, row.source),
+          ...transactionValues(userId, row, row.externalId, row.source),
         });
         created += 1;
       }
@@ -265,8 +291,8 @@ export async function importTransactions(payload: unknown): Promise<ImportResult
   return { created, updated, invalid };
 }
 
-export async function exportTransactions() {
-  const rows = await listTransactions();
+export async function exportTransactions(userId: string) {
+  const rows = await listTransactions(userId);
   return {
     transactions: rows.map((row) => ({
       externalId: row.externalId,
@@ -283,10 +309,10 @@ export async function exportTransactions() {
   };
 }
 
-export async function summarizeLedger(): Promise<SummaryResponse> {
-  await ensureCategories();
-  const rows = await getDb().select().from(transactions);
-  const categoryRows = await getDb().select().from(categories);
+export async function summarizeLedger(userId: string): Promise<SummaryResponse> {
+  await ensureCategories(userId);
+  const rows = await getDb().select().from(transactions).where(eq(transactions.userId, userId));
+  const categoryRows = await getDb().select().from(categories).where(eq(categories.userId, userId));
   const colors = new Map(categoryRows.map((category) => [category.name, category.color]));
   const amounts: LedgerAmount[] = rows.map((row) => ({
     date: row.date,

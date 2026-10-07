@@ -1,10 +1,12 @@
+import type { NextRequest } from "next/server";
 import { getShareBook } from "@/db/shares";
-import { beginRequest, jsonError } from "@/lib/http";
+import { jsonError } from "@/lib/http";
+import { requireUserId } from "@/lib/session";
 
-export async function GET() {
-  await beginRequest();
+export async function GET(request: NextRequest) {
   try {
-    return Response.json(await getShareBook());
+    const userId = await requireUserId(request);
+    return Response.json(await getShareBook(userId));
   } catch (error) {
     return jsonError(error);
   }

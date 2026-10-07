@@ -20,11 +20,9 @@ const schema = `{
 }`;
 
 export function SyncView({
-  passcodeRequired,
   onImport,
   onSample,
 }: {
-  passcodeRequired: boolean;
   onImport: (payload: unknown) => Promise<ImportResult>;
   onSample: () => Promise<ImportResult>;
 }) {
@@ -76,15 +74,13 @@ export function SyncView({
       <h1 className="text-lg font-medium tracking-tight">Sync</h1>
       <p className="mt-2 text-sm leading-6 text-muted-foreground">
         A daily routine can POST bank lines to <code className="text-foreground">/api/import</code>. Rows that share an{" "}
-        <code className="text-foreground">externalId</code> update in place. This import does not create friend splits. Link a
-        bank credit from Settle up when it matches a payment between people.
+        <code className="text-foreground">externalId</code> update in place, inside this account. This import does not create
+        friend splits. Link a bank credit from Settle up when it matches a payment between people.
       </p>
-      {passcodeRequired ? (
-        <p className="mt-3 text-sm text-muted-foreground">
-          This ledger is private. Send <code className="text-foreground">Authorization: Bearer &lt;APP_PASSCODE&gt;</code> with
-          the import.
-        </p>
-      ) : null}
+      <p className="mt-3 text-sm text-muted-foreground">
+        The request needs this account&apos;s session. Send the <code className="text-foreground">better-auth.session_token</code>{" "}
+        cookie, or <code className="text-foreground">Authorization: Bearer</code> with that same token.
+      </p>
 
       <div className="mt-8 flex flex-col gap-3 sm:flex-row">
         <Button type="button" variant="outline" className="h-11 px-4" disabled={pending} onClick={() => void run(onSample, "Sample week loaded")}>

@@ -1,14 +1,15 @@
 import type { NextRequest } from "next/server";
 import { createSharedExpense } from "@/db/shares";
-import { badRequest, beginRequest, shareError } from "@/lib/http";
+import { badRequest, shareError } from "@/lib/http";
 import { expenseWriteSchema, shareIssue } from "@/lib/share-schemas";
+import { requireUserId } from "@/lib/session";
 
 export async function POST(request: NextRequest) {
-  await beginRequest();
   try {
+    const userId = await requireUserId(request);
     const parsed = expenseWriteSchema.safeParse(await request.json());
     if (!parsed.success) return badRequest(shareIssue(parsed.error));
-    const id = await createSharedExpense(parsed.data);
+    const id = await createSharedExpense(userId, parsed.data);
     return Response.json({ id }, { status: 201 });
   } catch (error) {
     return shareError(error);

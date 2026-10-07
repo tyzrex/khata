@@ -3,6 +3,7 @@
 import { Download, History, LayoutDashboard, Rows3, Scale, Tags, Users } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState, useSyncExternalStore } from "react";
+import { authClient } from "@/lib/auth-client";
 import { toast } from "sonner";
 import { ActivityView } from "@/components/activity-view";
 import { BalancesView } from "@/components/balances-view";
@@ -70,7 +71,7 @@ function suggestGroup(book: ShareBook, fromId: string, toId: string) {
 
 const blankSettle: SettleDraft = { fromId: "", toId: "", amount: "", groupId: "" };
 
-export function KhataApp() {
+export function KhataApp({ user }: { user: { name: string; email: string } }) {
   const router = useRouter();
   const ledger = useLedger();
   const shares = useShares();
@@ -139,7 +140,10 @@ export function KhataApp() {
             );
           })}
         </nav>
-        <p className="mt-auto px-2 text-xs text-muted-foreground">{ledger.auth.required ? "Passcode on" : "Open on this server"}</p>
+        <div className="mt-auto px-2">
+          <p className="truncate text-sm font-medium">{user.name}</p>
+          <p className="truncate text-xs text-muted-foreground">{user.email}</p>
+        </div>
       </aside>
 
       <div className="min-w-0">
@@ -155,18 +159,19 @@ export function KhataApp() {
             <Button type="button" variant="ghost" size="sm" className="md:hidden" onClick={() => setMenuOpen(true)}>
               More
             </Button>
-            {ledger.auth.required ? (
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={() => {
-                  void fetch("/api/auth/logout", { method: "POST" }).then(() => router.push("/login"));
-                }}
-              >
-                Lock
-              </Button>
-            ) : null}
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                void authClient.signOut().then(() => {
+                  router.push("/login");
+                  router.refresh();
+                });
+              }}
+            >
+              Sign out
+            </Button>
             <ThemeToggle />
           </div>
         </header>
@@ -256,7 +261,7 @@ export function KhataApp() {
                 />
               ) : null}
               {view === "categories" ? <CategoriesView categories={ledger.categories} onSave={ledger.saveCategory} onDelete={ledger.removeCategory} /> : null}
-              {view === "sync" ? <SyncView passcodeRequired={ledger.auth.required} onImport={ledger.importPayload} onSample={async () => {
+              {view === "sync" ? <SyncView onImport={ledger.importPayload} onSample={async () => {
                 const result = await ledger.loadSample();
                 await shares.reload();
                 return result;
