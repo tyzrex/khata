@@ -234,7 +234,7 @@ export function KhataApp({ user }: { user: { name: string; email: string } }) {
               {view === "balances" && shares.book ? (
                 <BalancesView
                   book={shares.book}
-                  onSettle={(debt) => openSettle(debt)}
+                  onSettle={(debt, groupId) => openSettle(debt, groupId)}
                   onCreatePerson={shares.createPerson}
                   onRenamePerson={shares.renamePerson}
                   onDeletePerson={shares.deletePerson}
