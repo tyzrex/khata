@@ -2,6 +2,7 @@ import type { NextRequest } from "next/server";
 import { z } from "zod";
 import { createGroupInvite } from "@/db/invites";
 import { badRequest, shareError } from "@/lib/http";
+import { appOrigin } from "@/lib/app-origin";
 import { sendInviteEmail } from "@/lib/invite-email";
 import { requireUserId } from "@/lib/session";
 
@@ -20,7 +21,7 @@ export async function POST(request: NextRequest, context: Context) {
     const parsed = inviteSchema.safeParse(body);
     if (!parsed.success) return badRequest(parsed.error.issues[0]?.message ?? "Invalid request");
     const invite = await createGroupInvite(userId, id, parsed.data);
-    const url = `${request.nextUrl.origin}/invite/${invite.token}`;
+    const url = `${appOrigin(request)}/invite/${invite.token}`;
     const emailSent = parsed.data.email
       ? await sendInviteEmail({ to: parsed.data.email, inviterName: invite.inviterName, groupName: invite.groupName, url })
       : false;
