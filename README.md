@@ -161,6 +161,22 @@ People, groups, shared expenses, and settlements live in their own tables. They 
 
 After the sample, you owe Anita NPR 2,000, Sameer owes you NPR 1,425, and Rajan owes you NPR 300.
 
+## Inviting friends to a group
+
+Friends sign up for their own Khata account and join your group as real members.
+
+1. Open **Groups**, pick a group you own, and press **Invite**.
+2. Optional: enter an email. That invite then works only for a signed-in account with that address, and only once. Without an email, the link works for anyone who has it until it expires (7 days).
+3. Optional: pick a name already in the group (for example a placeholder you added earlier). When the friend joins, that person is linked to their account, so past shares and balances carry over. Otherwise a new member is created from their account name.
+4. Copy the link and send it. If `RESEND_API_KEY` is set, an email with the link is sent too.
+5. The friend opens `/invite/<token>`, signs in or creates an account, and presses **Join**. They land on **Groups**.
+
+Members see the group's expenses, balances, and members, and can add or edit shared expenses and record settlements inside that group. Each person's bank ledger stays private. Only the group owner can invite, rename, or change members. Group data is stored in the owner's book and shared with members through `group_user_access`. Removing a linked person from the owner's People list revokes that account's access.
+
+Optional env vars: `RESEND_API_KEY` and `INVITE_FROM_EMAIL` (for example `Khata <invites@your-domain.example>`). Without a key the invite link is still created and can be shared by hand.
+
+Migration `0003_multi_user_invites` adds `group_invites`, `group_user_access`, and `people.linked_user_id`, and backfills owner rows for existing groups. Run `npm run db:migrate`.
+
 ## Other routes
 
 - `GET/POST /api/transactions` and `PATCH/DELETE /api/transactions/:id`

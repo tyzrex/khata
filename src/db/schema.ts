@@ -15,6 +15,7 @@ import { user } from "@/db/auth-schema";
 export * from "@/db/auth-schema";
 
 const ownerId = () => text("user_id").references(() => user.id, { onDelete: "cascade" });
+const linkedUserId = () => text("linked_user_id").references(() => user.id, { onDelete: "set null" });
 
 export const categories = pgTable(
   "categories",
@@ -68,10 +69,11 @@ export const people = pgTable(
     userId: ownerId(),
     name: text("name").notNull(),
     isSelf: boolean("is_self").notNull().default(false),
+    linkedUserId: linkedUserId(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (table) => [index("people_user_idx").on(table.userId)],
+  (table) => [index("people_user_idx").on(table.userId), index("people_linked_user_idx").on(table.linkedUserId)],
 );
 
 export const groups = pgTable(
@@ -176,6 +178,45 @@ export const settlements = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [index("settlements_user_idx").on(table.userId), index("settlements_date_idx").on(table.date)],
+);
+
+export const groupInvites = pgTable(
+  "group_invites",
+  {
+    id: text("id").primaryKey(),
+    groupId: text("group_id")
+      .notNull()
+      .references(() => groups.id, { onDelete: "cascade" }),
+    creatorUserId: text("creator_user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    inviteeEmail: text("invitee_email"),
+    personId: text("person_id").references(() => people.id, { onDelete: "set null" }),
+    token: text("token").notNull().unique(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    acceptedAt: timestamp("accepted_at", { withTimezone: true }),
+    acceptedByUserId: text("accepted_by_user_id").references(() => user.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [index("group_invites_group_idx").on(table.groupId), index("group_invites_token_idx").on(table.token)],
+);
+
+export const groupUserAccess = pgTable(
+  "group_user_access",
+  {
+    groupId: text("group_id")
+      .notNull()
+      .references(() => groups.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    ownerUserId: text("owner_user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    role: text("role").notNull(),
+    joinedAt: timestamp("joined_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [primaryKey({ columns: [table.groupId, table.userId] }), index("group_user_access_user_idx").on(table.userId)],
 );
 
 export type CategoryRow = typeof categories.$inferSelect;

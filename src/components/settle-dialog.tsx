@@ -25,6 +25,7 @@ export function SettleDialog({
   book,
   transactions,
   draft,
+  groupLocked = false,
   onOpenChange,
   onSave,
 }: {
@@ -33,6 +34,7 @@ export function SettleDialog({
   book: ShareBook;
   transactions: TransactionDto[];
   draft: SettleDraft;
+  groupLocked?: boolean;
   onOpenChange: (open: boolean) => void;
   onSave: (input: unknown) => Promise<void>;
 }) {
@@ -91,7 +93,7 @@ export function SettleDialog({
 
   const lines = [...transactions].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 12);
   const peopleItems = Object.fromEntries(book.people.map((person) => [person.id, person.name]));
-  const groupItems = { none: "Outside a group", ...Object.fromEntries(book.groups.map((group) => [group.id, group.name])) };
+  const groupItems = { ...(groupLocked ? {} : { none: "Outside a group" }), ...Object.fromEntries(book.groups.map((group) => [group.id, group.name])) };
   const bankItems = {
     none: "None",
     ...Object.fromEntries(lines.map((transaction) => [transaction.id, `${transaction.merchant} · ${formatNpr(transaction.amount)}`])),
@@ -155,7 +157,7 @@ export function SettleDialog({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="none">Outside a group</SelectItem>
+                  {groupLocked ? null : <SelectItem value="none">Outside a group</SelectItem>}
                   {book.groups.map((group) => (
                     <SelectItem key={group.id} value={group.id}>
                       {group.name}
@@ -165,27 +167,29 @@ export function SettleDialog({
               </Select>
               <FieldDescription>A payment inside a group changes that group. A payment outside it only changes the overall book.</FieldDescription>
             </Field>
-            <Field>
-              <FieldLabel>Bank line</FieldLabel>
-              <Select items={bankItems} value={transactionId} onValueChange={(value) => value && setTransactionId(value)}>
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="None" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">None</SelectItem>
-                  {lines.map((transaction) => (
-                    <SelectItem key={transaction.id} value={transaction.id}>
-                      {transaction.merchant} · {formatNpr(transaction.amount)}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {gap && bank ? (
-                <FieldDescription>
-                  The bank line is {formatNpr(bank.amount)}. This settlement is {formatNpr(Number(amount))}. The difference stays on the bank line.
-                </FieldDescription>
-              ) : null}
-            </Field>
+            {groupLocked ? null : (
+              <Field>
+                <FieldLabel>Bank line</FieldLabel>
+                <Select items={bankItems} value={transactionId} onValueChange={(value) => value && setTransactionId(value)}>
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="None" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">None</SelectItem>
+                    {lines.map((transaction) => (
+                      <SelectItem key={transaction.id} value={transaction.id}>
+                        {transaction.merchant} · {formatNpr(transaction.amount)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {gap && bank ? (
+                  <FieldDescription>
+                    The bank line is {formatNpr(bank.amount)}. This settlement is {formatNpr(Number(amount))}. The difference stays on the bank line.
+                  </FieldDescription>
+                ) : null}
+              </Field>
+            )}
             <Field>
               <FieldLabel htmlFor="settle-note">Note</FieldLabel>
               <Textarea id="settle-note" value={note} onChange={(event) => setNote(event.target.value)} rows={2} />

@@ -71,6 +71,10 @@ export function BalancesView({
   const [pending, setPending] = useState(false);
   const owe = sumAmounts(book.overall.youOwe);
   const owed = sumAmounts(book.overall.youAreOwed);
+  const joinedDebts = book.joinedGroups.flatMap((group) => [
+    ...group.balances.youOwe.map((debt) => ({ group, debt, direction: "owe" as const })),
+    ...group.balances.youAreOwed.map((debt) => ({ group, debt, direction: "owed" as const })),
+  ]);
 
   function start(person?: ShareBook["people"][number]) {
     setEditingId(person?.id ?? null);
@@ -121,6 +125,33 @@ export function BalancesView({
         </Panel>
       </div>
 
+      {joinedDebts.length ? (
+        <Panel title="In groups you joined">
+          <ul className="divide-y divide-border">
+            {joinedDebts.map(({ group, debt, direction }) => {
+              const other = direction === "owe" ? debt.toName : debt.fromName;
+              return (
+                <li key={`${group.id}-${debt.fromId}-${debt.toId}`} className="flex items-center gap-3 py-3">
+                  <Avatar size="sm">
+                    <AvatarFallback>{initials(other)}</AvatarFallback>
+                  </Avatar>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm">{other}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {group.name} · {direction === "owe" ? "you owe" : "owes you"}
+                    </p>
+                  </div>
+                  <p className={direction === "owed" ? "figure text-sm text-credit" : "figure text-sm"}>{formatNpr(debt.amount)}</p>
+                  <Button type="button" variant="outline" size="sm" onClick={() => onSettle(debt, group.id)}>
+                    Settle
+                  </Button>
+                </li>
+              );
+            })}
+          </ul>
+        </Panel>
+      ) : null}
+
       {book.overall.others.length ? (
         <Panel title="Between others">
           <ul className="divide-y divide-border">
@@ -169,7 +200,7 @@ export function BalancesView({
                 </Avatar>
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm">{person.name}</p>
-                  <p className="text-xs text-muted-foreground">{person.isSelf ? "You" : "Friend"}</p>
+                  <p className="text-xs text-muted-foreground">{person.isSelf ? "You" : person.linkedUserId ? "Friend · has an account" : "Friend"}</p>
                 </div>
                 <Button type="button" variant="ghost" size="sm" onClick={() => start(person)}>
                   Rename

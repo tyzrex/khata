@@ -7,6 +7,9 @@ const PUBLIC_PATHS = new Set(["/login", "/offline", "/manifest.webmanifest"]);
 function isPublic(pathname: string) {
   if (PUBLIC_PATHS.has(pathname)) return true;
   if (pathname.startsWith("/api/auth")) return true;
+  if (pathname.startsWith("/invite/")) return true;
+  // Allow reading invite info (GET) without auth; accepting still requires auth
+  if (pathname.startsWith("/api/invite/") && !pathname.endsWith("/accept")) return true;
   return pathname.startsWith("/icons/");
 }
 

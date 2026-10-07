@@ -69,6 +69,22 @@ function suggestGroup(book: ShareBook, fromId: string, toId: string) {
   return hits.length === 1 ? hits[0]!.id : "";
 }
 
+function scopeBook(book: ShareBook, groupId: string | null | undefined) {
+  const joined = groupId ? book.joinedGroups.find((group) => group.id === groupId) : undefined;
+  if (!joined) return { book, locked: false };
+  const scoped: ShareBook = {
+    ...book,
+    self: joined.self,
+    people: joined.people,
+    groups: [{ id: joined.id, name: joined.name, members: joined.members, balances: joined.balances }],
+    joinedGroups: [],
+    expenses: joined.expenses,
+    settlements: joined.settlements,
+    links: [],
+  };
+  return { book: scoped, locked: true };
+}
+
 const blankSettle: SettleDraft = { fromId: "", toId: "", amount: "", groupId: "" };
 
 export function KhataApp({ user }: { user: { name: string; email: string } }) {
@@ -110,8 +126,11 @@ export function KhataApp({ user }: { user: { name: string; email: string } }) {
   }
 
   const today = ledger.summary?.today ?? "";
-  const owe = shares.book ? shares.book.overall.youOwe.reduce((total, debt) => total + debt.amount, 0) : null;
-  const owed = shares.book ? shares.book.overall.youAreOwed.reduce((total, debt) => total + debt.amount, 0) : null;
+  const sum = (debts: { amount: number }[]) => debts.reduce((total, debt) => total + debt.amount, 0);
+  const owe = shares.book ? sum(shares.book.overall.youOwe) + shares.book.joinedGroups.reduce((total, group) => total + sum(group.balances.youOwe), 0) : null;
+  const owed = shares.book ? sum(shares.book.overall.youAreOwed) + shares.book.joinedGroups.reduce((total, group) => total + sum(group.balances.youAreOwed), 0) : null;
+  const expenseScope = shares.book ? scopeBook(shares.book, editingExpense?.groupId ?? expenseGroup) : null;
+  const settleScope = shares.book ? scopeBook(shares.book, settleDraft.groupId) : null;
 
   return (
     <div className="min-h-dvh md:grid md:grid-cols-[220px_minmax(0,1fr)]">
@@ -215,7 +234,7 @@ export function KhataApp({ user }: { user: { name: string; email: string } }) {
               {view === "balances" && shares.book ? (
                 <BalancesView
                   book={shares.book}
-                  onSettle={(debt) => openSettle(debt)}
+                  onSettle={(debt, groupId) => openSettle(debt, groupId)}
                   onCreatePerson={shares.createPerson}
                   onRenamePerson={shares.renamePerson}
                   onDeletePerson={shares.deletePerson}
@@ -230,6 +249,7 @@ export function KhataApp({ user }: { user: { name: string; email: string } }) {
                   onCreateGroup={shares.createGroup}
                   onUpdateGroup={shares.updateGroup}
                   onDeleteGroup={shares.deleteGroup}
+                  onCreateInvite={shares.createInvite}
                 />
               ) : null}
               {view === "ledger" ? (
@@ -323,13 +343,14 @@ export function KhataApp({ user }: { user: { name: string; email: string } }) {
         onDelete={ledger.removeTransaction}
       />
 
-      {shares.book ? (
+      {shares.book && expenseScope && settleScope ? (
         <>
           <ShareExpenseDialog
             open={expenseOpen}
             today={today}
-            book={shares.book}
-            transactions={ledger.transactions}
+            book={expenseScope.book}
+            groupLocked={expenseScope.locked}
+            transactions={expenseScope.locked ? [] : ledger.transactions}
             expense={editingExpense}
             groupId={expenseGroup}
             onOpenChange={setExpenseOpen}
@@ -339,8 +360,9 @@ export function KhataApp({ user }: { user: { name: string; email: string } }) {
           <SettleDialog
             open={settleOpen}
             today={today}
-            book={shares.book}
-            transactions={ledger.transactions}
+            book={settleScope.book}
+            groupLocked={settleScope.locked}
+            transactions={settleScope.locked ? [] : ledger.transactions}
             draft={settleDraft}
             onOpenChange={setSettleOpen}
             onSave={shares.saveSettlement}
