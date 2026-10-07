@@ -43,17 +43,15 @@ npm run db:seed
 
 The seed script falls back to `DATABASE_URL_UNPOOLED` if `DATABASE_URL` is empty.
 
-## Passcode
+## Accounts
 
-Leave `APP_PASSCODE` empty while you are setting the app up. The ledger is then open to anyone who can reach the server.
+Khata uses [Better Auth](https://www.better-auth.com). Email and password work without an email provider. Google is optional until the client id and secret are set. There is no shared passcode.
 
-Set `APP_PASSCODE` on Vercel when you want it private. The browser asks for that passcode and stores an httpOnly cookie. A daily import can skip the cookie and send:
+Sessions are httpOnly cookies (`better-auth.session_token`, prefixed `__Secure-` on HTTPS), `SameSite=Lax`, and `Secure` in production. Better Auth checks the request origin on sign-in and sign-up. The signed cookie cache lasts five minutes so most page loads skip a database read. A route still calls `getSession` before it reads the ledger.
 
-```http
-Authorization: Bearer <APP_PASSCODE>
-```
+Every ledger and share row stores `user_id`. Queries only return the signed-in account. `npm run db:seed` writes rows with a null owner; the first account that signs in adopts those rows. A second account gets its own empty book. The sample week uses stable ids, so only one account can hold that sample.
 
-`x-khata-passcode` is accepted as well.
+Password reset email is not wired up. Add an email sender later if you want reset links. Until then, keep the password, or sign in with Google using the same verified address (Google is a trusted provider for account linking).
 
 ## Deploy on Vercel
 
@@ -65,7 +63,10 @@ In the Vercel project, set:
 | --- | --- | --- |
 | `DATABASE_URL` | Yes | Neon **pooled** string, hostname contains `-pooler` |
 | `DATABASE_URL_UNPOOLED` | Yes, for migrations | Neon **direct** string, no `-pooler` |
-| `APP_PASSCODE` | No | Empty keeps the ledger open |
+| `BETTER_AUTH_SECRET` | Yes | `openssl rand -base64 32`. At least 32 characters. |
+| `BETTER_AUTH_URL` | Production and local | Canonical origin, no trailing slash. Leave **unset** on Vercel Preview. |
+| `GOOGLE_CLIENT_ID` | For Google sign-in | Google Cloud OAuth web client |
+| `GOOGLE_CLIENT_SECRET` | For Google sign-in | Same client |
 
 Do not commit those values. `.env.example` is placeholders only. `.env.local` is gitignored.
 
@@ -78,9 +79,28 @@ DATABASE_URL_UNPOOLED='postgresql://USER:PASSWORD@ep-example.region.aws.neon.tec
 DATABASE_URL='postgresql://USER:PASSWORD@ep-example-pooler.region.aws.neon.tech/neondb?sslmode=require' npm run db:seed
 ```
 
-`db:migrate` applies `drizzle/0000_pink_husk.sql` (categories, transactions) and `drizzle/0001_share_book.sql` (people, groups, splits, settlements). `db:seed` is idempotent: bank rows upsert on `externalId`, and the sample share book upserts on its stable ids.
+`db:migrate` applies `drizzle/0000_pink_husk.sql` (categories, transactions), `drizzle/0001_share_book.sql` (people, groups, splits, settlements), and `drizzle/0002_sparkling_colonel_america.sql` (Better Auth tables, plus `user_id` on the ledger). `db:seed` is idempotent: bank rows upsert on `externalId`, and the sample share book upserts on its stable ids. Those seeded rows stay unowned until the first sign-in claims them.
 
 There is no Neon URL in this workspace. The commands above are what to run once you paste yours. A local Postgres URL in `.env.local` is only for development.
+
+## Google sign-in
+
+1. Open [Google Cloud Console](https://console.cloud.google.com/) → APIs & Services → Credentials → Create credentials → OAuth client ID → Web application.
+2. Authorized JavaScript origins:
+   - `http://127.0.0.1:3847`
+   - `http://localhost:3847`
+   - `https://YOUR_PRODUCTION_DOMAIN`
+3. Authorized redirect URIs (Better Auth’s callback):
+   - `http://127.0.0.1:3847/api/auth/callback/google`
+   - `http://localhost:3847/api/auth/callback/google`
+   - `https://YOUR_PRODUCTION_DOMAIN/api/auth/callback/google`
+4. Copy the client id and secret into `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` locally and on Vercel. Restart `npm run dev` after changing `.env.local`.
+5. Set `BETTER_AUTH_URL` to the origin you actually open. Locally that is `http://127.0.0.1:3847` if you follow the link above. A mismatch here makes Google’s redirect fail.
+6. Preview deployments each have their own host. Leave `BETTER_AUTH_URL` empty on the Preview environment. Add that preview origin and `https://<preview-host>/api/auth/callback/google` in Google Cloud if you need Google on that URL, or use a stable branch alias.
+
+Email and password do not use Google. The Google button stays hidden until both client variables are set.
+
+Vercel’s own deployment protection (team SSO) is separate. Once this app has accounts, you can turn that protection off for visitors who are not on the Vercel team. The ledger still requires a Khata session.
 
 Install Khata from the browser once it is served over HTTPS (or localhost). The manifest, icons, and service worker are part of the production build. API calls are not cached, so an offline open shows the shell and asks for the network before it invents a balance.
 
@@ -116,9 +136,11 @@ Example:
 ```bash
 curl -X POST "$APP_URL/api/import" \
   -H "content-type: application/json" \
-  -H "authorization: Bearer $APP_PASSCODE" \
+  -H "authorization: Bearer $KHATA_SESSION_TOKEN" \
   -d @seed/week-of-2026-10-05.json
 ```
+
+`KHATA_SESSION_TOKEN` is the `better-auth.session_token` cookie from a signed-in browser (devtools → Application → Cookies). The same value can be sent as that cookie instead of a bearer token. The import is stored on that account.
 
 The response is `{ "created": 0, "updated": 6, "invalid": [] }` after a second run of the sample week.
 

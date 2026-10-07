@@ -1,31 +1,34 @@
+import { getSessionCookie } from "better-auth/cookies";
 import { NextResponse, type NextRequest } from "next/server";
-import { bearerMatches, expectedSessionToken, passcodeConfigured, safeEqual, SESSION_COOKIE } from "@/lib/passcode";
+import { safeNext } from "@/lib/return-path";
 
-const PUBLIC_PATHS = new Set(["/login", "/offline", "/api/auth/login", "/api/auth/logout", "/api/auth/status", "/manifest.webmanifest"]);
+const PUBLIC_PATHS = new Set(["/login", "/offline", "/manifest.webmanifest"]);
 
 function isPublic(pathname: string) {
   if (PUBLIC_PATHS.has(pathname)) return true;
+  if (pathname.startsWith("/api/auth")) return true;
   return pathname.startsWith("/icons/");
 }
 
-export async function proxy(request: NextRequest) {
-  if (!passcodeConfigured()) return NextResponse.next();
+export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
   if (isPublic(pathname)) return NextResponse.next();
-  if (bearerMatches(request)) return NextResponse.next();
 
-  const expected = await expectedSessionToken();
-  const token = request.cookies.get(SESSION_COOKIE)?.value ?? "";
-  if (expected && token && safeEqual(token, expected)) return NextResponse.next();
+  if (getSessionCookie(request)) return NextResponse.next();
+
+  const authorization = request.headers.get("authorization");
+  if (pathname.startsWith("/api/") && authorization?.toLowerCase().startsWith("bearer ")) {
+    return NextResponse.next();
+  }
 
   if (pathname.startsWith("/api/")) {
-    return NextResponse.json({ error: "Passcode required." }, { status: 401 });
+    return NextResponse.json({ error: "Sign in required." }, { status: 401 });
   }
 
   const login = request.nextUrl.clone();
   login.pathname = "/login";
   login.search = "";
-  const next = `${pathname}${request.nextUrl.search}`;
+  const next = safeNext(`${pathname}${request.nextUrl.search}`);
   if (next !== "/") login.searchParams.set("next", next);
   return NextResponse.redirect(login);
 }

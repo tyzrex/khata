@@ -15,6 +15,13 @@
       "when": 1791365224967,
       "tag": "0001_share_book",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1791369164185,
+      "tag": "0002_sparkling_colonel_america",
+      "breakpoints": true
     }
   ]
 }

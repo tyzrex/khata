@@ -8,23 +8,38 @@ import {
   primaryKey,
   text,
   timestamp,
+  unique,
 } from "drizzle-orm/pg-core";
+import { user } from "@/db/auth-schema";
 
-export const categories = pgTable("categories", {
-  id: text("id").primaryKey(),
-  name: text("name").notNull().unique(),
-  kind: text("kind").notNull(),
-  color: text("color").notNull(),
-  sortOrder: integer("sort_order").notNull().default(0),
-  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
-});
+export * from "@/db/auth-schema";
+
+const ownerId = () => text("user_id").references(() => user.id, { onDelete: "cascade" });
+
+export const categories = pgTable(
+  "categories",
+  {
+    id: text("id").primaryKey(),
+    userId: ownerId(),
+    name: text("name").notNull(),
+    kind: text("kind").notNull(),
+    color: text("color").notNull(),
+    sortOrder: integer("sort_order").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    unique("categories_user_name_unique").on(table.userId, table.name).nullsNotDistinct(),
+    index("categories_user_idx").on(table.userId),
+  ],
+);
 
 export const transactions = pgTable(
   "transactions",
   {
     id: text("id").primaryKey(),
-    externalId: text("external_id").unique(),
+    userId: ownerId(),
+    externalId: text("external_id"),
     date: date("date", { mode: "string" }).notNull(),
     type: text("type").notNull(),
     amount: numeric("amount", { precision: 14, scale: 2, mode: "number" }).notNull(),
@@ -38,26 +53,38 @@ export const transactions = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
+    unique("transactions_user_external_unique").on(table.userId, table.externalId).nullsNotDistinct(),
+    index("transactions_user_idx").on(table.userId),
     index("transactions_date_idx").on(table.date),
     index("transactions_type_idx").on(table.type),
     index("transactions_category_idx").on(table.categoryName),
   ],
 );
 
-export const people = pgTable("people", {
-  id: text("id").primaryKey(),
-  name: text("name").notNull(),
-  isSelf: boolean("is_self").notNull().default(false),
-  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
-});
+export const people = pgTable(
+  "people",
+  {
+    id: text("id").primaryKey(),
+    userId: ownerId(),
+    name: text("name").notNull(),
+    isSelf: boolean("is_self").notNull().default(false),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [index("people_user_idx").on(table.userId)],
+);
 
-export const groups = pgTable("groups", {
-  id: text("id").primaryKey(),
-  name: text("name").notNull(),
-  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
-});
+export const groups = pgTable(
+  "groups",
+  {
+    id: text("id").primaryKey(),
+    userId: ownerId(),
+    name: text("name").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [index("groups_user_idx").on(table.userId)],
+);
 
 export const groupMembers = pgTable(
   "group_members",
@@ -76,6 +103,7 @@ export const sharedExpenses = pgTable(
   "shared_expenses",
   {
     id: text("id").primaryKey(),
+    userId: ownerId(),
     groupId: text("group_id").references(() => groups.id, { onDelete: "set null" }),
     description: text("description").notNull(),
     date: date("date", { mode: "string" }).notNull(),
@@ -90,6 +118,7 @@ export const sharedExpenses = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
+    index("shared_expenses_user_idx").on(table.userId),
     index("shared_expenses_date_idx").on(table.date),
     index("shared_expenses_group_idx").on(table.groupId),
   ],
@@ -128,6 +157,7 @@ export const settlements = pgTable(
   "settlements",
   {
     id: text("id").primaryKey(),
+    userId: ownerId(),
     groupId: text("group_id").references(() => groups.id, { onDelete: "set null" }),
     fromPersonId: text("from_person_id")
       .notNull()
@@ -145,7 +175,7 @@ export const settlements = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (table) => [index("settlements_date_idx").on(table.date)],
+  (table) => [index("settlements_user_idx").on(table.userId), index("settlements_date_idx").on(table.date)],
 );
 
 export type CategoryRow = typeof categories.$inferSelect;

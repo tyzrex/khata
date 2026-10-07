@@ -3,6 +3,13 @@ import { connection } from "next/server";
 import { NotFoundError } from "@/db/shares";
 import { ShareInputError } from "@/lib/split";
 
+export class UnauthorizedError extends Error {
+  constructor() {
+    super("Sign in required.");
+    this.name = "UnauthorizedError";
+  }
+}
+
 export async function beginRequest() {
   await connection();
 }
@@ -19,6 +26,9 @@ export function shareError(error: unknown) {
 
 export function jsonError(error: unknown) {
   unstable_rethrow(error);
+  if (error instanceof UnauthorizedError) {
+    return Response.json({ error: "Sign in required." }, { status: 401 });
+  }
   console.error(error);
   const message = error instanceof Error ? error.message : "";
   if (!process.env.DATABASE_URL || message.includes("DATABASE_URL is not set")) {

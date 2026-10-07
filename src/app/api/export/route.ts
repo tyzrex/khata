@@ -1,10 +1,12 @@
+import type { NextRequest } from "next/server";
 import { exportTransactions } from "@/db/ledger";
-import { beginRequest, jsonError } from "@/lib/http";
+import { jsonError } from "@/lib/http";
+import { requireUserId } from "@/lib/session";
 
-export async function GET() {
-  await beginRequest();
+export async function GET(request: NextRequest) {
   try {
-    const body = await exportTransactions();
+    const userId = await requireUserId(request);
+    const body = await exportTransactions(userId);
     return new Response(JSON.stringify(body, null, 2), {
       headers: {
         "content-type": "application/json; charset=utf-8",

@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import type { TxType } from "@/lib/constants";
-import type { AuthStatus, CategoryDto, ImportResult, SummaryResponse, TransactionDto } from "@/lib/types";
+import type { CategoryDto, ImportResult, SummaryResponse, TransactionDto } from "@/lib/types";
 
 export type LedgerFilters = {
   q: string;
@@ -18,7 +18,7 @@ const emptyFilters: LedgerFilters = { q: "", from: "", to: "", type: "", categor
 async function readError(response: Response, goToLogin: () => void) {
   if (response.status === 401) {
     goToLogin();
-    throw new Error("Passcode required.");
+    throw new Error("Sign in required.");
   }
   const body = (await response.json().catch(() => null)) as { error?: string } | null;
   throw new Error(body?.error ?? "The ledger could not be read just now.");
@@ -30,7 +30,6 @@ export function useLedger() {
   const [summary, setSummary] = useState<SummaryResponse | null>(null);
   const [transactions, setTransactions] = useState<TransactionDto[]>([]);
   const [categories, setCategories] = useState<CategoryDto[]>([]);
-  const [auth, setAuth] = useState<AuthStatus>({ required: false, authenticated: true });
   const [filters, setFilters] = useState<LedgerFilters>(emptyFilters);
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
   const [error, setError] = useState<string | null>(null);
@@ -50,19 +49,13 @@ export function useLedger() {
   }, [deny]);
 
   const refresh = useCallback(async () => {
-    const [summaryRes, categoryRes, authRes] = await Promise.all([
-      fetch("/api/summary"),
-      fetch("/api/categories"),
-      fetch("/api/auth/status"),
-    ]);
+    const [summaryRes, categoryRes] = await Promise.all([fetch("/api/summary"), fetch("/api/categories")]);
     if (!summaryRes.ok) await deny(summaryRes);
     if (!categoryRes.ok) await deny(categoryRes);
     const summaryBody = (await summaryRes.json()) as SummaryResponse;
     const categoryBody = (await categoryRes.json()) as { categories: CategoryDto[] };
-    const authBody = (await authRes.json()) as AuthStatus;
     setSummary(summaryBody);
     setCategories(categoryBody.categories);
-    setAuth(authBody);
     await loadTransactions(filters);
   }, [deny, filters, loadTransactions]);
 
@@ -73,11 +66,10 @@ export function useLedger() {
         if (typeof navigator !== "undefined" && !navigator.onLine) {
           throw new Error("You're offline. Khata can open, but the ledger lives in Postgres and needs a connection.");
         }
-        const [summaryRes, categoryRes, txRes, authRes] = await Promise.all([
+        const [summaryRes, categoryRes, txRes] = await Promise.all([
           fetch("/api/summary"),
           fetch("/api/categories"),
           fetch("/api/transactions"),
-          fetch("/api/auth/status"),
         ]);
         if (!summaryRes.ok) await deny(summaryRes);
         if (!categoryRes.ok) await deny(categoryRes);
@@ -85,12 +77,10 @@ export function useLedger() {
         const summaryBody = (await summaryRes.json()) as SummaryResponse;
         const categoryBody = (await categoryRes.json()) as { categories: CategoryDto[] };
         const txBody = (await txRes.json()) as { transactions: TransactionDto[] };
-        const authBody = (await authRes.json()) as AuthStatus;
         if (cancelled) return;
         setSummary(summaryBody);
         setCategories(categoryBody.categories);
         setTransactions(txBody.transactions);
-        setAuth(authBody);
         setStatus("ready");
       } catch (caught) {
         if (cancelled) return;
@@ -184,7 +174,6 @@ export function useLedger() {
     summary,
     transactions,
     categories,
-    auth,
     filters,
     status,
     error,

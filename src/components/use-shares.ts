@@ -18,7 +18,7 @@ export function useShares() {
     const response = await fetch("/api/shares");
     if (response.status === 401) {
       router.push("/login");
-      throw new Error("Passcode required.");
+      throw new Error("Sign in required.");
     }
     const body = await readBody(response);
     if (!response.ok) throw new Error(body?.error ?? "The share book could not be read.");
@@ -62,7 +62,7 @@ export function useShares() {
     });
     if (response.status === 401) {
       router.push("/login");
-      throw new Error("Passcode required.");
+      throw new Error("Sign in required.");
     }
     if (!response.ok && response.status !== 204) {
       const body = await readBody(response);

@@ -64,8 +64,3 @@ export type ImportResult = {
   updated: number;
   invalid: { index: number; message: string }[];
 };
-
-export type AuthStatus = {
-  required: boolean;
-  authenticated: boolean;
-};
