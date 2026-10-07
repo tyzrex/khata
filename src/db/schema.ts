@@ -14,7 +14,7 @@ import { user } from "@/db/auth-schema";
 
 export * from "@/db/auth-schema";
 
-const ownerId = () => text("user_id").references(() => user.id, { onDelete: "cascade" });
+const ownerId = () => text("user_id").notNull().references(() => user.id, { onDelete: "cascade" });
 const linkedUserId = () => text("linked_user_id").references(() => user.id, { onDelete: "set null" });
 
 export const categories = pgTable(

@@ -10,7 +10,7 @@
     "build": "next build && serwist build serwist.config.mjs",
     "start": "next start -p 3847 -H 0.0.0.0",
     "lint": "eslint",
-    "test": "tsx --test src/lib/period.test.ts src/lib/schemas.test.ts src/lib/split.test.ts",
+    "test": "tsx --test src/lib/period.test.ts src/lib/schemas.test.ts src/lib/split.test.ts src/lib/isolation.test.ts",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:seed": "tsx src/db/seed.ts"
