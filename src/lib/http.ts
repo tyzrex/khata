@@ -42,7 +42,7 @@ export function jsonError(error: unknown) {
   if (/ECONNREFUSED|ENOTFOUND|password authentication|timeout|relation ["']?\w+["']? does not exist|does not exist/i.test(message)) {
     return Response.json(
       {
-        error: "Postgres is unreachable, or the Khata tables are missing. Check DATABASE_URL and run npm run db:migrate.",
+        error: "Postgres is unreachable, or the Khata tables are missing. Check DATABASE_URL and run bun run db:migrate.",
       },
       { status: 503 },
     );

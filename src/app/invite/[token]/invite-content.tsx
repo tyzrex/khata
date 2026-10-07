@@ -27,7 +27,7 @@ export function InviteContent() {
 
   useEffect(() => {
     let cancelled = false;
-    fetch(`/api/invite/${token}`)
+    fetch(`/api/invite/${encodeURIComponent(token)}`)
       .then(async (response) => {
         if (cancelled) return;
         if (!response.ok) {
@@ -49,7 +49,7 @@ export function InviteContent() {
     setPhase("joining");
     setError(null);
     try {
-      const response = await fetch(`/api/invite/${token}/accept`, { method: "POST" });
+      const response = await fetch(`/api/invite/${encodeURIComponent(token)}/accept`, { method: "POST" });
       const body = (await response.json().catch(() => null)) as { groupName?: string; error?: string } | null;
       if (!response.ok) throw new Error(body?.error ?? "Could not join that group.");
       toast.success(`You joined ${body?.groupName ?? "the group"}`);
