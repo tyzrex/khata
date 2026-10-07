@@ -1,10 +1,6 @@
-import { and, asc, desc, eq, gte, ilike, isNull, lte, or, type AnyColumn } from "drizzle-orm";
+import { and, asc, desc, eq, gte, ilike, lte, or } from "drizzle-orm";
 import { getDb } from "@/db/client";
 import { categories, transactions, type TransactionRow } from "@/db/schema";
-
-function owned(column: AnyColumn, userId: string | null) {
-  return userId ? eq(column, userId) : isNull(column);
-}
 import { DEFAULT_CATEGORIES, type TxType } from "@/lib/constants";
 import { summarize, type LedgerAmount } from "@/lib/period";
 import { parseImportPayload, type ImportTransaction, type ManualTransaction } from "@/lib/schemas";
@@ -49,7 +45,7 @@ function toCategory(row: typeof categories.$inferSelect): CategoryDto {
   };
 }
 
-export async function ensureCategories(userId: string | null) {
+export async function ensureCategories(userId: string) {
   const db = getDb();
   await db
     .insert(categories)
@@ -186,7 +182,7 @@ export async function listTransactions(userId: string, filters: TransactionFilte
   return rows.map(toTransaction);
 }
 
-function transactionValues(userId: string | null, input: ManualTransaction | ImportTransaction, externalId: string, source: string) {
+function transactionValues(userId: string, input: ManualTransaction | ImportTransaction, externalId: string, source: string) {
   const now = new Date();
   return {
     userId,
@@ -245,7 +241,7 @@ export async function deleteTransaction(userId: string, id: string) {
   return rows.length > 0;
 }
 
-export async function importTransactions(userId: string | null, payload: unknown): Promise<ImportResult> {
+export async function importTransactions(userId: string, payload: unknown): Promise<ImportResult> {
   const { rows, invalid } = parseImportPayload(payload);
   await ensureCategories(userId);
   let created = 0;
@@ -269,14 +265,14 @@ export async function importTransactions(userId: string | null, payload: unknown
       const [existing] = await tx
         .select({ id: transactions.id })
         .from(transactions)
-        .where(and(owned(transactions.userId, userId), eq(transactions.externalId, row.externalId)))
+        .where(and(eq(transactions.userId, userId), eq(transactions.externalId, row.externalId)))
         .limit(1);
 
       if (existing) {
         await tx
           .update(transactions)
           .set(transactionValues(userId, row, row.externalId, row.source))
-          .where(and(eq(transactions.id, existing.id), owned(transactions.userId, userId)));
+          .where(and(eq(transactions.id, existing.id), eq(transactions.userId, userId)));
         updated += 1;
       } else {
         await tx.insert(transactions).values({

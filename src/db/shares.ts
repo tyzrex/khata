@@ -1,4 +1,4 @@
-import { and, eq, inArray, or, isNull } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { getDb } from "@/db/client";
 import {
   expenseTransactions,
@@ -560,9 +560,9 @@ async function requireGroupMembers(groupId: string, ids: string[]) {
   if (rows.length !== unique.length) throw new ShareInputError("Everyone in a shared group entry must be a member of that group.");
 }
 
-async function rowScope(actorId: string, row: { userId: string | null; groupId: string | null }): Promise<Scope | null> {
+async function rowScope(actorId: string, row: { userId: string; groupId: string | null }): Promise<Scope | null> {
   if (row.userId === actorId) return { ownerId: actorId, isOwner: true };
-  if (!row.userId || !row.groupId) return null;
+  if (!row.groupId) return null;
   const access = await memberAccess(actorId, row.groupId);
   return access && access.ownerUserId === row.userId ? { ownerId: row.userId, isOwner: false } : null;
 }
@@ -581,7 +581,7 @@ async function writeExpense(
     participants: { personId: string; amount?: number; weight?: number }[];
     transactionIds: string[];
   },
-  existing: { userId: string | null; groupId: string | null } | null,
+  existing: { userId: string; groupId: string | null } | null,
 ) {
   const personIds = [input.paidById, ...input.participants.map((participant) => participant.personId)];
   let scope: Scope;
@@ -621,7 +621,7 @@ async function writeExpense(
           note: input.note,
           updatedAt: now,
         })
-        .where(and(eq(sharedExpenses.id, id), eq(sharedExpenses.userId, existing.userId!)))
+        .where(and(eq(sharedExpenses.id, id), eq(sharedExpenses.userId, existing.userId)))
         .returning();
       if (!updated) throw new NotFoundError("That shared expense is not in the book.");
       await tx.delete(sharedSplits).where(eq(sharedSplits.expenseId, id));
@@ -746,57 +746,46 @@ export async function deleteSettlement(userId: string, id: string) {
   await getDb().delete(settlements).where(and(eq(settlements.id, id), eq(settlements.userId, scope.ownerId)));
 }
 
-export async function seedSampleBook(userId: string | null) {
+export async function seedSampleBook(userId: string) {
   const db = getDb();
-  const ownerPatch = userId ? { userId } : {};
-  await db.transaction(async (tx) => {
-    const selves = userId
-      ? await tx.select().from(people).where(and(eq(people.userId, userId), eq(people.isSelf, true)))
-      : [];
-    const sampleSelf = selves.find((person) => person.id === "person-self");
-    const generatedSelf = selves.find((person) => person.id !== "person-self");
-    const selfId = sampleSelf?.id ?? generatedSelf?.id ?? "person-self";
-    if (sampleSelf && generatedSelf) {
-      const [splitUse] = await tx.select({ id: sharedSplits.personId }).from(sharedSplits).where(eq(sharedSplits.personId, generatedSelf.id)).limit(1);
-      const [settlementUse] = await tx
-        .select({ id: settlements.id })
-        .from(settlements)
-        .where(or(eq(settlements.fromPersonId, generatedSelf.id), eq(settlements.toPersonId, generatedSelf.id)))
-        .limit(1);
-      if (!splitUse && !settlementUse) await tx.delete(people).where(eq(people.id, generatedSelf.id));
-      else await tx.update(people).set({ isSelf: false, updatedAt: new Date() }).where(eq(people.id, generatedSelf.id));
-    }
-    const mapId = (id: string) => (id === "person-self" ? selfId : id);
+  // Use user-scoped IDs so two users can both seed without colliding.
+  // Every sample entity is namespaced under the userId.
+  const scopedId = (raw: string) => `${raw}--${userId}`;
 
+  await db.transaction(async (tx) => {
+    // Reuse the existing "You" person for this user if it exists, otherwise
+    // the scopedId for "person-self" will be the seed placeholder.
+    const selfRows = await tx
+      .select()
+      .from(people)
+      .where(and(eq(people.userId, userId), eq(people.isSelf, true)));
+    const selfId = selfRows[0]?.id ?? scopedId("person-self");
+    const mapId = (raw: string) => (raw === "person-self" ? selfId : scopedId(raw));
+
+    // Upsert people (scoped IDs → only this user's rows are touched).
     for (const person of samplePeople) {
-      if (person.id === "person-self" && selfId !== "person-self") continue;
-      const [current] = await tx.select({ userId: people.userId }).from(people).where(eq(people.id, person.id)).limit(1);
-      if (current?.userId && userId && current.userId !== userId) {
-        throw new ShareInputError("The sample book already belongs to another account.");
-      }
+      const id = mapId(person.id);
       await tx
         .insert(people)
-        .values({ id: mapId(person.id), userId, name: person.name, isSelf: person.isSelf })
+        .values({ id, userId, name: person.name, isSelf: person.isSelf })
         .onConflictDoUpdate({
           target: people.id,
-          set: { name: person.name, isSelf: person.isSelf, updatedAt: new Date(), ...ownerPatch },
-          setWhere: userId ? or(isNull(people.userId), eq(people.userId, userId)) : undefined,
+          set: { name: person.name, isSelf: person.isSelf, updatedAt: new Date() },
+          setWhere: eq(people.userId, userId),
         });
     }
-    const [currentGroup] = await tx.select({ userId: groups.userId }).from(groups).where(eq(groups.id, sampleGroup.id)).limit(1);
-    if (currentGroup?.userId && userId && currentGroup.userId !== userId) {
-      throw new ShareInputError("The sample book already belongs to another account.");
-    }
+
+    const groupId = scopedId(sampleGroup.id);
     await tx
       .insert(groups)
-      .values({ id: sampleGroup.id, userId, name: sampleGroup.name })
+      .values({ id: groupId, userId, name: sampleGroup.name })
       .onConflictDoUpdate({
         target: groups.id,
-        set: { name: sampleGroup.name, updatedAt: new Date(), ...ownerPatch },
-        setWhere: userId ? or(isNull(groups.userId), eq(groups.userId, userId)) : undefined,
+        set: { name: sampleGroup.name, updatedAt: new Date() },
+        setWhere: eq(groups.userId, userId),
       });
-    await tx.delete(groupMembers).where(eq(groupMembers.groupId, sampleGroup.id));
-    await tx.insert(groupMembers).values(sampleGroup.memberIds.map((personId) => ({ groupId: sampleGroup.id, personId: mapId(personId) })));
+    await tx.delete(groupMembers).where(eq(groupMembers.groupId, groupId));
+    await tx.insert(groupMembers).values(sampleGroup.memberIds.map((personId) => ({ groupId, personId: mapId(personId) })));
 
     const externalIds = [
       ...new Set([
@@ -808,16 +797,13 @@ export async function seedSampleBook(userId: string | null) {
       ? await tx
           .select({ id: transactions.id, externalId: transactions.externalId })
           .from(transactions)
-          .where(
-            and(
-              inArray(transactions.externalId, externalIds),
-              userId ? eq(transactions.userId, userId) : isNull(transactions.userId),
-            ),
-          )
+          .where(and(inArray(transactions.externalId, externalIds), eq(transactions.userId, userId)))
       : [];
     const bankId = new Map(bankRows.map((row) => [row.externalId, row.id]));
 
     for (const expense of sampleExpenses) {
+      const expenseId = scopedId(expense.id);
+      const expenseGroupId = expense.groupId ? scopedId(expense.groupId) : null;
       const paidById = mapId(expense.paidById);
       const participants = expense.participants.map((participant) => ({ ...participant, personId: mapId(participant.personId) }));
       const splits = buildSplits({
@@ -829,9 +815,9 @@ export async function seedSampleBook(userId: string | null) {
       await tx
         .insert(sharedExpenses)
         .values({
-          id: expense.id,
+          id: expenseId,
           userId,
-          groupId: expense.groupId,
+          groupId: expenseGroupId,
           description: expense.description,
           date: expense.date,
           amount: expense.amount,
@@ -843,7 +829,7 @@ export async function seedSampleBook(userId: string | null) {
         .onConflictDoUpdate({
           target: sharedExpenses.id,
           set: {
-            groupId: expense.groupId,
+            groupId: expenseGroupId,
             description: expense.description,
             date: expense.date,
             amount: expense.amount,
@@ -851,36 +837,37 @@ export async function seedSampleBook(userId: string | null) {
             splitMode: expense.splitMode,
             note: expense.note,
             updatedAt: new Date(),
-            ...ownerPatch,
           },
-          setWhere: userId ? or(isNull(sharedExpenses.userId), eq(sharedExpenses.userId, userId)) : undefined,
+          setWhere: eq(sharedExpenses.userId, userId),
         });
-      await tx.delete(sharedSplits).where(eq(sharedSplits.expenseId, expense.id));
+      await tx.delete(sharedSplits).where(eq(sharedSplits.expenseId, expenseId));
       await tx.insert(sharedSplits).values(
         splits.map((split) => ({
-          expenseId: expense.id,
+          expenseId,
           personId: split.personId,
           amount: split.amount,
           weight: split.weight,
         })),
       );
-      await tx.delete(expenseTransactions).where(eq(expenseTransactions.expenseId, expense.id));
+      await tx.delete(expenseTransactions).where(eq(expenseTransactions.expenseId, expenseId));
       const links = expense.transactionExternalIds.map((externalId) => bankId.get(externalId)).filter((id): id is string => Boolean(id));
       if (links.length) {
-        await tx.insert(expenseTransactions).values(links.map((transactionId) => ({ expenseId: expense.id, transactionId })));
+        await tx.insert(expenseTransactions).values(links.map((transactionId) => ({ expenseId, transactionId })));
       }
     }
 
     for (const settlement of sampleSettlements) {
+      const settlementId = scopedId(settlement.id);
+      const settlementGroupId = settlement.groupId ? scopedId(settlement.groupId) : null;
       const transactionId = settlement.transactionExternalId ? bankId.get(settlement.transactionExternalId) ?? null : null;
       const fromPersonId = mapId(settlement.fromPersonId);
       const toPersonId = mapId(settlement.toPersonId);
       await tx
         .insert(settlements)
         .values({
-          id: settlement.id,
+          id: settlementId,
           userId,
-          groupId: settlement.groupId,
+          groupId: settlementGroupId,
           fromPersonId,
           toPersonId,
           amount: settlement.amount,
@@ -892,7 +879,7 @@ export async function seedSampleBook(userId: string | null) {
         .onConflictDoUpdate({
           target: settlements.id,
           set: {
-            groupId: settlement.groupId,
+            groupId: settlementGroupId,
             fromPersonId,
             toPersonId,
             amount: settlement.amount,
@@ -900,9 +887,8 @@ export async function seedSampleBook(userId: string | null) {
             note: settlement.note,
             transactionId,
             updatedAt: new Date(),
-            ...ownerPatch,
           },
-          setWhere: userId ? or(isNull(settlements.userId), eq(settlements.userId, userId)) : undefined,
+          setWhere: eq(settlements.userId, userId),
         });
     }
   });
