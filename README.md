@@ -57,16 +57,30 @@ Authorization: Bearer <APP_PASSCODE>
 
 ## Deploy on Vercel
 
-1. Import this repository in Vercel. Framework preset: Next.js. Build command: `npm run build` (Next.js, then the service worker).
-2. Environment variables:
-   - `DATABASE_URL` — pooled Neon URL
-   - `DATABASE_URL_UNPOOLED` — direct Neon URL
-   - `APP_PASSCODE` — optional
-3. Deploy.
-4. From your machine, with the production direct URL exported, run `npm run db:migrate` once. You can also set the Vercel build command to `npm run db:migrate && npm run build` after those variables exist.
-5. Optional: `npm run db:seed` against the production `DATABASE_URL`.
+`vercel.json` sets the build command to `npm run build`. That runs Next.js and then Serwist, which writes `public/sw.js`. Vercel’s default Next.js command is only `next build`, so leave this override in place or the service worker will be missing. Migrations are not part of the build. A deploy can succeed before the database exists; the app will answer 503 until the tables are there.
 
-The app uses `node-postgres` with a small pool. On Vercel Fluid, `attachDatabasePool` closes idle connections before the function suspends.
+In the Vercel project, set:
+
+| Name | Required | Where it comes from |
+| --- | --- | --- |
+| `DATABASE_URL` | Yes | Neon **pooled** string, hostname contains `-pooler` |
+| `DATABASE_URL_UNPOOLED` | Yes, for migrations | Neon **direct** string, no `-pooler` |
+| `APP_PASSCODE` | No | Empty keeps the ledger open |
+
+Do not commit those values. `.env.example` is placeholders only. `.env.local` is gitignored.
+
+Node 20.9 or newer. The app uses `node-postgres`. On Vercel Fluid, `attachDatabasePool` closes idle connections before the function suspends.
+
+Apply the schema from a machine that has the Neon URLs. A variable already in the shell wins over `.env.local`, so a local file does not point this at the wrong database:
+
+```bash
+DATABASE_URL_UNPOOLED='postgresql://USER:PASSWORD@ep-example.region.aws.neon.tech/neondb?sslmode=require' npm run db:migrate
+DATABASE_URL='postgresql://USER:PASSWORD@ep-example-pooler.region.aws.neon.tech/neondb?sslmode=require' npm run db:seed
+```
+
+`db:migrate` applies `drizzle/0000_pink_husk.sql` (categories, transactions) and `drizzle/0001_share_book.sql` (people, groups, splits, settlements). `db:seed` is idempotent: bank rows upsert on `externalId`, and the sample share book upserts on its stable ids.
+
+There is no Neon URL in this workspace. The commands above are what to run once you paste yours. A local Postgres URL in `.env.local` is only for development.
 
 Install Khata from the browser once it is served over HTTPS (or localhost). The manifest, icons, and service worker are part of the production build. API calls are not cached, so an offline open shows the shell and asks for the network before it invents a balance.
 

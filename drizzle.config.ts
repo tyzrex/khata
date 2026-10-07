@@ -2,7 +2,7 @@ import { config } from "dotenv";
 import { defineConfig } from "drizzle-kit";
 
 config({ path: ".env" });
-config({ path: ".env.local", override: true });
+config({ path: ".env.local" });
 
 const url =
   process.env.DATABASE_URL_UNPOOLED ||
