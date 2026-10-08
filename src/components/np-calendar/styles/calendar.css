@@ -1,0 +1,363 @@
+.hpc {
+  /* Map onto the app design tokens so the calendar inherits the theme (and dark
+     mode) automatically; the fallbacks keep it working standalone. */
+  --hpc-accent: var(--primary, #1a0fd1);
+  --hpc-accent-contrast: var(--primary-foreground, #ffffff);
+  --hpc-surface: var(--card, #ffffff);
+  --hpc-surface-2: var(--secondary, #f4f4f5);
+  --hpc-text: var(--foreground, #1f2937);
+  --hpc-muted: var(--muted-foreground, #6b7280);
+  --hpc-border: var(--border, #e5e7eb);
+  --hpc-radius: 24px;
+  --hpc-radius-sm: 12px;
+  --hpc-holiday: var(--destructive, #dc2626);
+  --hpc-today-ring: var(--hpc-accent);
+  --hpc-day-size: 2.5rem;
+  --hpc-font: var(--font-metropolis, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif);
+
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 22rem;
+  font-family: var(--hpc-font);
+  color: var(--hpc-text);
+  background: var(--hpc-surface);
+  border: 1px solid var(--hpc-border);
+  border-radius: var(--hpc-radius);
+  box-shadow:
+    0 1px 2px rgb(0 0 0 / 0.04),
+    0 8px 24px -12px rgb(0 0 0 / 0.12);
+  overflow: hidden;
+}
+.hpc *,
+.hpc *::before,
+.hpc *::after {
+  box-sizing: border-box;
+}
+.hpc.hpc-compact {
+  max-width: 19rem;
+  --hpc-day-size: 2.1rem;
+}
+.hpc[data-theme="dark"] {
+  --hpc-surface: #0f172a;
+  --hpc-surface-2: #1e293b;
+  --hpc-text: #e2e8f0;
+  --hpc-muted: #94a3b8;
+  --hpc-border: #334155;
+}
+
+.hpc-switch-bar {
+  display: flex;
+  justify-content: center;
+  padding: 0.5rem;
+  background: var(--hpc-surface-2);
+  border-bottom: 1px solid var(--hpc-border);
+}
+.hpc-switch {
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  background: var(--hpc-surface);
+  border: 1px solid var(--hpc-border);
+  border-radius: 999px;
+}
+.hpc-switch-btn {
+  appearance: none;
+  border: 0;
+  cursor: pointer;
+  padding: 0.25rem 0.9rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--hpc-muted);
+  background: transparent;
+  border-radius: 999px;
+  transition:
+    color 150ms,
+    background-color 150ms,
+    transform 150ms;
+}
+.hpc-switch-btn:hover {
+  color: var(--hpc-accent);
+}
+.hpc-switch-btn[data-active="true"] {
+  color: var(--hpc-accent-contrast);
+  background: var(--hpc-accent);
+}
+.hpc-switch-btn:focus-visible {
+  outline: 2px solid var(--hpc-accent);
+  outline-offset: 2px;
+}
+
+.hpc-calendar {
+  padding: 0.75rem;
+}
+/* Three columns: prev nav | center (picker + today) | next nav — keeps << >>
+   visible instead of letting Today crowd the right chevrons off-screen. */
+.hpc-header {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.25rem;
+  margin-bottom: 0.6rem;
+}
+.hpc-header-group {
+  display: flex;
+  align-items: center;
+  gap: 0.15rem;
+  flex-shrink: 0;
+}
+.hpc-header-center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  min-width: 0;
+}
+.hpc-title {
+  margin: 0;
+  font-size: 0.85rem;
+  font-weight: 700;
+  text-align: center;
+}
+.hpc-picker {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  min-width: 0;
+}
+.hpc-picker-trigger {
+  border-color: var(--hpc-border);
+  background: var(--hpc-surface-2);
+  color: var(--hpc-text);
+  font-family: inherit;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+.hpc-picker-trigger:hover,
+.hpc-picker-trigger[data-popup-open] {
+  border-color: var(--hpc-accent);
+  color: var(--hpc-accent);
+}
+.hpc-month-trigger {
+  width: 6.5rem;
+}
+.hpc-year-trigger {
+  width: 5.25rem;
+}
+.hpc-picker-content {
+  scrollbar-gutter: stable;
+  overscroll-behavior: contain;
+}
+.hpc-nav-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--hpc-muted);
+  cursor: pointer;
+  transition:
+    background-color 150ms,
+    color 150ms,
+    transform 150ms;
+}
+.hpc-nav-btn:hover:not(:disabled) {
+  background: var(--hpc-surface-2);
+  color: var(--hpc-accent);
+  transform: scale(1.05);
+}
+.hpc-nav-btn:focus-visible {
+  outline: 2px solid var(--hpc-accent);
+  outline-offset: 2px;
+}
+.hpc-nav-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+.hpc-today-btn {
+  border: 0;
+  cursor: pointer;
+  padding: 0.22rem 0.65rem;
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: var(--hpc-accent-contrast);
+  background: var(--hpc-accent);
+  border-radius: 999px;
+  transition:
+    filter 150ms,
+    transform 150ms;
+  white-space: nowrap;
+}
+.hpc-today-btn:hover {
+  filter: brightness(0.94);
+  transform: translateY(-1px);
+}
+.hpc-today-btn:focus-visible {
+  outline: 2px solid var(--hpc-accent);
+  outline-offset: 2px;
+}
+
+.hpc-weekrow,
+.hpc-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+}
+.hpc-weekday {
+  padding: 0.35rem 0;
+  text-align: center;
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--hpc-muted);
+  text-transform: uppercase;
+}
+/* Always reserve 6 week-rows so month navigation doesn't jump the popover height. */
+.hpc-grid {
+  border: 1px solid var(--hpc-border);
+  border-radius: var(--hpc-radius-sm);
+  overflow: hidden;
+  min-height: calc(6 * var(--hpc-day-size));
+}
+.hpc-day {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  height: var(--hpc-day-size);
+  border: 0;
+  border-right: 1px solid var(--hpc-border);
+  border-bottom: 1px solid var(--hpc-border);
+  background: var(--hpc-surface);
+  color: var(--hpc-text);
+  cursor: pointer;
+  transition:
+    background-color 150ms,
+    color 150ms,
+    transform 120ms;
+}
+.hpc-day:nth-child(7n) {
+  border-right: 0;
+}
+.hpc-day:nth-last-child(-n + 7) {
+  border-bottom: 0;
+}
+.hpc-day-primary {
+  font-size: 0.8rem;
+  font-weight: 600;
+  line-height: 1;
+}
+.hpc-day-secondary {
+  font-size: 0.6rem;
+  line-height: 1;
+  opacity: 0.55;
+}
+.hpc-day:hover:not(:disabled) {
+  background: var(--hpc-surface-2);
+  color: var(--hpc-accent);
+  transform: scale(1.04);
+  z-index: 1;
+}
+.hpc-day:focus-visible {
+  outline: 2px solid var(--hpc-accent);
+  outline-offset: -2px;
+  z-index: 2;
+}
+.hpc-day[data-other-month="true"] {
+  opacity: 0.4;
+  color: var(--hpc-muted);
+}
+.hpc-day[data-holiday="true"] .hpc-day-primary {
+  color: var(--hpc-holiday);
+}
+/* Weekends / weekly offs — red like holidays. When the caller supplies
+   employee `markedWeekDays`, those drive `data-weekend` instead of a
+   hardcoded Sat+Sun pair (see CalendarGrid). */
+.hpc-day[data-weekend="true"] .hpc-day-primary {
+  color: var(--hpc-holiday);
+}
+.hpc-weekday[data-weekend="true"] {
+  color: var(--hpc-holiday);
+}
+.hpc-day[data-today="true"] {
+  box-shadow: inset 0 0 0 2px var(--hpc-today-ring);
+  font-weight: 700;
+}
+/* Non-blocking markers (org holiday / weekly off / employee off-date) — muted
+   text plus a small dot, distinct from the disabled state (these days remain
+   selectable; the tooltip carries the reason via the button's `title`). */
+.hpc-day[data-marked="true"]:not(:disabled) {
+  position: relative;
+  color: var(--hpc-muted);
+}
+.hpc-day[data-marked="true"]:not(:disabled) .hpc-day-primary {
+  color: var(--hpc-holiday);
+}
+.hpc-day[data-marked="true"]:not(:disabled)::after {
+  content: "";
+  position: absolute;
+  bottom: 3px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 4px;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--hpc-holiday);
+}
+.hpc-day[data-marked="true"][data-selected="true"]::after {
+  background: var(--hpc-accent-contrast);
+}
+/* Range mode: days strictly between the two picked endpoints. The endpoints
+   themselves use the normal `data-selected` accent styling above. */
+.hpc-day[data-in-range="true"] {
+  background: color-mix(in srgb, var(--hpc-accent) 16%, var(--hpc-surface));
+}
+.hpc-day[data-in-range="true"] .hpc-day-primary {
+  color: var(--hpc-accent);
+}
+.hpc-day[data-in-range="true"]:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--hpc-accent) 26%, var(--hpc-surface));
+  transform: none;
+}
+.hpc-day[data-selected="true"] {
+  background: var(--hpc-accent);
+  color: var(--hpc-accent-contrast);
+  transform: scale(1.02);
+}
+/* A selected day keeps its light text even when it's a weekend/holiday. */
+.hpc-day[data-selected="true"] .hpc-day-primary {
+  color: var(--hpc-accent-contrast);
+}
+.hpc-day[data-selected="true"] .hpc-day-secondary {
+  opacity: 0.8;
+}
+.hpc-day[data-selected="true"]:hover:not(:disabled) {
+  background: var(--hpc-accent);
+  color: var(--hpc-accent-contrast);
+}
+.hpc-day:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+  background: var(--hpc-surface-2);
+  color: var(--hpc-muted);
+}
+.hpc-day--empty {
+  background: var(--hpc-surface-2);
+  cursor: default;
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hpc * {
+    transition: none !important;
+  }
+  .hpc-day:hover:not(:disabled),
+  .hpc-day[data-selected="true"],
+  .hpc-nav-btn:hover:not(:disabled) {
+    transform: none;
+  }
+}

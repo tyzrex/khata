@@ -1,10 +1,11 @@
+/** Khata mark: a filled disc with three ledger lines, drawn in the brand blue. */
 export function Mark({ className = "size-8" }: { className?: string }) {
   return (
     <svg viewBox="0 0 32 32" className={className} aria-hidden>
-      <rect width="32" height="32" rx="7" className="fill-foreground" />
-      <rect x="7" y="9" width="18" height="2.5" rx="1" className="fill-background" />
-      <rect x="7" y="15" width="13" height="2.5" rx="1" className="fill-background" />
-      <rect x="7" y="21" width="8" height="2.5" rx="1" className="fill-background" />
+      <circle cx="16" cy="16" r="16" className="fill-brand" />
+      <rect x="8" y="10" width="16" height="2" rx="1" className="fill-brand-foreground" />
+      <rect x="8" y="15" width="11" height="2" rx="1" className="fill-brand-foreground" />
+      <rect x="8" y="20" width="6" height="2" rx="1" className="fill-brand-foreground" />
     </svg>
   );
 }

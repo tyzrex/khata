@@ -2,15 +2,15 @@ import type { ReactNode } from "react";
 
 export function Panel({ title, meta, action, children }: { title: string; meta?: string; action?: ReactNode; children: ReactNode }) {
   return (
-    <section className="rounded-lg border border-border bg-card">
-      <header className="flex items-center justify-between gap-3 border-b border-border px-4 py-3">
-        <h2 className="text-sm font-medium">{title}</h2>
+    <section className="overflow-hidden rounded-3xl bg-card shadow-card">
+      <header className="flex items-center justify-between gap-3 px-6 pt-6 pb-2">
+        <h2 className="text-base font-semibold tracking-[-0.02em] text-display">{title}</h2>
         <div className="flex items-center gap-3">
-          {meta ? <p className="figure text-sm text-muted-foreground">{meta}</p> : null}
+          {meta ? <p className="figure text-sm text-foreground">{meta}</p> : null}
           {action}
         </div>
       </header>
-      <div className="px-4">{children}</div>
+      <div className="px-6 pb-2">{children}</div>
     </section>
   );
 }
