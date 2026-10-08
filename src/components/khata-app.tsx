@@ -1,42 +1,28 @@
 "use client";
 
-import { Download, History, LayoutDashboard, Rows3, Scale, Tags, Users } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState, useSyncExternalStore } from "react";
 import { authClient } from "@/lib/auth-client";
-import { toast } from "sonner";
+import { toast } from "@/lib/status";
+import { AppShell, views, type ViewId } from "@/components/app-shell";
 import { ActivityView } from "@/components/activity-view";
 import { BalancesView } from "@/components/balances-view";
 import { CategoriesView } from "@/components/categories-view";
+import { SettingsView } from "@/components/settings-view";
+import { FriendsView } from "@/components/friends-view";
 import { GroupsView } from "@/components/groups-view";
 import { Ledger } from "@/components/ledger";
-import { Mark } from "@/components/mark";
 import { Overview } from "@/components/overview";
 import { SettleDialog, type SettleDraft } from "@/components/settle-dialog";
 import { ShareExpenseDialog } from "@/components/share-expense-dialog";
 import { SyncView } from "@/components/sync-view";
-import { ThemeToggle } from "@/components/theme-toggle";
 import { TransactionDialog } from "@/components/transaction-dialog";
 import { useLedger } from "@/components/use-ledger";
 import { useShares } from "@/components/use-shares";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Skeleton } from "@/components/ui/skeleton";
+import { Loading } from "@/components/ui/loading";
 import type { BalanceScope, ShareBook } from "@/db/shares";
-import { formatLongDate } from "@/lib/format";
 import type { TransactionDto } from "@/lib/types";
-
-const views = [
-  { id: "overview", label: "Overview", icon: LayoutDashboard, mobile: true },
-  { id: "balances", label: "Balances", icon: Scale, mobile: true },
-  { id: "groups", label: "Groups", icon: Users, mobile: true },
-  { id: "ledger", label: "Ledger", icon: Rows3, mobile: true },
-  { id: "activity", label: "Activity", icon: History, mobile: false },
-  { id: "categories", label: "Categories", icon: Tags, mobile: false },
-  { id: "sync", label: "Sync", icon: Download, mobile: false },
-] as const;
-
-type ViewId = (typeof views)[number]["id"];
 
 const viewListeners = new Set<() => void>();
 
@@ -62,6 +48,22 @@ function rememberView(next: ViewId) {
   viewListeners.forEach((listener) => listener());
 }
 
+type LaunchAction = "add" | "split";
+
+/** `?action=add|split` comes from the installed app's shortcuts; it opens the matching dialog once. */
+function readAction(): LaunchAction | null {
+  const value = new URLSearchParams(window.location.search).get("action");
+  return value === "add" || value === "split" ? value : null;
+}
+
+function clearAction() {
+  const url = new URL(window.location.href);
+  if (!url.searchParams.has("action")) return;
+  url.searchParams.delete("action");
+  window.history.replaceState(null, "", url);
+  viewListeners.forEach((listener) => listener());
+}
+
 function suggestGroup(book: ShareBook, fromId: string, toId: string) {
   const hits = book.groups.filter((group) =>
     [...group.balances.youOwe, ...group.balances.youAreOwed, ...group.balances.others].some((debt) => debt.fromId === fromId && debt.toId === toId),
@@ -76,7 +78,7 @@ function scopeBook(book: ShareBook, groupId: string | null | undefined) {
     ...book,
     self: joined.self,
     people: joined.people,
-    groups: [{ id: joined.id, name: joined.name, members: joined.members, balances: joined.balances }],
+    groups: [{ id: joined.id, name: joined.name, kind: joined.kind, members: joined.members, balances: joined.balances }],
     joinedGroups: [],
     expenses: joined.expenses,
     settlements: joined.settlements,
@@ -92,9 +94,9 @@ export function KhataApp({ user }: { user: { name: string; email: string } }) {
   const ledger = useLedger();
   const shares = useShares();
   const view = useSyncExternalStore(subscribeView, readView, () => "overview" as ViewId);
+  const action = useSyncExternalStore(subscribeView, readAction, () => null);
   const [composerOpen, setComposerOpen] = useState(false);
   const [editing, setEditing] = useState<TransactionDto | undefined>();
-  const [menuOpen, setMenuOpen] = useState(false);
   const [expenseOpen, setExpenseOpen] = useState(false);
   const [editingExpense, setEditingExpense] = useState<ShareBook["expenses"][number] | undefined>();
   const [expenseGroup, setExpenseGroup] = useState<string | null>(null);
@@ -103,7 +105,6 @@ export function KhataApp({ user }: { user: { name: string; email: string } }) {
 
   function changeView(next: ViewId) {
     rememberView(next);
-    setMenuOpen(false);
   }
 
   function openSettle(debt: Pick<BalanceScope["youOwe"][number], "fromId" | "toId" | "amount">, groupId = "") {
@@ -125,87 +126,38 @@ export function KhataApp({ user }: { user: { name: string; email: string } }) {
     setExpenseOpen(true);
   }
 
+  const inviteActions = { ensureDirect: shares.ensureDirect, createGroup: shares.addGroup, updateGroup: shares.updateGroup, createInvite: shares.createInvite };
   const today = ledger.summary?.today ?? "";
-  const sum = (debts: { amount: number }[]) => debts.reduce((total, debt) => total + debt.amount, 0);
-  const owe = shares.book ? sum(shares.book.overall.youOwe) + shares.book.joinedGroups.reduce((total, group) => total + sum(group.balances.youOwe), 0) : null;
-  const owed = shares.book ? sum(shares.book.overall.youAreOwed) + shares.book.joinedGroups.reduce((total, group) => total + sum(group.balances.youAreOwed), 0) : null;
   const expenseScope = shares.book ? scopeBook(shares.book, editingExpense?.groupId ?? expenseGroup) : null;
   const settleScope = shares.book ? scopeBook(shares.book, settleDraft.groupId) : null;
 
+  function signOut() {
+    // The service worker drops its caches so nothing from this session outlives it on a shared device.
+    navigator.serviceWorker?.controller?.postMessage({ type: "khata:sign-out" });
+    void authClient.signOut().then(() => {
+      router.push("/login");
+      router.refresh();
+    });
+  }
+
   return (
-    <div className="min-h-dvh md:grid md:grid-cols-[220px_minmax(0,1fr)]">
-      <aside className="hidden border-r border-sidebar-border bg-sidebar text-sidebar-foreground md:flex md:flex-col md:px-3 md:py-4">
-        <div className="flex items-center gap-2.5 px-2 py-1">
-          <Mark className="size-7" />
-          <div>
-            <p className="text-sm font-medium tracking-tight">Khata</p>
-            <p className="text-xs text-muted-foreground">NPR</p>
-          </div>
-        </div>
-        <nav className="mt-6 flex flex-col gap-0.5" aria-label="Sections">
-          {views.map((item) => {
-            const Icon = item.icon;
-            const active = view === item.id;
-            return (
-              <button
-                key={item.id}
-                type="button"
-                onClick={() => changeView(item.id)}
-                className={active ? "flex items-center gap-2 rounded-md bg-sidebar-accent px-2 py-1.5 text-left text-sm font-medium" : "flex items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm text-muted-foreground hover:bg-sidebar-accent/70 hover:text-sidebar-foreground"}
-              >
-                <Icon className="size-4" />
-                {item.label}
-              </button>
-            );
-          })}
-        </nav>
-        <div className="mt-auto px-2">
-          <p className="truncate text-sm font-medium">{user.name}</p>
-          <p className="truncate text-xs text-muted-foreground">{user.email}</p>
-        </div>
-      </aside>
-
-      <div className="min-w-0">
-        <header className="flex items-center justify-between gap-3 border-b border-border px-4 py-3 md:px-8">
-          <div className="flex items-center gap-2.5 md:block">
-            <Mark className="size-7 md:hidden" />
-            <div>
-              <p className="text-sm font-medium tracking-tight md:hidden">Khata</p>
-              <p className="text-sm text-muted-foreground">{today ? formatLongDate(today) : "Kathmandu"}</p>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <Button type="button" variant="ghost" size="sm" className="md:hidden" onClick={() => setMenuOpen(true)}>
-              More
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={() => {
-                void authClient.signOut().then(() => {
-                  router.push("/login");
-                  router.refresh();
-                });
-              }}
-            >
-              Sign out
-            </Button>
-            <ThemeToggle />
-          </div>
-        </header>
-
-        <main className="px-4 py-6 pb-24 md:px-8 md:pb-16">
-          {ledger.status === "loading" ? (
-            <div className="flex flex-col gap-4" aria-hidden>
-              <Skeleton className="h-4 w-32" />
-              <Skeleton className="h-24 w-full" />
-              <Skeleton className="h-40 w-full" />
-            </div>
-          ) : null}
+    <AppShell
+      user={user}
+      today={today}
+      view={view}
+      onView={changeView}
+      onAdd={() => {
+        setEditing(undefined);
+        setComposerOpen(true);
+      }}
+      onSplit={() => openExpense(null)}
+      onSignOut={signOut}
+    >
+      <>
+          {ledger.status === "loading" ? <Loading /> : null}
           {ledger.status === "error" ? (
             <section className="max-w-md py-10">
-              <h1 className="text-lg font-medium">The ledger is out of reach</h1>
+              <h1 className="display text-3xl">The ledger is out of reach</h1>
               <p className="mt-2 text-sm leading-6 text-muted-foreground">{ledger.error}</p>
               <Button type="button" className="mt-4" onClick={() => void ledger.reload()}>
                 Try again
@@ -216,28 +168,43 @@ export function KhataApp({ user }: { user: { name: string; email: string } }) {
             <>
               {view === "overview" ? (
                 <Overview
-                  summary={ledger.summary}
-                  owe={owe}
-                  owed={owed}
+                  transactions={ledger.allTransactions}
+                  categories={ledger.categories}
+                  today={today}
+                  book={shares.book}
+                  onLedger={() => changeView("ledger")}
                   onAdd={() => {
                     setEditing(undefined);
                     setComposerOpen(true);
                   }}
+                  onSplit={() => openExpense(null)}
                   onSample={async () => {
                     const result = await ledger.loadSample();
                     await shares.reload();
                     toast.success(result.created ? "Sample week loaded" : "Sample week already in the ledger");
                   }}
                   onBalances={() => changeView("balances")}
+                  onFriends={() => changeView("friends")}
+                  onGroups={() => changeView("groups")}
                 />
               ) : null}
               {view === "balances" && shares.book ? (
                 <BalancesView
                   book={shares.book}
                   onSettle={(debt, groupId) => openSettle(debt, groupId)}
-                  onCreatePerson={shares.createPerson}
+                />
+              ) : null}
+              {view === "friends" && shares.book ? (
+                <FriendsView
+                  book={shares.book}
+                  onSettle={(debt, groupId) => openSettle(debt, groupId)}
+                  onAddExpense={(groupId) => openExpense(groupId)}
+                  onEditExpense={(expense) => openExpense(expense.groupId, expense)}
+                  onGroups={() => changeView("groups")}
+                  addFriend={shares.addFriend}
                   onRenamePerson={shares.renamePerson}
                   onDeletePerson={shares.deletePerson}
+                  inviteActions={inviteActions}
                 />
               ) : null}
               {view === "groups" && shares.book ? (
@@ -249,7 +216,7 @@ export function KhataApp({ user }: { user: { name: string; email: string } }) {
                   onCreateGroup={shares.createGroup}
                   onUpdateGroup={shares.updateGroup}
                   onDeleteGroup={shares.deleteGroup}
-                  onCreateInvite={shares.createInvite}
+                  inviteActions={inviteActions}
                 />
               ) : null}
               {view === "ledger" ? (
@@ -280,6 +247,7 @@ export function KhataApp({ user }: { user: { name: string; email: string } }) {
                   }}
                 />
               ) : null}
+              {view === "settings" && today ? <SettingsView today={today} user={user} onSignOut={signOut} /> : null}
               {view === "categories" ? <CategoriesView categories={ledger.categories} onSave={ledger.saveCategory} onDelete={ledger.removeCategory} /> : null}
               {view === "sync" ? <SyncView onImport={ledger.importPayload} onSample={async () => {
                 const result = await ledger.loadSample();
@@ -288,57 +256,27 @@ export function KhataApp({ user }: { user: { name: string; email: string } }) {
               }} /> : null}
               {shares.status === "error" && (view === "balances" || view === "groups" || view === "activity") ? (
                 <section className="max-w-md">
-                  <h1 className="text-lg font-medium">The share book is out of reach</h1>
+                  <h1 className="display text-3xl">The share book is out of reach</h1>
                   <p className="mt-2 text-sm text-muted-foreground">{shares.error}</p>
                   <Button type="button" className="mt-4" onClick={() => void shares.reload()}>
                     Try again
                   </Button>
                 </section>
               ) : null}
-              {shares.status === "loading" && (view === "balances" || view === "groups" || view === "activity") ? <Skeleton className="h-40 w-full" /> : null}
+              {shares.status === "loading" && (view === "balances" || view === "groups" || view === "friends" || view === "activity") ? <Loading /> : null}
             </>
           ) : null}
-        </main>
-      </div>
-
-      <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-background/95 backdrop-blur md:hidden" style={{ paddingBottom: "env(safe-area-inset-bottom)" }} aria-label="Sections">
-        <ul className="grid grid-cols-4">
-          {views.filter((item) => item.mobile).map((item) => {
-            const Icon = item.icon;
-            const active = view === item.id;
-            return (
-              <li key={item.id}>
-                <button type="button" className={active ? "flex w-full flex-col items-center gap-1 py-2 text-[11px] text-foreground" : "flex w-full flex-col items-center gap-1 py-2 text-[11px] text-muted-foreground"} onClick={() => changeView(item.id)}>
-                  <Icon className="size-4" />
-                  {item.label}
-                </button>
-              </li>
-            );
-          })}
-        </ul>
-      </nav>
-
-      <Dialog open={menuOpen} onOpenChange={setMenuOpen}>
-        <DialogContent className="sm:max-w-xs">
-          <DialogHeader>
-            <DialogTitle>More</DialogTitle>
-          </DialogHeader>
-          <div className="flex flex-col gap-1">
-            {views.filter((item) => !item.mobile).map((item) => (
-              <Button key={item.id} type="button" variant="ghost" className="justify-start" onClick={() => changeView(item.id)}>
-                {item.label}
-              </Button>
-            ))}
-          </div>
-        </DialogContent>
-      </Dialog>
+      </>
 
       <TransactionDialog
-        open={composerOpen}
+        open={composerOpen || (action === "add" && today !== "")}
         today={today}
         categories={ledger.categories}
         transaction={editing}
-        onOpenChange={setComposerOpen}
+        onOpenChange={(open) => {
+          if (!open) clearAction();
+          setComposerOpen(open);
+        }}
         onSave={ledger.saveTransaction}
         onDelete={ledger.removeTransaction}
       />
@@ -346,14 +284,17 @@ export function KhataApp({ user }: { user: { name: string; email: string } }) {
       {shares.book && expenseScope && settleScope ? (
         <>
           <ShareExpenseDialog
-            open={expenseOpen}
+            open={expenseOpen || (action === "split" && today !== "")}
             today={today}
             book={expenseScope.book}
             groupLocked={expenseScope.locked}
-            transactions={expenseScope.locked ? [] : ledger.transactions}
+            transactions={expenseScope.locked ? [] : ledger.allTransactions}
             expense={editingExpense}
             groupId={expenseGroup}
-            onOpenChange={setExpenseOpen}
+            onOpenChange={(open) => {
+              if (!open) clearAction();
+              setExpenseOpen(open);
+            }}
             onSave={shares.saveExpense}
             onDelete={shares.deleteExpense}
           />
@@ -362,13 +303,13 @@ export function KhataApp({ user }: { user: { name: string; email: string } }) {
             today={today}
             book={settleScope.book}
             groupLocked={settleScope.locked}
-            transactions={settleScope.locked ? [] : ledger.transactions}
+            transactions={settleScope.locked ? [] : ledger.allTransactions}
             draft={settleDraft}
             onOpenChange={setSettleOpen}
             onSave={shares.saveSettlement}
           />
         </>
       ) : null}
-    </div>
+    </AppShell>
   );
 }
