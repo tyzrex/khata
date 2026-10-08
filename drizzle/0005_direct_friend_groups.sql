@@ -1,0 +1,1 @@
+ALTER TABLE "groups" ADD COLUMN "kind" text DEFAULT 'group' NOT NULL;

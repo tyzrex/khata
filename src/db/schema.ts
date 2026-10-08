@@ -82,6 +82,8 @@ export const groups = pgTable(
     id: text("id").primaryKey(),
     userId: ownerId(),
     name: text("name").notNull(),
+    /** "group" is a normal named group. "direct" is the hidden two-person book behind a friendship. */
+    kind: text("kind").notNull().default("group"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },

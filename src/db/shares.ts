@@ -1,4 +1,4 @@
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, notInArray } from "drizzle-orm";
 import { getDb } from "@/db/client";
 import {
   expenseTransactions,
@@ -84,9 +84,12 @@ type SettlementDto = {
   transaction: { id: string; merchant: string; amount: number; account: string; date: string; type: string } | null;
 };
 
+export type GroupKind = "group" | "direct";
+
 export type JoinedGroup = {
   id: string;
   name: string;
+  kind: GroupKind;
   ownerName: string;
   members: PersonDto[];
   people: PersonDto[];
@@ -102,6 +105,7 @@ export type ShareBook = {
   groups: {
     id: string;
     name: string;
+    kind: GroupKind;
     members: PersonDto[];
     balances: BalanceScope;
   }[];
@@ -221,9 +225,11 @@ async function loadJoinedGroup(userId: string, groupId: string, ownerId: string)
   }
   const visible = roster.filter((person) => involved.has(person.id));
 
+  const kind: GroupKind = group.kind === "direct" ? "direct" : "group";
   return {
     id: group.id,
-    name: group.name,
+    name: kind === "direct" ? ownerName : group.name,
+    kind,
     ownerName,
     members,
     people: visible,
@@ -233,7 +239,7 @@ async function loadJoinedGroup(userId: string, groupId: string, ownerId: string)
       .map((expense) => ({
         id: expense.id,
         groupId: expense.groupId,
-        groupName: group.name,
+        groupName: group.kind === "direct" ? ownerName : group.name,
         description: expense.description,
         date: expense.date,
         amount: expense.amount,
@@ -251,7 +257,7 @@ async function loadJoinedGroup(userId: string, groupId: string, ownerId: string)
       .map((settlement) => ({
         id: settlement.id,
         groupId: settlement.groupId,
-        groupName: group.name,
+        groupName: group.kind === "direct" ? ownerName : group.name,
         fromPersonId: settlement.fromPersonId,
         toPersonId: settlement.toPersonId,
         fromName: nameOf(roster, settlement.fromPersonId),
@@ -323,16 +329,18 @@ export async function getShareBook(userId: string): Promise<ShareBook> {
         involved.add(debt.fromId);
         involved.add(debt.toId);
       }
+      const kind: GroupKind = group.kind === "direct" ? "direct" : "group";
       return {
         id: group.id,
-        name: group.name,
+        name: kind === "direct" ? (members.find((member) => !member.isSelf)?.name ?? "Direct") : group.name,
+        kind,
         members,
         balances: scopeFor(debts, self.id, roster, [...involved]),
       };
     })
     .sort((a, b) => a.name.localeCompare(b.name));
 
-  const groupName = new Map(groupRows.map((group) => [group.id, group.name]));
+  const groupName = new Map(groupDtos.map((group) => [group.id, group.name]));
   const expenses = expenseRows
     .map((expense) => ({
       id: expense.id,
@@ -458,6 +466,23 @@ export async function deletePerson(userId: string, id: string) {
           .delete(groupUserAccess)
           .where(and(eq(groupUserAccess.userId, row.linkedUserId), eq(groupUserAccess.role, "member"), inArray(groupUserAccess.groupId, owned)));
       }
+      // The hidden two-person book behind this friendship goes with them.
+      const direct = await tx
+        .select({ id: groups.id })
+        .from(groups)
+        .innerJoin(groupMembers, eq(groupMembers.groupId, groups.id))
+        .where(and(eq(groups.userId, userId), eq(groups.kind, "direct"), eq(groupMembers.personId, id)));
+      if (direct.length) {
+        await tx.delete(groups).where(
+          and(
+            eq(groups.userId, userId),
+            inArray(
+              groups.id,
+              direct.map((group) => group.id),
+            ),
+          ),
+        );
+      }
       await tx.delete(people).where(and(eq(people.id, id), eq(people.userId, userId)));
     });
   } catch (error) {
@@ -480,6 +505,50 @@ export async function createGroup(userId: string, name: string, memberIds: strin
   return id;
 }
 
+/**
+ * The hidden two-person book between you and one friend. Expenses added "with a
+ * friend" live here, so the friend sees them as soon as they have an account.
+ * Created on first use. If the friend already has an account the access row is
+ * granted right away.
+ */
+export async function ensureDirectGroup(userId: string, personId: string) {
+  const self = await ensureSelf(userId);
+  const db = getDb();
+  const [person] = await db
+    .select()
+    .from(people)
+    .where(and(eq(people.id, personId), eq(people.userId, userId)))
+    .limit(1);
+  if (!person) throw new NotFoundError("That person is not in the book.");
+  if (person.isSelf) throw new ShareInputError("You cannot be your own friend.");
+
+  const existing = await db
+    .select({ id: groups.id })
+    .from(groups)
+    .innerJoin(groupMembers, eq(groupMembers.groupId, groups.id))
+    .where(and(eq(groups.userId, userId), eq(groups.kind, "direct"), eq(groupMembers.personId, personId)))
+    .limit(1);
+  const groupId = existing[0]?.id ?? crypto.randomUUID();
+
+  await db.transaction(async (tx) => {
+    if (!existing[0]) {
+      await tx.insert(groups).values({ id: groupId, userId, name: "Direct", kind: "direct" });
+      await tx.insert(groupMembers).values([
+        { groupId, personId: self.id },
+        { groupId, personId },
+      ]);
+      await tx.insert(groupUserAccess).values({ groupId, userId, ownerUserId: userId, role: "owner" });
+    }
+    if (person.linkedUserId) {
+      await tx
+        .insert(groupUserAccess)
+        .values({ groupId, userId: person.linkedUserId, ownerUserId: userId, role: "member" })
+        .onConflictDoNothing();
+    }
+  });
+  return groupId;
+}
+
 export async function updateGroup(userId: string, id: string, input: { name?: string; memberIds?: string[] }) {
   const [group] = await getDb()
     .select()
@@ -487,6 +556,9 @@ export async function updateGroup(userId: string, id: string, input: { name?: st
     .where(and(eq(groups.id, id), eq(groups.userId, userId)))
     .limit(1);
   if (!group) throw new NotFoundError("That group is not in the book.");
+  // The hidden two-person book is defined by its two members; editing it would
+  // turn a friendship into an unlisted group the friend never agreed to.
+  if (group.kind === "direct") throw new ShareInputError("A friend's book cannot be renamed or given other members.");
   const unique = input.memberIds ? [...new Set(input.memberIds)] : undefined;
   if (unique) await requirePeople(userId, unique);
   await getDb().transaction(async (tx) => {
@@ -498,17 +570,50 @@ export async function updateGroup(userId: string, id: string, input: { name?: st
     }
     if (unique) {
       await tx.delete(groupMembers).where(eq(groupMembers.groupId, id));
-      await tx.insert(groupMembers).values(unique.map((personId) => ({ groupId: id, personId })));
+      if (unique.length) {
+        await tx.insert(groupMembers).values(unique.map((personId) => ({ groupId: id, personId })));
+      }
+      // Revoke access for any linked account whose person row is no longer a
+      // member of this group. Without this, removing someone from the member
+      // list leaves their Khata account able to read and write the group.
+      const keepRows = unique.length
+        ? await tx
+            .select({ linkedUserId: people.linkedUserId })
+            .from(people)
+            .where(and(eq(people.userId, userId), inArray(people.id, unique)))
+        : [];
+      const keepUserIds = keepRows.map((row) => row.linkedUserId).filter((value): value is string => Boolean(value));
+      await tx
+        .delete(groupUserAccess)
+        .where(
+          and(
+            eq(groupUserAccess.groupId, id),
+            eq(groupUserAccess.role, "member"),
+            keepUserIds.length ? notInArray(groupUserAccess.userId, keepUserIds) : undefined,
+          ),
+        );
     }
   });
 }
 
 export async function deleteGroup(userId: string, id: string) {
-  const [group] = await getDb()
-    .delete(groups)
+  const db = getDb();
+  const [group] = await db
+    .select({ id: groups.id })
+    .from(groups)
     .where(and(eq(groups.id, id), eq(groups.userId, userId)))
-    .returning();
+    .limit(1);
   if (!group) throw new NotFoundError("That group is not in the book.");
+  await db.transaction(async (tx) => {
+    // Remove the group's own data instead of orphaning it. Deleting the group
+    // alone would leave its expenses and settlements behind with a null
+    // group_id, still counted in the overall balances. splits and expense
+    // links cascade from shared_expenses; members, access, and invites cascade
+    // from the group row.
+    await tx.delete(sharedExpenses).where(and(eq(sharedExpenses.userId, userId), eq(sharedExpenses.groupId, id)));
+    await tx.delete(settlements).where(and(eq(settlements.userId, userId), eq(settlements.groupId, id)));
+    await tx.delete(groups).where(and(eq(groups.id, id), eq(groups.userId, userId)));
+  });
 }
 
 async function assertExpenseLinks(userId: string, transactionIds: string[], exceptExpenseId?: string) {

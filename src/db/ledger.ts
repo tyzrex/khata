@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, gte, ilike, lte, or } from "drizzle-orm";
+import { and, asc, desc, eq, gte, ilike, inArray, lte, or } from "drizzle-orm";
 import { getDb } from "@/db/client";
 import { categories, transactions, type TransactionRow } from "@/db/schema";
 import { DEFAULT_CATEGORIES, type TxType } from "@/lib/constants";
@@ -47,6 +47,14 @@ function toCategory(row: typeof categories.$inferSelect): CategoryDto {
 
 export async function ensureCategories(userId: string) {
   const db = getDb();
+  // Called on every read path, so bail out cheaply once every default exists.
+  // Checking for *all* defaults (not just any row) matters: ensureNamedCategory
+  // can create a custom category first, and that must not block seeding.
+  const present = await db
+    .select({ name: categories.name })
+    .from(categories)
+    .where(and(eq(categories.userId, userId), inArray(categories.name, DEFAULT_CATEGORIES.map((category) => category.name))));
+  if (present.length >= DEFAULT_CATEGORIES.length) return;
   await db
     .insert(categories)
     .values(
@@ -72,7 +80,7 @@ async function ensureNamedCategory(userId: string, name: string, kind: string) {
       userId,
       name,
       kind: match?.kind ?? kind,
-      color: match?.color ?? "#6f675e",
+      color: match?.color ?? "#7c828a",
       sortOrder: match?.sortOrder ?? 200,
     })
     .onConflictDoNothing({ target: [categories.userId, categories.name] });
@@ -190,7 +198,7 @@ function transactionValues(userId: string, input: ManualTransaction | ImportTran
     date: input.date,
     type: input.type,
     amount: input.amount,
-    currency: "NPR" as const,
+    currency: input.currency,
     categoryName: input.category,
     merchant: input.merchant,
     account: input.account,
@@ -257,7 +265,7 @@ export async function importTransactions(userId: string, payload: unknown): Prom
           userId,
           name: row.category,
           kind: row.type === "expense" ? "expense" : row.type === "income" ? "income" : "transfer",
-          color: DEFAULT_CATEGORIES.find((category) => category.name === row.category)?.color ?? "#6f675e",
+          color: DEFAULT_CATEGORIES.find((category) => category.name === row.category)?.color ?? "#7c828a",
           sortOrder: DEFAULT_CATEGORIES.find((category) => category.name === row.category)?.sortOrder ?? 200,
         })
         .onConflictDoNothing({ target: [categories.userId, categories.name] });
@@ -321,7 +329,7 @@ export async function summarizeLedger(userId: string): Promise<SummaryResponse> 
     ...period,
     byCategory: period.byCategory.map((slice) => ({
       ...slice,
-      color: colors.get(slice.category) ?? "#6f675e",
+      color: colors.get(slice.category) ?? "#7c828a",
     })),
   });
   return {

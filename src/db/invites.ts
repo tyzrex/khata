@@ -8,6 +8,8 @@ const INVITE_DAYS = 7;
 
 export type InviteInfo = {
   groupName: string;
+  /** A friend invite: the group is the hidden two-person book. */
+  direct: boolean;
   creatorName: string;
   inviteeEmail: string | null;
   expired: boolean;
@@ -52,7 +54,8 @@ export async function createGroupInvite(
     expiresAt,
   });
   const [inviter] = await db.select({ name: user.name }).from(user).where(eq(user.id, userId)).limit(1);
-  return { token, expiresAt, groupName: group.name, inviterName: inviter?.name ?? "A friend" };
+  const inviterName = inviter?.name ?? "A friend";
+  return { token, expiresAt, groupName: group.kind === "direct" ? inviterName : group.name, inviterName, direct: group.kind === "direct" };
 }
 
 export async function getInviteByToken(token: string): Promise<InviteInfo | null> {
@@ -61,6 +64,7 @@ export async function getInviteByToken(token: string): Promise<InviteInfo | null
     .select({
       invite: groupInvites,
       groupName: groups.name,
+      kind: groups.kind,
       creatorName: user.name,
     })
     .from(groupInvites)
@@ -69,8 +73,10 @@ export async function getInviteByToken(token: string): Promise<InviteInfo | null
     .where(eq(groupInvites.token, token))
     .limit(1);
   if (!row) return null;
+  const direct = row.kind === "direct";
   return {
-    groupName: row.groupName,
+    groupName: direct ? row.creatorName : row.groupName,
+    direct,
     creatorName: row.creatorName,
     inviteeEmail: row.invite.inviteeEmail,
     expired: row.invite.expiresAt < new Date(),
@@ -78,7 +84,7 @@ export async function getInviteByToken(token: string): Promise<InviteInfo | null
   };
 }
 
-export async function acceptInvite(userId: string, token: string): Promise<{ groupId: string; groupName: string }> {
+export async function acceptInvite(userId: string, token: string): Promise<{ groupId: string; groupName: string; direct: boolean }> {
   const db = getDb();
   const [invite] = await db.select().from(groupInvites).where(eq(groupInvites.token, token)).limit(1);
   if (!invite) throw new NotFoundError("This invite link is not valid.");
@@ -97,7 +103,10 @@ export async function acceptInvite(userId: string, token: string): Promise<{ gro
     .from(groupUserAccess)
     .where(and(eq(groupUserAccess.groupId, group.id), eq(groupUserAccess.userId, userId)))
     .limit(1);
-  if (existing) return { groupId: group.id, groupName: group.name };
+  const direct = group.kind === "direct";
+  const [creator] = direct ? await db.select({ name: user.name }).from(user).where(eq(user.id, ownerId)).limit(1) : [];
+  const label = direct ? (creator?.name ?? "your friend") : group.name;
+  if (existing) return { groupId: group.id, groupName: label, direct };
 
   if (invite.inviteeEmail) {
     if (invite.acceptedAt) throw new ShareInputError("This invite has already been used.");
@@ -134,6 +143,16 @@ export async function acceptInvite(userId: string, token: string): Promise<{ gro
     await tx.insert(groupMembers).values({ groupId: group.id, personId }).onConflictDoNothing();
     await tx.insert(groupUserAccess).values({ groupId: group.id, userId, ownerUserId: ownerId, role: "member" }).onConflictDoNothing();
 
+    // Joining any group makes you a friend: open the direct book with this person too.
+    const directRows = await tx
+      .select({ id: groups.id })
+      .from(groups)
+      .innerJoin(groupMembers, eq(groupMembers.groupId, groups.id))
+      .where(and(eq(groups.userId, ownerId), eq(groups.kind, "direct"), eq(groupMembers.personId, personId)));
+    for (const row of directRows) {
+      await tx.insert(groupUserAccess).values({ groupId: row.id, userId, ownerUserId: ownerId, role: "member" }).onConflictDoNothing();
+    }
+
     if (invite.inviteeEmail) {
       const [marked] = await tx
         .update(groupInvites)
@@ -144,5 +163,5 @@ export async function acceptInvite(userId: string, token: string): Promise<{ gro
     }
   });
 
-  return { groupId: group.id, groupName: group.name };
+  return { groupId: group.id, groupName: label, direct };
 }
