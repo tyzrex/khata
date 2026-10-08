@@ -1,7 +1,6 @@
 /// <reference lib="webworker" />
-import { defaultCache } from "@serwist/next/worker";
 import type { PrecacheEntry, RuntimeCaching, SerwistGlobalConfig } from "serwist";
-import { NetworkOnly, Serwist } from "serwist";
+import { CacheableResponsePlugin, CacheFirst, ExpirationPlugin, NetworkOnly, Serwist, StaleWhileRevalidate } from "serwist";
 
 declare global {
   interface WorkerGlobalScope extends SerwistGlobalConfig {
@@ -11,30 +10,83 @@ declare global {
 
 declare const self: ServiceWorkerGlobalScope;
 
+/*
+ * Privacy rule for this worker: nothing that can carry a user's data is ever written to a cache.
+ * Pages, RSC payloads and every /api/ route are network-only, so a shared phone never shows the
+ * previous account's ledger, and sign-out leaves nothing private behind. Only build assets that
+ * are identical for every user (hashed JS/CSS, fonts, icons, the offline shell) are cached.
+ */
+
+const VERSION = "v2";
+const STATIC_CACHE = `khata-static-${VERSION}`;
+const ICON_CACHE = `khata-icons-${VERSION}`;
+const MANIFEST_CACHE = `khata-manifest-${VERSION}`;
+const KEEP = new Set([STATIC_CACHE, ICON_CACHE, MANIFEST_CACHE]);
+
+const isRsc = (request: Request) => request.headers.get("RSC") === "1";
+
 const runtimeCaching: RuntimeCaching[] = [
+  // Auth and data: always the network, never stored.
+  { matcher: ({ sameOrigin, url }) => sameOrigin && url.pathname.startsWith("/api/"), handler: new NetworkOnly() },
+  // Pages and RSC payloads render the signed-in user's data. Offline navigations fall back to /offline.
+  { matcher: ({ request, sameOrigin }) => sameOrigin && (request.mode === "navigate" || isRsc(request)), handler: new NetworkOnly() },
+  // Hashed build output never changes under the same URL, so the first copy is good forever.
   {
-    matcher: ({ sameOrigin, url }) => sameOrigin && url.pathname.startsWith("/api/"),
-    handler: new NetworkOnly(),
+    matcher: ({ sameOrigin, url }) => sameOrigin && url.pathname.startsWith("/_next/static/"),
+    handler: new CacheFirst({
+      cacheName: STATIC_CACHE,
+      plugins: [new CacheableResponsePlugin({ statuses: [200] }), new ExpirationPlugin({ maxEntries: 256, maxAgeSeconds: 60 * 60 * 24 * 365 })],
+    }),
   },
-  ...defaultCache,
+  // App icons and the favicon: shown instantly, refreshed in the background.
+  {
+    matcher: ({ sameOrigin, url }) => sameOrigin && (url.pathname.startsWith("/icons/") || url.pathname === "/icon.png" || url.pathname.startsWith("/splash/")),
+    handler: new StaleWhileRevalidate({
+      cacheName: ICON_CACHE,
+      plugins: [new CacheableResponsePlugin({ statuses: [200] }), new ExpirationPlugin({ maxEntries: 64, maxAgeSeconds: 60 * 60 * 24 * 30 })],
+    }),
+  },
+  {
+    matcher: ({ sameOrigin, url }) => sameOrigin && url.pathname === "/manifest.webmanifest",
+    handler: new StaleWhileRevalidate({ cacheName: MANIFEST_CACHE, plugins: [new CacheableResponsePlugin({ statuses: [200] })] }),
+  },
+  // Anything else (cross-origin avatars, unknown same-origin GETs): straight to the network.
+  { matcher: () => true, handler: new NetworkOnly() },
 ];
 
 const serwist = new Serwist({
   precacheEntries: self.__SW_MANIFEST,
-  skipWaiting: true,
+  // The page asks before a new worker takes over (see the "SKIP_WAITING" message), so an open tab
+  // never runs old JavaScript against chunks a new deploy has already replaced.
+  skipWaiting: false,
   clientsClaim: true,
   navigationPreload: true,
+  precacheOptions: { cleanupOutdatedCaches: true },
   runtimeCaching,
   fallbacks: {
-    entries: [
-      {
-        url: "/offline",
-        matcher({ request }) {
-          return request.destination === "document";
-        },
-      },
-    ],
+    entries: [{ url: "/offline", matcher: ({ request }) => request.destination === "document" }],
   },
+});
+
+async function dropCaches(keep: (name: string) => boolean) {
+  const names = await caches.keys();
+  await Promise.all(names.filter((name) => !keep(name)).map((name) => caches.delete(name)));
+}
+
+const isPrecache = (name: string) => name.includes("precache");
+
+self.addEventListener("activate", (event) => {
+  // Clear what older workers left: the earlier worker used Serwist's defaultCache, which stored
+  // pages, RSC payloads and /api/ responses ("pages", "pages-rsc", "apis", "others"…). Drop them all.
+  event.waitUntil(dropCaches((name) => isPrecache(name) || KEEP.has(name)));
+});
+
+self.addEventListener("message", (event) => {
+  // Sent by the app on sign-out. Nothing private is cached by design; this also removes anything a
+  // future route might add by mistake.
+  if (event.data?.type === "khata:sign-out") {
+    event.waitUntil(dropCaches((name) => isPrecache(name) || KEEP.has(name)));
+  }
 });
 
 serwist.addEventListeners();
