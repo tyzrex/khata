@@ -29,6 +29,8 @@ export function useLedger() {
   const deny = useCallback((response: Response) => readError(response, () => router.push("/login")), [router]);
   const [summary, setSummary] = useState<SummaryResponse | null>(null);
   const [transactions, setTransactions] = useState<TransactionDto[]>([]);
+  /** Every transaction, never filtered. The dashboard reads this. */
+  const [allTransactions, setAllTransactions] = useState<TransactionDto[]>([]);
   const [categories, setCategories] = useState<CategoryDto[]>([]);
   const [filters, setFilters] = useState<LedgerFilters>(emptyFilters);
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
@@ -56,6 +58,9 @@ export function useLedger() {
     const categoryBody = (await categoryRes.json()) as { categories: CategoryDto[] };
     setSummary(summaryBody);
     setCategories(categoryBody.categories);
+    const everything = await fetch("/api/transactions");
+    if (!everything.ok) await deny(everything);
+    setAllTransactions(((await everything.json()) as { transactions: TransactionDto[] }).transactions);
     await loadTransactions(filters);
   }, [deny, filters, loadTransactions]);
 
@@ -81,6 +86,7 @@ export function useLedger() {
         setSummary(summaryBody);
         setCategories(categoryBody.categories);
         setTransactions(txBody.transactions);
+        setAllTransactions(txBody.transactions);
         setStatus("ready");
       } catch (caught) {
         if (cancelled) return;
@@ -173,6 +179,7 @@ export function useLedger() {
   return {
     summary,
     transactions,
+    allTransactions,
     categories,
     filters,
     status,

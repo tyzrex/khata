@@ -1,7 +1,9 @@
 "use client";
 
+import { Trash2 } from "lucide-react";
 import { useState } from "react";
-import { toast } from "sonner";
+import { toast } from "@/lib/status";
+import { DatePicker } from "@/components/date-picker";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -15,8 +17,15 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { SEGMENT, SEGMENT_OFF, SEGMENT_ON } from "@/components/segmented";
 import { ACCOUNTS, type TxType } from "@/lib/constants";
 import type { CategoryDto, TransactionDto } from "@/lib/types";
+
+const TYPES: { id: TxType; label: string }[] = [
+  { id: "expense", label: "Expense" },
+  { id: "income", label: "Income" },
+  { id: "transfer", label: "Transfer" },
+];
 
 type Draft = {
   date: string;
@@ -144,85 +153,74 @@ export function TransactionDialog({
 
   const names = categories.some((category) => category.name === draft.category)
     ? categories
-    : [...categories, { id: "draft", name: draft.category, kind: "any" as const, color: "#6f675e", sortOrder: 999 }];
+    : [...categories, { id: "draft", name: draft.category, kind: "any" as const, color: "#7c828a", sortOrder: 999 }];
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle className="font-heading text-xl">{transaction ? "Edit entry" : "New entry"}</DialogTitle>
-          <DialogDescription>Amounts are in Nepalese rupees.</DialogDescription>
+          <DialogTitle className="text-lg">{transaction ? "Edit entry" : "New entry"}</DialogTitle>
+          <DialogDescription>
+            Amounts are in Nepalese rupees.<span className="max-sm:hidden"> Press Ctrl or ⌘ + Enter to save.</span>
+          </DialogDescription>
         </DialogHeader>
-        <form className="grid gap-3" onSubmit={submit}>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="grid gap-1.5">
-              <Label htmlFor="tx-date">Date</Label>
-              <Input id="tx-date" type="date" required value={draft.date} onChange={(event) => setDraft({ ...draft, date: event.target.value })} className="h-10" />
-            </div>
-            <div className="grid gap-1.5">
-              <Label htmlFor="tx-type">Type</Label>
-              <Select
-                items={{ expense: "Expense", income: "Income", transfer: "Transfer" }}
-                value={draft.type}
-                onValueChange={(value) => {
-                  if (value !== "expense" && value !== "income" && value !== "transfer") return;
-                  setDraft((current) => ({ ...current, type: value, category: categoryFor(value, current.category) }));
-                }}
+        <form
+          className="grid gap-3.5"
+          onSubmit={submit}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
+              event.preventDefault();
+              event.currentTarget.requestSubmit();
+            }
+          }}
+        >
+          <div className={SEGMENT} role="radiogroup" aria-label="Type">
+            {TYPES.map((type) => (
+              <button
+                key={type.id}
+                type="button"
+                role="radio"
+                aria-checked={draft.type === type.id}
+                className={draft.type === type.id ? SEGMENT_ON : SEGMENT_OFF}
+                onClick={() => setDraft((current) => ({ ...current, type: type.id, category: categoryFor(type.id, current.category) }))}
               >
-                <SelectTrigger id="tx-type" className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="expense">Expense</SelectItem>
-                  <SelectItem value="income">Income</SelectItem>
-                  <SelectItem value="transfer">Transfer</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+                {type.label}
+              </button>
+            ))}
           </div>
-          <div className="grid gap-1.5">
-            <Label htmlFor="tx-amount">Amount</Label>
-            <Input
+
+          <label htmlFor="tx-amount" className="flex items-baseline gap-2 rounded-xl bg-secondary px-4 py-3 transition-colors focus-within:bg-card focus-within:ring-2 focus-within:ring-ring/30">
+            <span className="text-sm font-semibold text-muted-foreground">{draft.type === "expense" ? "−NPR" : "+NPR"}</span>
+            <span className="sr-only">Amount</span>
+            <input
               id="tx-amount"
               inputMode="decimal"
+              autoComplete="off"
               placeholder="0"
               required
+              autoFocus={!transaction}
               value={draft.amount}
-              onChange={(event) => setDraft({ ...draft, amount: event.target.value })}
-              className="h-10"
+              onChange={(event) => setDraft({ ...draft, amount: event.target.value.replace(/[^\d.,]/g, "").replace(/,/g, "") })}
+              className={`figure w-full min-w-0 bg-transparent text-3xl outline-none placeholder:text-disabled ${draft.type === "expense" ? "text-display" : "text-credit"}`}
+            />
+          </label>
+
+          <div className="grid gap-1.5">
+            <Label htmlFor="tx-merchant">{draft.type === "income" ? "From" : draft.type === "transfer" ? "Description" : "Merchant"}</Label>
+            <Input
+              id="tx-merchant"
+              placeholder={draft.type === "income" ? "Employer" : "Lawa Chiya Ghar"}
+              required
+              maxLength={120}
+              value={draft.merchant}
+              onChange={(event) => setDraft({ ...draft, merchant: event.target.value })}
             />
           </div>
           <div className="grid gap-1.5">
-            <Label htmlFor="tx-merchant">Merchant</Label>
-            <Input
-              id="tx-merchant"
-              placeholder="Lawa Chiya Ghar"
-              required
-              value={draft.merchant}
-              onChange={(event) => setDraft({ ...draft, merchant: event.target.value })}
-              className="h-10"
-            />
+            <Label htmlFor="tx-date">Date</Label>
+            <DatePicker id="tx-date" value={draft.date} onChange={(date) => setDraft({ ...draft, date })} className="h-11" />
           </div>
           <div className="grid grid-cols-2 gap-3">
-            <div className="grid gap-1.5">
-              <Label htmlFor="tx-category">Category</Label>
-              <Select
-                items={Object.fromEntries(names.map((category) => [category.name, category.name]))}
-                value={draft.category}
-                onValueChange={(value) => value && setDraft({ ...draft, category: value })}
-              >
-                <SelectTrigger id="tx-category" className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {names.map((category) => (
-                    <SelectItem key={category.id} value={category.name}>
-                      {category.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
             <div className="grid gap-1.5">
               <Label htmlFor="tx-account">Account</Label>
               <Select items={Object.fromEntries(ACCOUNTS.map((account) => [account, account]))} value={draft.account} onValueChange={(value) => value && setDraft({ ...draft, account: value })}>
@@ -238,28 +236,63 @@ export function TransactionDialog({
                 </SelectContent>
               </Select>
             </div>
+            <div className="grid gap-1.5">
+              <Label htmlFor="tx-category">Category</Label>
+              <Select
+                items={Object.fromEntries(names.map((category) => [category.name, category.name]))}
+                value={draft.category}
+                onValueChange={(value) => value && setDraft({ ...draft, category: value })}
+              >
+                <SelectTrigger id="tx-category" className="w-full">
+                  <span className="flex min-w-0 items-center gap-2">
+                    <span className="size-2.5 shrink-0 rounded-full" style={{ background: names.find((category) => category.name === draft.category)?.color ?? "#7c828a" }} aria-hidden />
+                    <SelectValue />
+                  </span>
+                </SelectTrigger>
+                <SelectContent>
+                  {names.map((category) => (
+                    <SelectItem key={category.id} value={category.name}>
+                      {category.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
           <div className="grid gap-1.5">
-            <Label htmlFor="tx-note">Note</Label>
-            <Textarea id="tx-note" value={draft.note} onChange={(event) => setDraft({ ...draft, note: event.target.value })} rows={3} />
+            <Label htmlFor="tx-note">
+              Note <span className="font-normal text-muted-foreground">(optional)</span>
+            </Label>
+            <Textarea id="tx-note" maxLength={500} value={draft.note} onChange={(event) => setDraft({ ...draft, note: event.target.value })} rows={2} />
           </div>
-          {error ? <p className="text-sm text-destructive">{error}</p> : null}
-          <DialogFooter className="sm:justify-between">
+          {error ? (
+            <p role="alert" className="rounded-xl bg-destructive/10 px-3 py-2 text-sm font-medium text-destructive">
+              {error}
+            </p>
+          ) : null}
+          <DialogFooter className="mt-1 gap-2 max-sm:flex-col-reverse sm:justify-between">
             {transaction ? (
               confirmingDelete ? (
-                <Button type="button" variant="destructive" disabled={pending} onClick={() => void remove()}>
-                  Confirm delete
-                </Button>
+                <span className="flex gap-2 max-sm:w-full">
+                  <Button type="button" variant="outline" className="max-sm:flex-1" disabled={pending} onClick={() => setConfirmingDelete(false)}>
+                    Keep
+                  </Button>
+                  <Button type="button" variant="destructive" className="max-sm:flex-1" disabled={pending} onClick={() => void remove()}>
+                    <Trash2 />
+                    Confirm delete
+                  </Button>
+                </span>
               ) : (
-                <Button type="button" variant="ghost" disabled={pending} onClick={() => setConfirmingDelete(true)}>
+                <Button type="button" variant="outline" className="hover:bg-destructive/10 hover:text-destructive max-sm:w-full" disabled={pending} onClick={() => setConfirmingDelete(true)}>
+                  <Trash2 />
                   Delete
                 </Button>
               )
             ) : (
-              <span />
+              <span className="max-sm:hidden" />
             )}
-            <Button type="submit" disabled={pending} className="h-10 px-4">
-              {pending ? "Saving" : "Save entry"}
+            <Button type="submit" disabled={pending} className="max-sm:w-full">
+              {pending ? "Saving" : transaction ? "Save changes" : "Add entry"}
             </Button>
           </DialogFooter>
         </form>
