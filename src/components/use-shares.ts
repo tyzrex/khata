@@ -68,7 +68,13 @@ export function useShares() {
       const body = await readBody(response);
       throw new Error(body?.error ?? "Could not save that.");
     }
+    const body = response.status === 204 ? null : await readBody(response);
     await load();
+    return body;
+  }
+
+  async function sendVoid(path: string, method: string, payload?: unknown) {
+    await send(path, method, payload);
   }
 
   return {
@@ -76,12 +82,25 @@ export function useShares() {
     status,
     error,
     reload: load,
-    createPerson: (name: string) => send("/api/people", "POST", { name }),
-    renamePerson: (id: string, name: string) => send(`/api/people/${id}`, "PATCH", { name }),
-    deletePerson: (id: string) => send(`/api/people/${id}`, "DELETE"),
-    createGroup: (name: string, memberIds: string[]) => send("/api/groups", "POST", { name, memberIds }),
-    updateGroup: (id: string, input: { name?: string; memberIds?: string[] }) => send(`/api/groups/${id}`, "PATCH", input),
-    deleteGroup: (id: string) => send(`/api/groups/${id}`, "DELETE"),
+    createPerson: (name: string) => sendVoid("/api/people", "POST", { name }),
+    renamePerson: (id: string, name: string) => sendVoid(`/api/people/${id}`, "PATCH", { name }),
+    deletePerson: (id: string) => sendVoid(`/api/people/${id}`, "DELETE"),
+    createGroup: (name: string, memberIds: string[]) => sendVoid("/api/groups", "POST", { name, memberIds }),
+    updateGroup: (id: string, input: { name?: string; memberIds?: string[] }) => sendVoid(`/api/groups/${id}`, "PATCH", input),
+    deleteGroup: (id: string) => sendVoid(`/api/groups/${id}`, "DELETE"),
+    addFriend: async (name: string) => {
+      const body = (await send("/api/people", "POST", { name })) as { person?: { id: string } } | null;
+      return body?.person?.id ?? null;
+    },
+    addGroup: async (name: string, memberIds: string[]) => {
+      const body = (await send("/api/groups", "POST", { name, memberIds })) as { id?: string } | null;
+      return body?.id ?? null;
+    },
+    ensureDirect: async (personId: string) => {
+      const body = (await send(`/api/people/${personId}/direct`, "POST")) as { id?: string } | null;
+      if (!body?.id) throw new Error("Could not open a shared book with that friend.");
+      return body.id;
+    },
     createInvite: async (groupId: string, input: { email?: string; personId?: string }) => {
       const response = await fetch(`/api/groups/${groupId}/invite`, {
         method: "POST",
@@ -96,9 +115,9 @@ export function useShares() {
       if (!response.ok || !body?.url) throw new Error(body?.error ?? "Could not create that invite.");
       return { url: body.url, emailSent: Boolean(body.emailSent) };
     },
-    saveExpense: (input: unknown, id?: string) => send(id ? `/api/shared-expenses/${id}` : "/api/shared-expenses", id ? "PATCH" : "POST", input),
-    deleteExpense: (id: string) => send(`/api/shared-expenses/${id}`, "DELETE"),
-    saveSettlement: (input: unknown) => send("/api/settlements", "POST", input),
-    deleteSettlement: (id: string) => send(`/api/settlements/${id}`, "DELETE"),
+    saveExpense: (input: unknown, id?: string) => sendVoid(id ? `/api/shared-expenses/${id}` : "/api/shared-expenses", id ? "PATCH" : "POST", input),
+    deleteExpense: (id: string) => sendVoid(`/api/shared-expenses/${id}`, "DELETE"),
+    saveSettlement: (input: unknown) => sendVoid("/api/settlements", "POST", input),
+    deleteSettlement: (id: string) => sendVoid(`/api/settlements/${id}`, "DELETE"),
   };
 }

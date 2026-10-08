@@ -1,251 +1,185 @@
 "use client";
 
-import { useState } from "react";
-import { toast } from "sonner";
-import { Panel, sumAmounts } from "@/components/panel";
+import { ArrowRight, HandCoins } from "lucide-react";
+import { Card, CardEmpty, PersonMark } from "@/components/balances-card";
+import { PageHeader } from "@/components/page-header";
+import { sumAmounts } from "@/components/panel";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
-import { Field, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
-import { Input } from "@/components/ui/input";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import type { BalanceScope, ShareBook } from "@/db/shares";
 import { formatNpr } from "@/lib/format";
 
-function initials(name: string) {
-  return name.trim().slice(0, 1).toUpperCase() || "?";
+type Debt = BalanceScope["youOwe"][number];
+
+function DebtRow({ name, detail, amount, tone, onSettle }: { name: string; detail: string; amount: number; tone: "owe" | "owed"; onSettle: () => void }) {
+  return (
+    <li className="flex items-center gap-3 py-2.5">
+      <PersonMark name={name} tone={tone} />
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm font-semibold text-display">{name}</p>
+        <p className="truncate text-xs text-muted-foreground">{detail}</p>
+      </div>
+      <p className={tone === "owed" ? "figure shrink-0 text-sm text-credit" : "figure shrink-0 text-sm text-warning"}>{formatNpr(amount)}</p>
+      <Button type="button" variant="outline" size="xs" className="shrink-0" onClick={onSettle}>
+        Settle
+      </Button>
+    </li>
+  );
 }
 
-function DebtList({
-  debts,
-  empty,
-  onSettle,
-}: {
-  debts: BalanceScope["youOwe"];
-  empty: string;
-  onSettle: (debt: BalanceScope["youOwe"][number]) => void;
-}) {
-  if (debts.length === 0) {
-    return <p className="py-6 text-sm text-muted-foreground">{empty}</p>;
-  }
+function Summary({ owe, owed, people }: { owe: number; owed: number; people: number }) {
+  const net = owed - owe;
+  const total = owe + owed;
+  const owedShare = total > 0 ? (owed / total) * 100 : 50;
   return (
-    <ul className="divide-y divide-border">
-      {debts.map((debt) => {
-        const other = debt.fromName === "You" ? debt.toName : debt.fromName;
-        return (
-          <li key={`${debt.fromId}-${debt.toId}`} className="flex items-center gap-3 py-3">
-            <Avatar size="sm">
-              <AvatarFallback>{initials(other)}</AvatarFallback>
-            </Avatar>
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-sm">{other}</p>
-            </div>
-            <p className="figure text-sm">{formatNpr(debt.amount)}</p>
-            <Button type="button" variant="outline" size="sm" onClick={() => onSettle(debt)}>
-              Settle
-            </Button>
-          </li>
-        );
-      })}
-    </ul>
+    <section className="grid grid-cols-2 rounded-3xl bg-card shadow-card sm:grid-cols-3">
+      <div className="col-span-2 border-b border-border p-4 sm:col-span-1 sm:border-r sm:border-b-0 sm:p-5 2xl:p-6">
+        <p className="label">Net balance</p>
+        <p className={`figure mt-2.5 text-2xl 2xl:text-[28px] ${net > 0.005 ? "text-credit" : net < -0.005 ? "text-warning" : "text-display"}`}>
+          {net > 0.005 ? "+" : net < -0.005 ? "−" : ""}
+          {formatNpr(Math.abs(net))}
+        </p>
+        <p className="mt-2 text-xs text-muted-foreground">{Math.abs(net) < 0.005 ? "Everyone is square" : net > 0 ? "Overall, you are owed" : "Overall, you owe"}</p>
+      </div>
+      <div className="border-r border-border p-4 sm:p-5 2xl:p-6">
+        <p className="label">You are owed</p>
+        <p className={`figure mt-2.5 text-xl sm:text-2xl ${owed ? "text-credit" : "text-muted-foreground"}`}>{formatNpr(owed)}</p>
+        <div className="mt-3 flex h-1.5 gap-[2px] overflow-hidden rounded-full" aria-hidden>
+          {total > 0 ? (
+            <>
+              <span className="bg-credit" style={{ width: `${owedShare}%` }} />
+              <span className="flex-1 bg-warning/70" />
+            </>
+          ) : (
+            <span className="flex-1 bg-secondary" />
+          )}
+        </div>
+      </div>
+      <div className="p-4 sm:p-5 2xl:p-6">
+        <p className="label">You owe</p>
+        <p className={`figure mt-2.5 text-xl sm:text-2xl ${owe ? "text-warning" : "text-muted-foreground"}`}>{formatNpr(owe)}</p>
+        <p className="mt-3 text-xs text-muted-foreground">
+          {people} {people === 1 ? "person" : "people"} with an open balance
+        </p>
+      </div>
+    </section>
   );
 }
 
 export function BalancesView({
   book,
   onSettle,
-  onCreatePerson,
-  onRenamePerson,
-  onDeletePerson,
 }: {
   book: ShareBook;
-  onSettle: (debt: BalanceScope["youOwe"][number], groupId?: string) => void;
-  onCreatePerson: (name: string) => Promise<void>;
-  onRenamePerson: (id: string, name: string) => Promise<void>;
-  onDeletePerson: (id: string) => Promise<void>;
+  onSettle: (debt: Debt, groupId?: string) => void;
 }) {
-  const [personOpen, setPersonOpen] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [name, setName] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [pending, setPending] = useState(false);
   const owe = sumAmounts(book.overall.youOwe);
   const owed = sumAmounts(book.overall.youAreOwed);
   const joinedDebts = book.joinedGroups.flatMap((group) => [
     ...group.balances.youOwe.map((debt) => ({ group, debt, direction: "owe" as const })),
     ...group.balances.youAreOwed.map((debt) => ({ group, debt, direction: "owed" as const })),
   ]);
-
-  function start(person?: ShareBook["people"][number]) {
-    setEditingId(person?.id ?? null);
-    setName(person?.name ?? "");
-    setError(null);
-    setPersonOpen(true);
-  }
-
-  async function submit(event: React.FormEvent) {
-    event.preventDefault();
-    setPending(true);
-    setError(null);
-    try {
-      if (editingId) await onRenamePerson(editingId, name);
-      else await onCreatePerson(name);
-      toast.success(editingId ? "Name updated" : "Person added");
-      setPersonOpen(false);
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Could not save that person.");
-    } finally {
-      setPending(false);
-    }
-  }
+  const people = new Set([...book.overall.youOwe.map((debt) => debt.toId), ...book.overall.youAreOwed.map((debt) => debt.fromId)]).size;
+  const firstOther = book.people.find((person) => !person.isSelf);
 
   return (
-    <div className="flex flex-col gap-6">
-      <div className="flex items-end justify-between gap-3">
-        <div className="flex flex-col gap-1">
-          <h1 className="text-lg font-medium tracking-tight">Balances</h1>
-          <p className="text-sm text-muted-foreground">Who owes whom, across every group and any expense outside one.</p>
-        </div>
-        <div className="flex gap-2">
-          <Button type="button" variant="outline" onClick={() => start()}>
-            Add person
+    <div className="rise flex flex-col gap-6">
+      <PageHeader
+        eyebrow="Settle up"
+        title="Balances"
+        description="Who owes whom, across every group and any expense outside one."
+        actions={
+          <Button type="button" onClick={() => onSettle({ fromId: book.self.id, toId: firstOther?.id ?? book.self.id, fromName: book.self.name, toName: "", amount: 0 })}>
+            <HandCoins />
+            Record a payment
           </Button>
-          <Button type="button" onClick={() => onSettle({ fromId: book.self.id, toId: book.people.find((person) => !person.isSelf)?.id ?? book.self.id, fromName: book.self.name, toName: "", amount: 0 })}>
-            Settle up
-          </Button>
+        }
+      />
+
+      <div className="flex flex-col gap-3 2xl:gap-4">
+        <Summary owe={owe} owed={owed} people={people} />
+
+        <div className="grid gap-3 lg:grid-cols-2 2xl:gap-4">
+          <Card title="You are owed" hint={`${book.overall.youAreOwed.length} ${book.overall.youAreOwed.length === 1 ? "person" : "people"}`} aside={<span className="figure text-sm text-credit">{formatNpr(owed)}</span>}>
+            {book.overall.youAreOwed.length === 0 ? (
+              <CardEmpty>Nobody owes you right now.</CardEmpty>
+            ) : (
+              <ul className="divide-y divide-border">
+                {book.overall.youAreOwed.map((debt) => (
+                  <DebtRow key={`${debt.fromId}-${debt.toId}`} name={debt.fromName} detail="owes you" amount={debt.amount} tone="owed" onSettle={() => onSettle(debt)} />
+                ))}
+              </ul>
+            )}
+          </Card>
+          <Card title="You owe" hint={`${book.overall.youOwe.length} ${book.overall.youOwe.length === 1 ? "person" : "people"}`} aside={<span className="figure text-sm text-warning">{formatNpr(owe)}</span>}>
+            {book.overall.youOwe.length === 0 ? (
+              <CardEmpty>You do not owe anyone. Nice.</CardEmpty>
+            ) : (
+              <ul className="divide-y divide-border">
+                {book.overall.youOwe.map((debt) => (
+                  <DebtRow key={`${debt.fromId}-${debt.toId}`} name={debt.toName} detail="you owe" amount={debt.amount} tone="owe" onSettle={() => onSettle(debt)} />
+                ))}
+              </ul>
+            )}
+          </Card>
         </div>
+
+        {joinedDebts.length ? (
+          <Card title="In groups you joined" hint="Balances inside groups other people own">
+            <ul className="divide-y divide-border">
+              {joinedDebts.map(({ group, debt, direction }) => (
+                <DebtRow
+                  key={`${group.id}-${debt.fromId}-${debt.toId}`}
+                  name={direction === "owe" ? debt.toName : debt.fromName}
+                  detail={`${group.name} · ${direction === "owe" ? "you owe" : "owes you"}`}
+                  amount={debt.amount}
+                  tone={direction}
+                  onSettle={() => onSettle(debt, group.id)}
+                />
+              ))}
+            </ul>
+          </Card>
+        ) : null}
+
+        {book.overall.simplified.length || book.overall.others.length ? (
+          <div className="grid gap-3 lg:grid-cols-2 2xl:gap-4">
+            {book.overall.simplified.length ? (
+              <Card title="Simplest way to settle" hint="Fewest payments that clear the same totals">
+                <ul className="divide-y divide-border">
+                  {book.overall.simplified.map((debt) => (
+                    <PairRow key={`${debt.fromId}-${debt.toId}`} debt={debt} selfId={book.self.id} />
+                  ))}
+                </ul>
+                <p className="mt-3 text-xs leading-5 text-muted-foreground">The lists above keep each friendship separate. These payments reach the same end state in fewer steps.</p>
+              </Card>
+            ) : null}
+            {book.overall.others.length ? (
+              <Card title="Between others" hint="Balances you can see but are not part of">
+                <ul className="divide-y divide-border">
+                  {book.overall.others.map((debt) => (
+                    <PairRow key={`${debt.fromId}-${debt.toId}`} debt={debt} selfId={book.self.id} />
+                  ))}
+                </ul>
+              </Card>
+            ) : null}
+          </div>
+        ) : null}
       </div>
-
-      <div className="grid gap-4 lg:grid-cols-2">
-        <Panel title="You owe" meta={formatNpr(owe)}>
-          <DebtList debts={book.overall.youOwe} empty="You do not owe anyone." onSettle={(debt) => onSettle(debt)} />
-        </Panel>
-        <Panel title="You are owed" meta={formatNpr(owed)}>
-          <DebtList debts={book.overall.youAreOwed} empty="Nobody owes you." onSettle={(debt) => onSettle(debt)} />
-        </Panel>
-      </div>
-
-      {joinedDebts.length ? (
-        <Panel title="In groups you joined">
-          <ul className="divide-y divide-border">
-            {joinedDebts.map(({ group, debt, direction }) => {
-              const other = direction === "owe" ? debt.toName : debt.fromName;
-              return (
-                <li key={`${group.id}-${debt.fromId}-${debt.toId}`} className="flex items-center gap-3 py-3">
-                  <Avatar size="sm">
-                    <AvatarFallback>{initials(other)}</AvatarFallback>
-                  </Avatar>
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm">{other}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {group.name} · {direction === "owe" ? "you owe" : "owes you"}
-                    </p>
-                  </div>
-                  <p className={direction === "owed" ? "figure text-sm text-credit" : "figure text-sm"}>{formatNpr(debt.amount)}</p>
-                  <Button type="button" variant="outline" size="sm" onClick={() => onSettle(debt, group.id)}>
-                    Settle
-                  </Button>
-                </li>
-              );
-            })}
-          </ul>
-        </Panel>
-      ) : null}
-
-      {book.overall.others.length ? (
-        <Panel title="Between others">
-          <ul className="divide-y divide-border">
-            {book.overall.others.map((debt) => (
-              <li key={`${debt.fromId}-${debt.toId}`} className="flex items-center justify-between gap-3 py-3 text-sm">
-                <span>
-                  {debt.fromName} {debt.fromName === "You" ? "owe" : "owes"} {debt.toName}
-                </span>
-                <span className="figure">{formatNpr(debt.amount)}</span>
-              </li>
-            ))}
-          </ul>
-        </Panel>
-      ) : null}
-
-      {book.overall.simplified.length ? (
-        <Panel title="Simplified">
-          <ul className="divide-y divide-border">
-            {book.overall.simplified.map((debt) => (
-              <li key={`${debt.fromId}-${debt.toId}`} className="flex items-center justify-between gap-3 py-3 text-sm">
-                <span>
-                  {debt.fromName} {debt.fromName === "You" ? "pay" : "pays"} {debt.toName}
-                </span>
-                <span className="figure">{formatNpr(debt.amount)}</span>
-              </li>
-            ))}
-          </ul>
-          <p className="pb-3 text-xs text-muted-foreground">Fewest payments that clear the same nets. The lists above keep each friendship intact.</p>
-        </Panel>
-      ) : null}
-
-      <Panel title="People" action={<Button type="button" variant="ghost" size="sm" onClick={() => start()}>Add</Button>}>
-        {book.people.length === 0 ? (
-          <Empty className="border-0">
-            <EmptyHeader>
-              <EmptyTitle>No one here yet</EmptyTitle>
-              <EmptyDescription>Add the people you split with.</EmptyDescription>
-            </EmptyHeader>
-          </Empty>
-        ) : (
-          <ul className="divide-y divide-border">
-            {book.people.map((person) => (
-              <li key={person.id} className="flex items-center gap-3 py-3">
-                <Avatar size="sm">
-                  <AvatarFallback>{initials(person.name)}</AvatarFallback>
-                </Avatar>
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm">{person.name}</p>
-                  <p className="text-xs text-muted-foreground">{person.isSelf ? "You" : person.linkedUserId ? "Friend · has an account" : "Friend"}</p>
-                </div>
-                <Button type="button" variant="ghost" size="sm" onClick={() => start(person)}>
-                  Rename
-                </Button>
-                {person.isSelf ? null : (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => {
-                      void onDeletePerson(person.id).catch((caught: unknown) => {
-                        toast.error(caught instanceof Error ? caught.message : "Could not remove that person.");
-                      });
-                    }}
-                  >
-                    Remove
-                  </Button>
-                )}
-              </li>
-            ))}
-          </ul>
-        )}
-      </Panel>
-
-      <Dialog open={personOpen} onOpenChange={setPersonOpen}>
-        <DialogContent className="sm:max-w-sm">
-          <DialogHeader>
-            <DialogTitle>{editingId ? "Rename" : "Add person"}</DialogTitle>
-          </DialogHeader>
-          <form onSubmit={(event) => void submit(event)}>
-            <FieldGroup>
-              <Field>
-                <FieldLabel htmlFor="person-name">Name</FieldLabel>
-                <Input id="person-name" required value={name} onChange={(event) => setName(event.target.value)} />
-              </Field>
-              {error ? <FieldError>{error}</FieldError> : null}
-            </FieldGroup>
-            <DialogFooter className="mt-5">
-              <Button type="submit" disabled={pending}>
-                {pending ? "Saving" : "Save"}
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
     </div>
+  );
+}
+
+/** "A → B  amount": who pays whom, with you highlighted. */
+function PairRow({ debt, selfId }: { debt: Debt; selfId: string }) {
+  const youPay = debt.fromId === selfId;
+  const youGet = debt.toId === selfId;
+  return (
+    <li className="flex items-center gap-3 py-2.5 text-sm">
+      <span className="flex min-w-0 flex-1 items-center gap-2">
+        <span className={`truncate font-medium ${youPay ? "text-warning" : "text-display"}`}>{debt.fromName}</span>
+        <ArrowRight className="size-3.5 shrink-0 text-disabled" aria-label="pays" />
+        <span className={`truncate font-medium ${youGet ? "text-credit" : "text-display"}`}>{debt.toName}</span>
+      </span>
+      <span className="figure shrink-0 text-display">{formatNpr(debt.amount)}</span>
+    </li>
   );
 }
