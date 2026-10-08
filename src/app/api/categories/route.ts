@@ -1,6 +1,6 @@
 import type { NextRequest } from "next/server";
 import { createCategory, isUniqueViolation, listCategories } from "@/db/ledger";
-import { badRequest, jsonError } from "@/lib/http";
+import { badRequest, jsonError, readJson } from "@/lib/http";
 import { categorySchema, issueMessage } from "@/lib/schemas";
 import { requireUserId } from "@/lib/session";
 
@@ -16,7 +16,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const userId = await requireUserId(request);
-    const parsed = categorySchema.safeParse(await request.json());
+    const parsed = categorySchema.safeParse(await readJson(request));
     if (!parsed.success) return badRequest(issueMessage(parsed.error));
     const category = await createCategory(userId, parsed.data);
     return Response.json({ category }, { status: 201 });

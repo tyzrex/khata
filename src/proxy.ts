@@ -1,5 +1,6 @@
 import { getSessionCookie } from "better-auth/cookies";
 import { NextResponse, type NextRequest } from "next/server";
+import { isAllowedWrite, trustedOrigins } from "@/lib/request-guard";
 import { safeNext } from "@/lib/return-path";
 
 const PUBLIC_PATHS = new Set(["/login", "/offline", "/manifest.webmanifest"]);
@@ -10,11 +11,16 @@ function isPublic(pathname: string) {
   if (pathname.startsWith("/invite/")) return true;
   // Allow reading invite info (GET) without auth; accepting still requires auth
   if (pathname.startsWith("/api/invite/") && !pathname.endsWith("/accept")) return true;
-  return pathname.startsWith("/icons/");
+  return pathname.startsWith("/icons/") || pathname.startsWith("/splash/");
 }
 
 export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
+  // CSRF: a cookie-authenticated write must come from this site. Better Auth runs
+  // the same check on its own routes, so /api/auth is left to it.
+  if (pathname.startsWith("/api/") && !pathname.startsWith("/api/auth") && !isAllowedWrite(request, trustedOrigins())) {
+    return NextResponse.json({ error: "Cross-site requests are not allowed." }, { status: 403 });
+  }
   if (isPublic(pathname)) return NextResponse.next();
 
   if (getSessionCookie(request)) return NextResponse.next();
@@ -37,5 +43,5 @@ export function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|icons/|favicon.ico|icon.png|sw.js|swe-worker|manifest.webmanifest).*)"],
+  matcher: ["/((?!_next/static|_next/image|icons/|splash/|favicon.ico|icon.png|sw.js|swe-worker|manifest.webmanifest).*)"],
 };

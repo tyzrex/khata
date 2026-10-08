@@ -17,10 +17,25 @@ export const dateSchema = z
     return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
   }, "Date is not a real calendar day");
 
+/**
+ * Largest amount any entry may hold. The columns are numeric(14, 2); this keeps far
+ * inside that and inside the range where paisa arithmetic on doubles stays exact.
+ */
+export const MAX_AMOUNT = 9_999_999_999.99;
+
+/** Positive money in NPR, rounded to the paisa so what is stored is what was validated. */
+export const moneySchema = z
+  .number()
+  .finite()
+  .positive("Amount must be greater than zero")
+  .max(MAX_AMOUNT, "Amount is too large")
+  .transform((value) => Math.round(value * 100) / 100)
+  .refine((value) => value > 0, "Amount must be at least 0.01");
+
 const amountSchema = z.preprocess((value) => {
   if (typeof value === "string" && value.trim() !== "") return Number(value);
   return value;
-}, z.number().finite().positive("Amount must be greater than zero"));
+}, moneySchema);
 
 const currencySchema = z.preprocess((value) => {
   if (value == null || value === "") return "NPR";
@@ -54,7 +69,18 @@ export const manualTransactionSchema = z.object({
 export const categorySchema = z.object({
   name: z.string().trim().min(1).max(40),
   kind: z.enum(CATEGORY_KINDS),
-  color: z.string().regex(/^#[0-9a-fA-F]{6}$/, "Color must be a hex value like #c45c16"),
+  color: z.string().regex(/^#[0-9a-fA-F]{6}$/, "Color must be a hex value like #0052ff"),
+});
+
+/** Query-string filters for the ledger list. Empty values mean "no filter". */
+const optionalParam = <T extends z.ZodType>(schema: T) => z.preprocess((value) => (typeof value === "string" && value.trim() === "" ? undefined : typeof value === "string" ? value.trim() : value), schema.optional());
+
+export const transactionFiltersSchema = z.object({
+  q: optionalParam(z.string().max(100, "Search is limited to 100 characters")),
+  from: optionalParam(dateSchema),
+  to: optionalParam(dateSchema),
+  type: optionalParam(z.enum(TX_TYPES, { error: "Type must be expense, income, or transfer." })),
+  category: optionalParam(z.string().max(80)),
 });
 
 export type ImportTransaction = z.infer<typeof importTransactionSchema>;

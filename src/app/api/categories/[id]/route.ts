@@ -1,6 +1,6 @@
 import type { NextRequest } from "next/server";
 import { deleteCategory, isUniqueViolation, updateCategory } from "@/db/ledger";
-import { badRequest, jsonError } from "@/lib/http";
+import { badRequest, jsonError, readJson } from "@/lib/http";
 import { categorySchema, issueMessage } from "@/lib/schemas";
 import { requireUserId } from "@/lib/session";
 
@@ -10,7 +10,7 @@ export async function PATCH(request: NextRequest, context: Context) {
   try {
     const userId = await requireUserId(request);
     const { id } = await context.params;
-    const parsed = categorySchema.safeParse(await request.json());
+    const parsed = categorySchema.safeParse(await readJson(request));
     if (!parsed.success) return badRequest(issueMessage(parsed.error));
     const category = await updateCategory(userId, id, parsed.data);
     if (!category) return Response.json({ error: "That category is gone." }, { status: 404 });
