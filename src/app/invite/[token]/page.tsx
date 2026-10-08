@@ -1,5 +1,6 @@
 import { Suspense } from "react";
 import { Mark } from "@/components/mark";
+import { Loading } from "@/components/ui/loading";
 import { InviteContent } from "./invite-content";
 
 export default function InvitePage() {
@@ -13,8 +14,11 @@ export default function InvitePage() {
 function InviteFallback() {
   return (
     <main className="mx-auto flex min-h-dvh max-w-md flex-col justify-center gap-8 px-6">
-      <Mark className="size-10" />
-      <p className="text-sm text-muted-foreground">Opening invite</p>
+      <div className="flex items-center gap-3">
+        <Mark className="size-9" />
+        <span className="text-base font-semibold tracking-[-0.02em] text-display">Khata</span>
+      </div>
+      <Loading className="py-0" />
     </main>
   );
 }

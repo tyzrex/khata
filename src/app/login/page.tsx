@@ -27,9 +27,9 @@ async function LoginGate({ searchParams }: Props) {
 
 function LoginFallback() {
   return (
-    <main className="mx-auto flex min-h-dvh max-w-md flex-col justify-center px-6">
+    <main className="flex min-h-dvh flex-col items-center justify-center gap-4 px-6">
       <Mark className="size-10" />
-      <p className="mt-6 text-sm text-muted-foreground">Opening Khata</p>
+      <p className="text-sm text-muted-foreground">Opening Khata</p>
     </main>
   );
 }

@@ -1,5 +1,6 @@
 "use client";
 
+import { ArrowRightLeft, BookOpen, Eye, EyeOff, Smartphone, Users } from "lucide-react";
 import { useState } from "react";
 import { authClient } from "@/lib/auth-client";
 import { safeNext } from "@/lib/return-path";
@@ -13,17 +14,6 @@ function nextPath() {
   return safeNext(new URLSearchParams(window.location.search).get("next"));
 }
 
-function GoogleMark() {
-  return (
-    <svg viewBox="0 0 24 24" className="size-4" aria-hidden>
-      <path fill="#4285F4" d="M23.49 12.27c0-.79-.07-1.54-.2-2.27H12v4.3h6.47a5.53 5.53 0 0 1-2.4 3.63v3h3.88c2.27-2.09 3.54-5.17 3.54-8.66Z" />
-      <path fill="#34A853" d="M12 24c3.24 0 5.96-1.07 7.95-2.91l-3.88-3c-1.08.72-2.46 1.16-4.07 1.16-3.13 0-5.78-2.11-6.73-4.96H1.26v3.09A12 12 0 0 0 12 24Z" />
-      <path fill="#FBBC05" d="M5.27 14.29A7.2 7.2 0 0 1 4.89 12c0-.8.14-1.57.38-2.29V6.62H1.26a12 12 0 0 0 0 10.76l4.01-3.09Z" />
-      <path fill="#EA4335" d="M12 4.75c1.76 0 3.34.61 4.59 1.8l3.44-3.44C17.95 1.14 15.23 0 12 0 7.31 0 3.25 2.69 1.26 6.62l4.01 3.09C6.22 6.86 8.87 4.75 12 4.75Z" />
-    </svg>
-  );
-}
-
 export function LoginForm({ googleEnabled }: { googleEnabled: boolean }) {
   const [mode, setMode] = useState<"sign-in" | "sign-up">("sign-in");
   const [name, setName] = useState("");
@@ -31,6 +21,7 @@ export function LoginForm({ googleEnabled }: { googleEnabled: boolean }) {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState<"email" | "google" | null>(null);
+  const [reveal, setReveal] = useState(false);
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
@@ -61,88 +52,156 @@ export function LoginForm({ googleEnabled }: { googleEnabled: boolean }) {
 
   const signingUp = mode === "sign-up";
 
+  const seg = (active: boolean) =>
+    "h-full flex-1 rounded-md text-[13px] font-medium outline-none transition-colors duration-200 focus-visible:ring-2 focus-visible:ring-ring " +
+    (active ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-secondary hover:text-display");
+
   return (
-    <main className="relative mx-auto flex min-h-dvh max-w-md flex-col justify-center px-6 py-16">
-      <div className="absolute top-4 right-4">
-        <ThemeToggle />
-      </div>
-      <Mark className="size-10" />
-      <p className="mt-6 text-xs uppercase tracking-[0.18em] text-muted-foreground">Khata</p>
-      <h1 className="figure mt-2 text-4xl">{signingUp ? "Open an account" : "Welcome back"}</h1>
-      <p className="mt-3 text-sm leading-6 text-muted-foreground">
-        A private NPR ledger. Sign in to see your entries, splits, and settlements.
-      </p>
+    <main className="min-h-dvh lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]">
+      <aside className="relative hidden flex-col justify-between overflow-hidden bg-brand p-10 text-brand-foreground lg:flex xl:p-14">
+        <div className="flex items-center gap-3">
+          <span className="rounded-full ring-2 ring-white/40">
+            <Mark className="block size-9" />
+          </span>
+          <span className="text-base font-semibold tracking-[-0.02em]">Khata</span>
+        </div>
+        <div className="max-w-md">
+          <h2 className="text-[34px] leading-[1.1] font-semibold tracking-[-0.03em] xl:text-[40px]">Your money and your splits, in one calm book.</h2>
+          <ul className="mt-10 grid gap-5 text-sm">
+            {[
+              { icon: BookOpen, title: "A ledger for bank and cash", text: "Every rupee in and out, in AD or BS dates." },
+              { icon: Users, title: "Split with friends and groups", text: "Equal, exact, shares or percent. Everyone sees the same numbers." },
+              { icon: ArrowRightLeft, title: "Settle up in fewer payments", text: "Balances simplify themselves, and each payment links to your bank line." },
+              { icon: Smartphone, title: "Installs like an app", text: "Add it to your home screen and it opens straight to your book." },
+            ].map((item) => (
+              <li key={item.title} className="flex gap-3.5">
+                <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-white/12" aria-hidden>
+                  <item.icon className="size-4" />
+                </span>
+                <span>
+                  <span className="block font-semibold">{item.title}</span>
+                  <span className="mt-0.5 block leading-5 opacity-75">{item.text}</span>
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+        <p className="text-xs opacity-60">Private by default. Your ledger is only visible to you.</p>
+      </aside>
 
-      <div className="mt-8 flex rounded-lg bg-muted p-1 text-sm">
-        <button
-          type="button"
-          className={mode === "sign-in" ? "h-9 flex-1 rounded-md bg-background font-medium shadow-sm" : "h-9 flex-1 rounded-md text-muted-foreground"}
-          onClick={() => {
-            setMode("sign-in");
-            setError(null);
-          }}
-        >
-          Sign in
-        </button>
-        <button
-          type="button"
-          className={mode === "sign-up" ? "h-9 flex-1 rounded-md bg-background font-medium shadow-sm" : "h-9 flex-1 rounded-md text-muted-foreground"}
-          onClick={() => {
-            setMode("sign-up");
-            setError(null);
-          }}
-        >
-          Create account
-        </button>
-      </div>
-
-      {googleEnabled ? (
-        <Button type="button" variant="outline" className="mt-4 h-11 w-full" disabled={pending !== null} onClick={() => void google()}>
-          <GoogleMark />
-          {pending === "google" ? "Redirecting" : "Continue with Google"}
-        </Button>
-      ) : (
-        <p className="mt-4 text-xs leading-5 text-muted-foreground">
-          Google sign-in appears after <code>GOOGLE_CLIENT_ID</code> and <code>GOOGLE_CLIENT_SECRET</code> are set.
-        </p>
-      )}
-
-      <div className="my-5 flex items-center gap-3 text-xs uppercase tracking-[0.16em] text-muted-foreground">
-        <span className="h-px flex-1 bg-border" />
-        Email
-        <span className="h-px flex-1 bg-border" />
-      </div>
-
-      <form className="grid gap-3" onSubmit={submit}>
-        {signingUp ? (
-          <div className="grid gap-2">
-            <Label htmlFor="name">Name</Label>
-            <Input id="name" autoComplete="name" value={name} onChange={(event) => setName(event.target.value)} className="h-11" required />
+      <div className="relative flex min-h-dvh flex-col px-5 py-6 sm:px-8 lg:min-h-0 lg:justify-center lg:px-12">
+        <div className="flex items-center justify-between lg:absolute lg:inset-x-12 lg:top-8 lg:justify-end">
+          <div className="flex items-center gap-2.5 lg:hidden">
+            <Mark className="size-8" />
+            <span className="text-[15px] font-semibold tracking-[-0.02em] text-display">Khata</span>
           </div>
-        ) : null}
-        <div className="grid gap-2">
-          <Label htmlFor="email">Email</Label>
-          <Input id="email" type="email" autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} className="h-11" required />
+          <ThemeToggle className="bg-card shadow-card" />
         </div>
-        <div className="grid gap-2">
-          <Label htmlFor="password">Password</Label>
-          <Input
-            id="password"
-            type="password"
-            autoComplete={signingUp ? "new-password" : "current-password"}
-            minLength={8}
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-            className="h-11"
-            required
-          />
+
+        <div className="mx-auto my-auto w-full max-w-sm py-10 lg:my-0 lg:py-0">
+          <h1 className="display text-[28px] sm:text-[32px]">{signingUp ? "Create your khata" : "Welcome back"}</h1>
+          <p className="mt-2 text-sm leading-6 text-muted-foreground">{signingUp ? "A private NPR ledger, with friends and settle-up built in." : "Sign in to see your entries, splits and settlements."}</p>
+
+          <div className="mt-8 flex h-10 items-center rounded-xl bg-card p-1 shadow-card" role="group" aria-label="Mode">
+            <button
+              type="button"
+              aria-pressed={!signingUp}
+              className={seg(!signingUp)}
+              onClick={() => {
+                setMode("sign-in");
+                setError(null);
+              }}
+            >
+              Sign in
+            </button>
+            <button
+              type="button"
+              aria-pressed={signingUp}
+              className={seg(signingUp)}
+              onClick={() => {
+                setMode("sign-up");
+                setError(null);
+              }}
+            >
+              Create account
+            </button>
+          </div>
+
+          {googleEnabled ? (
+            <>
+              <Button type="button" variant="outline" className="mt-4 w-full gap-2.5 bg-card shadow-card" disabled={pending !== null} onClick={() => void google()}>
+                <svg viewBox="0 0 24 24" className="size-4" aria-hidden>
+                  <path fill="#4285F4" d="M23.5 12.3c0-.8-.1-1.6-.2-2.3H12v4.4h6.5a5.6 5.6 0 0 1-2.4 3.6v3h3.9c2.3-2.1 3.5-5.2 3.5-8.7Z" />
+                  <path fill="#34A853" d="M12 24c3.2 0 6-1.1 8-2.9l-3.9-3c-1.1.7-2.5 1.2-4.1 1.2-3.1 0-5.8-2.1-6.7-5H1.3v3.1A12 12 0 0 0 12 24Z" />
+                  <path fill="#FBBC05" d="M5.3 14.3a7.2 7.2 0 0 1 0-4.6V6.6h-4a12 12 0 0 0 0 10.8l4-3.1Z" />
+                  <path fill="#EA4335" d="M12 4.8c1.8 0 3.3.6 4.6 1.8l3.4-3.4A12 12 0 0 0 1.3 6.6l4 3.1c.9-2.9 3.6-4.9 6.7-4.9Z" />
+                </svg>
+                {pending === "google" ? "Redirecting" : "Continue with Google"}
+              </Button>
+              <div className="my-6 flex items-center gap-3 text-xs text-disabled" aria-hidden>
+                <span className="h-px flex-1 bg-input" />
+                or with email
+                <span className="h-px flex-1 bg-input" />
+              </div>
+            </>
+          ) : (
+            <>
+              {process.env.NODE_ENV === "development" ? (
+                <p className="mt-4 text-xs leading-5 text-disabled">
+                  Google sign-in appears after <code>GOOGLE_CLIENT_ID</code> and <code>GOOGLE_CLIENT_SECRET</code> are set.
+                </p>
+              ) : null}
+              <div className="h-6" />
+            </>
+          )}
+
+          <form className="grid gap-4" onSubmit={submit}>
+            {signingUp ? (
+              <div className="grid gap-1.5">
+                <Label htmlFor="name">Name</Label>
+                <Input id="name" autoComplete="name" value={name} onChange={(event) => setName(event.target.value)} required />
+              </div>
+            ) : null}
+            <div className="grid gap-1.5">
+              <Label htmlFor="email">Email</Label>
+              <Input id="email" type="email" autoComplete="email" inputMode="email" autoCapitalize="none" spellCheck={false} value={email} onChange={(event) => setEmail(event.target.value)} required />
+            </div>
+            <div className="grid gap-1.5">
+              <Label htmlFor="password">Password</Label>
+              <div className="relative">
+                <Input
+                  id="password"
+                  type={reveal ? "text" : "password"}
+                  autoComplete={signingUp ? "new-password" : "current-password"}
+                  minLength={8}
+                  className="pr-11"
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                  required
+                />
+                <button
+                  type="button"
+                  className="absolute inset-y-0 right-1 my-auto flex size-9 items-center justify-center rounded-lg text-muted-foreground outline-none hover:text-display focus-visible:ring-2 focus-visible:ring-ring"
+                  aria-label={reveal ? "Hide password" : "Show password"}
+                  aria-pressed={reveal}
+                  onClick={() => setReveal((value) => !value)}
+                >
+                  {reveal ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+                </button>
+              </div>
+              {signingUp ? <p className="text-xs text-muted-foreground">At least 8 characters. Stored hashed, never in plain text.</p> : null}
+            </div>
+            {error ? (
+              <p role="alert" className="rounded-xl bg-destructive/10 px-3.5 py-2.5 text-sm font-medium text-destructive">
+                {error}
+              </p>
+            ) : null}
+            <Button type="submit" className="mt-1 w-full" disabled={pending !== null}>
+              {pending === "email" ? "Checking" : signingUp ? "Create account" : "Sign in"}
+            </Button>
+          </form>
         </div>
-        {signingUp ? <p className="text-xs text-muted-foreground">At least 8 characters. This password stays in your database, hashed.</p> : null}
-        {error ? <p className="text-sm text-destructive">{error}</p> : null}
-        <Button type="submit" className="h-11" disabled={pending !== null}>
-          {pending === "email" ? "Checking" : signingUp ? "Create account" : "Sign in"}
-        </Button>
-      </form>
+      </div>
     </main>
   );
 }
