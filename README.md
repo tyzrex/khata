@@ -53,7 +53,11 @@ Sessions are httpOnly cookies (`better-auth.session_token`, prefixed `__Secure-`
 
 Every ledger and share row stores `user_id`. Queries only return the signed-in account. `bun run db:seed` writes rows with a null owner; the first account that signs in adopts those rows. A second account gets its own empty book. The sample week uses stable ids, so only one account can hold that sample.
 
-Password reset email is not wired up. Add an email sender later if you want reset links. Until then, keep the password, or sign in with Google using the same verified address (Google is a trusted provider for account linking).
+**Settings → Your details / Password / Signed-in devices / Delete this account** covers managing the account. Name changes are immediate. Changing the email sends a confirmation link to the new address and nothing moves until it is clicked, so the sender must be a real domain — `INVITE_FROM_EMAIL`, not the `onboarding@resend.dev` sandbox. Deleting never happens in one step: Better Auth's `sendDeleteAccountVerification` short-circuits the immediate delete, so every deletion is confirmed by a link emailed to the address on the account. The password field in that dialog is an identity pre-check, and it is skipped for a Google-only account. The link's callback runs `beforeDelete`, which clears `settlements` and `shared_expenses` first: those hold `ON DELETE RESTRICT` references to `people`, and RESTRICT is checked as each row goes, so leaving them to the cascade from `user.id` can fail outright.
+
+Password reset email is still not wired up. Add an email sender later if you want reset links. Until then, keep the password, or sign in with Google using the same verified address (Google is a trusted provider for account linking).
+
+Migration `0008_auth_timestamps_timezone` moves Better Auth's timestamp columns to `timestamptz`. The app runs in Asia/Kathmandu while the database is UTC, so a naive column stored local wall clock and Node read it back as UTC — expiry checks drifted by the offset, and a session list would show sessions that had already expired. Existing rows are reinterpreted in the database session's time zone; session lifetimes are 30 days, so nothing is revoked by the change.
 
 ## Deploy on Vercel
 
@@ -129,7 +133,7 @@ Each row:
 | `currency` | `NPR` |
 | `category` | Free text. Unknown names are created. |
 | `merchant` | Description shown in the ledger |
-| `account` | `Nabil`, `NIMB`, `Sanima`, `Splitwise`, or `Other` |
+| `account` | One of the caller's own accounts. `GET /api/v1/context` lists them; names match case-insensitively and an unknown name is rejected. |
 | `note` | Optional |
 | `source` | Optional. Defaults to `gmail` |
 
@@ -175,9 +179,59 @@ Friends sign up for their own Khata account and join your group as real members.
 
 Members see the group's expenses, balances, and members, and can add or edit shared expenses and record settlements inside that group. Each person's bank ledger stays private. Only the group owner can invite, rename, or change members. Group data is stored in the owner's book and shared with members through `group_user_access`. Removing a linked person from the owner's People list revokes that account's access.
 
-Optional env vars: `RESEND_API_KEY` and `INVITE_FROM_EMAIL` (for example `Khata <invites@your-domain.example>`). Without a key the invite link is still created and can be shared by hand.
+Optional env vars: `RESEND_API_KEY` and `INVITE_FROM_EMAIL` (for example `Khata <invites@mail.your-domain.example>`). Without a key the invite link is still created and can be shared by hand.
+
+### Keeping invites out of Promotions
+
+Gmail files mail into Promotions mostly on sender reputation and on how the message looks. The code side is handled: each invite is sent as `"<Inviter> via Khata" <your address>`, with `Reply-To` set to the inviter, a plain-text part, a short HTML part with one link and no images, buttons, tracking or unsubscribe footer, and a unique `X-Entity-Ref-ID` so separate invites do not thread together.
+
+The rest is DNS and cannot be fixed in code:
+
+1. Do not send from `onboarding@resend.dev`. Verify your own domain in Resend, ideally a subdomain such as `mail.your-domain.example`, and add the SPF and DKIM records it gives you.
+2. Add a DMARC record, for example `_dmarc.your-domain.example TXT "v=DMARC1; p=none; rua=mailto:dmarc@your-domain.example"`.
+3. Keep invites on that subdomain only. Do not send newsletters or marketing from the same address.
+4. New domains start with no reputation. The first invites can still land in Promotions or spam; replies and "Move to Primary" from recipients teach Gmail quickly.
 
 Migration `0003_multi_user_invites` adds `group_invites`, `group_user_access`, and `people.linked_user_id`, and backfills owner rows for existing groups. Run `bun run db:migrate`.
+
+## Pages
+
+Each section is its own route, so links, the back button and bookmarks work:
+
+| Route | What it shows |
+| --- | --- |
+| `/` | Dashboard. `?range=week\|month\|year\|all\|custom`, `?at=YYYY-MM-DD` to step to another period, `?from=&to=` for a custom range |
+| `/ledger` | Every bank and cash entry. Filters live in the URL: `?q=`, `?type=expense\|income\|transfer`, `?category=`, `?from=`, `?to=` |
+| `/friends`, `/friends/:id` | Friends and one friend's shared books |
+| `/groups`, `/groups/:id` | Groups and one group's expenses and balances |
+| `/balances`, `/activity` | Who owes whom; every shared expense and payment |
+| `/categories`, `/sync`, `/settings` | Categories, JSON import and export, preferences |
+
+Old `/?view=ledger` links redirect to the matching route. `?action=add` or `?action=split` on any page opens the entry or split dialog (the installed app's shortcuts use this).
+
+The signed-in layout reads the session, paints the navigation, and reads the ledger and share book on the server in parallel while a skeleton of the requested page shows. Writes then update that data in place without a reload.
+
+## API for bots and AI assistants
+
+`/api/v1` lets a bot or assistant (a Telegram bot, a custom GPT, an MCP tool) act for one Khata user. It takes names instead of ids: "split 1200 with Sameer and Anita" becomes `POST /api/v1/expenses {"description":"Dinner","amount":1200,"splitWith":["Sameer","Anita"]}`.
+
+1. In Khata, open **Settings → API keys** and create a key per bot. The full key (`khata_...`) is shown once; only a SHA-256 hash is stored.
+2. Send it as `Authorization: Bearer khata_...` or `X-API-Key: khata_...`.
+3. Point the bot at `/api/v1/openapi.json` (OpenAPI 3.1) or `/api/v1/llms.txt` (a short guide for a language model). Both, and the `/api/v1` index, are public.
+
+Every response is `{ ok: true, message, data }` or `{ ok: false, error, candidates? }`. `message` is a sentence the bot can read back. When a name matches more than one friend, the call fails with `candidates` so the bot asks instead of guessing. `POST /transactions` accepts an `externalId` so retries do not double-add. Writes are limited to 300 per user per hour.
+
+| Endpoint | What it does |
+| --- | --- |
+| `GET /context` | Me, friends, groups, categories, accounts, today and balances. Call first |
+| `GET/POST /transactions`, `GET/PATCH/DELETE /transactions/:id` | Personal ledger, with totals on search |
+| `GET/POST /friends` | Friends with net balances; add by name |
+| `GET/POST /groups`, `GET/PATCH /groups/:group` | Groups by id or name; rename, add or remove members |
+| `GET/POST /expenses`, `GET/DELETE /expenses/:id` | Shared expenses split equal, exact, by shares or percent |
+| `POST /settlements`, `DELETE /settlements/:id` | Record or remove a payment |
+| `GET /balances` | Who owes whom, with ready-to-read sentences |
+
+Revoking a key in Settings takes effect on the bot's next call. Keys cannot list or create other keys; that needs a signed-in session. Migration `0006_agent_api_keys` adds the `api_keys` table. Run `bun run db:migrate`.
 
 ## Other routes
 
