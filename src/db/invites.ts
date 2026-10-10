@@ -53,9 +53,16 @@ export async function createGroupInvite(
     token,
     expiresAt,
   });
-  const [inviter] = await db.select({ name: user.name }).from(user).where(eq(user.id, userId)).limit(1);
+  const [inviter] = await db.select({ name: user.name, email: user.email }).from(user).where(eq(user.id, userId)).limit(1);
   const inviterName = inviter?.name ?? "A friend";
-  return { token, expiresAt, groupName: group.kind === "direct" ? inviterName : group.name, inviterName, direct: group.kind === "direct" };
+  return {
+    token,
+    expiresAt,
+    groupName: group.kind === "direct" ? inviterName : group.name,
+    inviterName,
+    inviterEmail: inviter?.email ?? null,
+    direct: group.kind === "direct",
+  };
 }
 
 export async function getInviteByToken(token: string): Promise<InviteInfo | null> {

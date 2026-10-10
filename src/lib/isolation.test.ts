@@ -18,7 +18,7 @@ import path from "node:path";
 import test from "node:test";
 import { appOrigin } from "./app-origin";
 import { assertAuthSecret } from "./auth";
-import { oneLine } from "./invite-email";
+import { buildInviteEmail, inviteSender, oneLine } from "./invite-email";
 import { clientIp, createRateLimiter, isAllowedWrite, isInviteToken, trustedOrigins } from "./request-guard";
 
 // ---------------------------------------------------------------------------
@@ -370,6 +370,17 @@ test("invite links never use a forged host", () => {
 test("invite email text keeps user-typed names on one line", () => {
   assert.equal(oneLine("Trip\r\nBcc: x@evil.example"), "Trip Bcc: x@evil.example");
   assert.equal(oneLine("a".repeat(200)).length, 80);
+});
+
+test("invite email reads as a personal note and escapes user-typed names", () => {
+  assert.equal(inviteSender("Asha", "Khata <invites@khata.example>"), '"Asha via Khata" <invites@khata.example>');
+  assert.equal(inviteSender('Ev"il <x@y>', "invites@khata.example"), '"Evil x@y via Khata" <invites@khata.example>');
+  const email = buildInviteEmail({ to: "f@x.example", inviterName: "Asha", inviterEmail: "asha@x.example", groupName: "<b>Trip</b>", url: "https://khata.example/invite/t" });
+  assert.equal(email.replyTo, "asha@x.example");
+  assert.equal(email.subject, "Asha added you to <b>Trip</b>");
+  assert.ok(!email.html.includes("<b>Trip</b>"), "group names are escaped in HTML");
+  assert.ok(email.text.includes("https://khata.example/invite/t"));
+  assert.ok(!/<img|unsubscribe/i.test(email.html), "no bulk-mail markers");
 });
 
 test("a friend's direct book cannot be renamed or re-membered", () => {

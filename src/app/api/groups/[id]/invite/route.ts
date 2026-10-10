@@ -43,7 +43,7 @@ export async function POST(request: NextRequest, context: Context) {
 
     const invite = await createGroupInvite(userId, id, parsed.data);
     const url = `${appOrigin(request)}/invite/${invite.token}`;
-    const emailSent = email ? await sendInviteEmail({ to: email, inviterName: invite.inviterName, groupName: invite.groupName, direct: invite.direct, url }) : false;
+    const emailSent = email ? await sendInviteEmail({ to: email, inviterName: invite.inviterName, inviterEmail: invite.inviterEmail, groupName: invite.groupName, direct: invite.direct, url }) : false;
     return Response.json({ url, expiresAt: invite.expiresAt, emailSent }, { status: 201 });
   } catch (error) {
     return shareError(error);
