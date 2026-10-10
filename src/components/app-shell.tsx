@@ -1,6 +1,8 @@
 "use client";
 
-import { Activity, ArrowLeftRight, BookOpen, HandCoins, House, LogOut, Menu, Plus, RefreshCw, Scale, Settings, Tags, Users, UsersRound, type LucideIcon } from "lucide-react";
+import { Activity, ArrowLeftRight, BookOpen, HandCoins, House, LogOut, Menu, Plus, RefreshCw, Scale, Settings, Tags, Users, UsersRound, Wallet, type LucideIcon } from "lucide-react";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useState, type ReactNode } from "react";
 import { Mark } from "@/components/mark";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -9,18 +11,25 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { useDateFormat } from "@/components/use-date-style";
 
 export const views = [
-  { id: "overview", label: "Dashboard", short: "Home", icon: House, mobile: true, group: "Money" },
-  { id: "ledger", label: "Ledger", short: "Ledger", icon: BookOpen, mobile: true, group: "Money" },
-  { id: "categories", label: "Categories", short: "Categories", icon: Tags, mobile: false, group: "Money" },
-  { id: "sync", label: "Import and export", short: "Sync", icon: RefreshCw, mobile: false, group: "Money" },
-  { id: "friends", label: "Friends", short: "Friends", icon: Users, mobile: true, group: "Splits" },
-  { id: "groups", label: "Groups", short: "Groups", icon: UsersRound, mobile: true, group: "Splits" },
-  { id: "balances", label: "Balances", short: "Balances", icon: Scale, mobile: true, group: "Splits" },
-  { id: "activity", label: "Activity", short: "Activity", icon: Activity, mobile: false, group: "Splits" },
-  { id: "settings", label: "Settings", short: "Settings", icon: Settings, mobile: false, group: "Account" },
-] as const satisfies readonly { id: string; label: string; short: string; icon: LucideIcon; mobile: boolean; group: string }[];
+  { id: "overview", href: "/", label: "Dashboard", short: "Home", icon: House, mobile: true, group: "Money" },
+  { id: "ledger", href: "/ledger", label: "Ledger", short: "Ledger", icon: BookOpen, mobile: true, group: "Money" },
+  { id: "categories", href: "/categories", label: "Categories", short: "Categories", icon: Tags, mobile: false, group: "Money" },
+  { id: "accounts", href: "/accounts", label: "Accounts", short: "Accounts", icon: Wallet, mobile: false, group: "Money" },
+  { id: "sync", href: "/sync", label: "Import and export", short: "Sync", icon: RefreshCw, mobile: false, group: "Money" },
+  { id: "friends", href: "/friends", label: "Friends", short: "Friends", icon: Users, mobile: true, group: "Splits" },
+  { id: "groups", href: "/groups", label: "Groups", short: "Groups", icon: UsersRound, mobile: true, group: "Splits" },
+  { id: "balances", href: "/balances", label: "Balances", short: "Balances", icon: Scale, mobile: true, group: "Splits" },
+  { id: "activity", href: "/activity", label: "Activity", short: "Activity", icon: Activity, mobile: false, group: "Splits" },
+  { id: "settings", href: "/settings", label: "Settings", short: "Settings", icon: Settings, mobile: false, group: "Account" },
+] as const satisfies readonly { id: string; href: string; label: string; short: string; icon: LucideIcon; mobile: boolean; group: string }[];
 
 export type ViewId = (typeof views)[number]["id"];
+
+/** The section a path belongs to: `/groups/abc` is still Groups. */
+export function viewForPath(pathname: string): ViewId {
+  const match = views.find((item) => item.href !== "/" && (pathname === item.href || pathname.startsWith(`${item.href}/`)));
+  return match?.id ?? "overview";
+}
 
 function initials(name: string) {
   const parts = name.trim().split(/\s+/).filter(Boolean);
@@ -31,8 +40,6 @@ function initials(name: string) {
 export function AppShell({
   user,
   today,
-  view,
-  onView,
   onAdd,
   onSplit,
   onSignOut,
@@ -40,14 +47,13 @@ export function AppShell({
 }: {
   user: { name: string; email: string };
   today: string;
-  view: ViewId;
-  onView: (view: ViewId) => void;
   onAdd: () => void;
   onSplit: () => void;
   onSignOut: () => void;
   children: ReactNode;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
+  const view = viewForPath(usePathname());
   const groups = ["Money", "Splits", "Account"] as const;
   const dates = useDateFormat();
 
@@ -86,10 +92,9 @@ export function AppShell({
                       const Icon = item.icon;
                       return (
                         <li key={item.id}>
-                          <button
-                            type="button"
+                          <Link
+                            href={item.href}
                             aria-current={active ? "page" : undefined}
-                            onClick={() => onView(item.id)}
                             className={
                               active
                                 ? "flex h-10 w-full items-center gap-3 rounded-xl bg-accent px-3 text-[14px] font-semibold tracking-[-0.01em] text-accent-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
@@ -98,7 +103,7 @@ export function AppShell({
                           >
                             <Icon className="size-[18px] shrink-0" strokeWidth={active ? 2.25 : 1.75} />
                             <span className="truncate">{item.label}</span>
-                          </button>
+                          </Link>
                         </li>
                       );
                     })}
@@ -124,7 +129,7 @@ export function AppShell({
       </aside>
 
       <div className="min-w-0">
-        <header className="sticky top-0 z-30 bg-background/90 backdrop-blur-md lg:hidden">
+        <header className="sticky top-0 z-30 border-b border-border bg-card/90 backdrop-blur-md lg:hidden">
           <div className="gutter-safe flex items-center justify-between gap-3 pt-5 pb-3 [--gutter:1.25rem] md:[--gutter:2rem]">
             <div className="flex min-w-0 items-center gap-3">
               <Mark className="size-9 shrink-0" />
@@ -133,12 +138,12 @@ export function AppShell({
                 <p className="truncate text-xs text-muted-foreground">{today ? dates.long(today) : user.name}</p>
               </div>
             </div>
-            <div className="flex items-center gap-2">
-              <ThemeToggle className="bg-card shadow-card" />
-              <Button type="button" variant="outline" size="icon" className="bg-card shadow-card" aria-label="More sections" onClick={() => setMenuOpen(true)}>
+            <div className="flex items-center gap-1">
+              <ThemeToggle className="bg-transparent text-muted-foreground hover:bg-accent/60 hover:text-display" />
+              <Button type="button" variant="outline" size="icon" className="bg-transparent text-muted-foreground hover:bg-accent/60 hover:text-display" aria-label="More sections" onClick={() => setMenuOpen(true)}>
                 <Menu />
               </Button>
-              <Button type="button" variant="outline" size="icon" className="bg-card shadow-card" aria-label="Sign out" onClick={onSignOut}>
+              <Button type="button" variant="outline" size="icon" className="bg-transparent text-muted-foreground hover:bg-accent/60 hover:text-display" aria-label="Sign out" onClick={onSignOut}>
                 <LogOut />
               </Button>
             </div>
@@ -161,21 +166,20 @@ export function AppShell({
               const Icon = item.icon;
               return (
                 <li key={item.id}>
-                  <button
-                    type="button"
+                  <Link
+                    href={item.href}
                     aria-current={active ? "page" : undefined}
                     className={
                       active
                         ? "flex h-16 w-full flex-col items-center justify-center gap-1 text-[11px] font-semibold text-accent-foreground outline-none"
                         : "group flex h-16 w-full flex-col items-center justify-center gap-1 text-[11px] font-medium text-muted-foreground outline-none"
                     }
-                    onClick={() => onView(item.id)}
                   >
                     <span className={active ? "flex h-7 w-12 items-center justify-center rounded-lg bg-accent" : "flex h-7 w-12 items-center justify-center rounded-lg transition-colors group-hover:bg-secondary group-focus-visible:bg-secondary"}>
                       <Icon className="size-5" strokeWidth={active ? 2.25 : 1.75} />
                     </span>
                     {item.short}
-                  </button>
+                  </Link>
                 </li>
               );
             })}
@@ -214,16 +218,7 @@ export function AppShell({
             {views
               .filter((item) => !item.mobile)
               .map((item) => (
-                <Button
-                  key={item.id}
-                  type="button"
-                  variant="outline"
-                  className="justify-start gap-3 px-4"
-                  onClick={() => {
-                    setMenuOpen(false);
-                    onView(item.id);
-                  }}
-                >
+                <Button key={item.id} variant="outline" className="justify-start gap-3 px-4" render={<Link href={item.href} onClick={() => setMenuOpen(false)} />} nativeButton={false}>
                   <item.icon />
                   {item.label}
                 </Button>

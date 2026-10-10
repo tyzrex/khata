@@ -1,11 +1,11 @@
 "use client";
 
-import { LogOut, Monitor, Moon, Sun, type LucideIcon } from "lucide-react";
+import { Monitor, Moon, Sun, type LucideIcon } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useSyncExternalStore, type ReactNode } from "react";
-import { Card, PersonMark } from "@/components/balances-card";
+import { ApiKeysCard } from "@/components/api-keys-card";
+import { Card } from "@/components/balances-card";
 import { PageHeader } from "@/components/page-header";
-import { Button } from "@/components/ui/button";
 import { useDateStyle } from "@/components/use-date-style";
 import { formatLongDate, formatMonthYear } from "@/lib/format";
 import type { CalendarKind, DateStyle, Script } from "@/lib/nepali-date";
@@ -62,12 +62,11 @@ function Row({ title, hint, children }: { title: string; hint?: string; children
 
 export function SettingsView({
   today,
-  user,
-  onSignOut,
+  account,
 }: {
   today: string;
-  user: { name: string; email: string };
-  onSignOut: () => void;
+  /** The editable account controls, rendered below the preference cards. */
+  account: ReactNode;
 }) {
   const { style, setCalendar, setScript } = useDateStyle();
   const { theme: stored, setTheme } = useTheme();
@@ -106,30 +105,20 @@ export function SettingsView({
           </div>
         </Card>
 
-        <div className="grid gap-3 2xl:gap-4">
-          <Card title="Appearance" hint="System follows your device">
-            <div role="radiogroup" aria-label="Theme" className="grid grid-cols-3 gap-2">
-              <Choice value="light" current={theme} title="Light" icon={Sun} onSelect={setTheme} />
-              <Choice value="dark" current={theme} title="Dark" icon={Moon} onSelect={setTheme} />
-              <Choice value="system" current={theme} title="System" icon={Monitor} onSelect={setTheme} />
-            </div>
-          </Card>
+        <Card title="Appearance" hint="System follows your device">
+          <div role="radiogroup" aria-label="Theme" className="grid grid-cols-3 gap-2">
+            <Choice value="light" current={theme} title="Light" icon={Sun} onSelect={setTheme} />
+            <Choice value="dark" current={theme} title="Dark" icon={Moon} onSelect={setTheme} />
+            <Choice value="system" current={theme} title="System" icon={Monitor} onSelect={setTheme} />
+          </div>
+        </Card>
 
-          <Card title="Account">
-            <div className="flex items-center gap-3">
-              <PersonMark name={user.name} tone="brand" className="size-10 text-xs" />
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-semibold text-display">{user.name}</p>
-                <p className="truncate text-xs text-muted-foreground">{user.email}</p>
-              </div>
-              <Button type="button" variant="outline" size="sm" className="shrink-0 gap-2" onClick={onSignOut}>
-                <LogOut />
-                Sign out
-              </Button>
-            </div>
-          </Card>
+        <div className="grid items-start gap-3 lg:col-span-2 2xl:gap-4">
+          <ApiKeysCard />
         </div>
       </div>
+
+      {account}
     </div>
   );
 }

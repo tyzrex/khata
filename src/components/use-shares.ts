@@ -1,18 +1,17 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import type { ShareBook } from "@/db/shares";
 
 async function readBody(response: Response) {
   return (await response.json().catch(() => null)) as { error?: string } | null;
 }
 
-export function useShares() {
+/** The share book (friends, groups, balances), seeded from the server render and re-read after every write. */
+export function useShares(initial: ShareBook) {
   const router = useRouter();
-  const [book, setBook] = useState<ShareBook | null>(null);
-  const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
-  const [error, setError] = useState<string | null>(null);
+  const [book, setBook] = useState<ShareBook>(initial);
 
   const load = useCallback(async () => {
     const response = await fetch("/api/shares");
@@ -23,35 +22,6 @@ export function useShares() {
     const body = await readBody(response);
     if (!response.ok) throw new Error(body?.error ?? "The share book could not be read.");
     setBook(body as ShareBook);
-    setStatus("ready");
-    setError(null);
-  }, [router]);
-
-  useEffect(() => {
-    let cancelled = false;
-    async function boot() {
-      try {
-        const response = await fetch("/api/shares");
-        if (response.status === 401) {
-          router.push("/login");
-          return;
-        }
-        const body = await readBody(response);
-        if (!response.ok) throw new Error(body?.error ?? "The share book could not be read.");
-        if (cancelled) return;
-        setBook(body as ShareBook);
-        setStatus("ready");
-        setError(null);
-      } catch (caught) {
-        if (cancelled) return;
-        setStatus("error");
-        setError(caught instanceof Error ? caught.message : "The share book could not be read.");
-      }
-    }
-    void boot();
-    return () => {
-      cancelled = true;
-    };
   }, [router]);
 
   async function send(path: string, method: string, payload?: unknown) {
@@ -79,8 +49,6 @@ export function useShares() {
 
   return {
     book,
-    status,
-    error,
     reload: load,
     createPerson: (name: string) => sendVoid("/api/people", "POST", { name }),
     renamePerson: (id: string, name: string) => sendVoid(`/api/people/${id}`, "PATCH", { name }),

@@ -55,9 +55,12 @@ function Step({ n, children }: { n: number; children: ReactNode }) {
 export function SyncView({
   onImport,
   onSample,
+  accounts,
 }: {
   onImport: (payload: unknown) => Promise<ImportResult>;
   onSample: () => Promise<ImportResult>;
+  /** The book's own account names, listed in the import schema note. */
+  accounts: string[];
 }) {
   const [result, setResult] = useState<ImportResult | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -158,7 +161,7 @@ export function SyncView({
         <Card title="Import" hint="Add bank lines from a JSON file or a paste" icon={<Upload className="size-4" />} className="lg:col-span-3">
           <Step n={1}>Drop or choose a file</Step>
           <label
-            className={`mt-2 flex cursor-pointer flex-col items-center gap-2 rounded-xl border-2 border-dashed px-4 py-8 text-center transition-colors duration-200 has-focus-visible:border-brand ${dragging ? "border-brand bg-accent/50" : "border-input hover:border-brand"}`}
+            className={`mt-2 flex cursor-pointer flex-col items-center gap-2 rounded-xl border-2 border-dashed px-4 py-8 text-center transition-colors duration-200 has-focus-visible:border-brand-tint ${dragging ? "border-brand-tint bg-accent/50" : "border-input hover:border-brand-tint"}`}
             onDragOver={(event) => {
               event.preventDefault();
               setDragging(true);
@@ -244,7 +247,7 @@ export function SyncView({
         </summary>
         <pre className="figure mt-4 overflow-x-auto rounded-xl bg-secondary p-4 text-xs leading-5">{schema}</pre>
         <p className="mt-2 text-xs leading-5 text-muted-foreground">
-          Accounts: Nabil, NIMB, Sanima, Splitwise, Other. Types: expense, income, transfer. Currency is NPR. The body may be a bare array or an object with a transactions field.
+          Accounts: {accounts.join(", ") || "none yet"}. Types: expense, income, transfer. Currency is NPR. An account the file names that you do not have yet is added for you. The body may be a bare array or an object with a transactions field.
         </p>
       </details>
     </div>

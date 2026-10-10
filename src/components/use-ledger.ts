@@ -1,19 +1,8 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
-import type { TxType } from "@/lib/constants";
-import type { CategoryDto, ImportResult, SummaryResponse, TransactionDto } from "@/lib/types";
-
-export type LedgerFilters = {
-  q: string;
-  from: string;
-  to: string;
-  type: "" | TxType;
-  category: string;
-};
-
-const emptyFilters: LedgerFilters = { q: "", from: "", to: "", type: "", category: "" };
+import { useCallback, useState } from "react";
+import type { AccountDto, CategoryDto, ImportResult, SummaryResponse, TransactionDto } from "@/lib/types";
 
 async function readError(response: Response, goToLogin: () => void) {
   if (response.status === 401) {
@@ -24,136 +13,64 @@ async function readError(response: Response, goToLogin: () => void) {
   throw new Error(body?.error ?? "The ledger could not be read just now.");
 }
 
-export function useLedger() {
+/**
+ * The bank and cash ledger, seeded from the server render. Every transaction is held
+ * once; the ledger page filters it on the client from the URL, and the dashboard
+ * reads it whole. Writes go to the API and then re-read the three lists together.
+ */
+export function useLedger(initial: { summary: SummaryResponse; accounts: AccountDto[]; categories: CategoryDto[]; transactions: TransactionDto[] }) {
   const router = useRouter();
   const deny = useCallback((response: Response) => readError(response, () => router.push("/login")), [router]);
-  const [summary, setSummary] = useState<SummaryResponse | null>(null);
-  const [transactions, setTransactions] = useState<TransactionDto[]>([]);
-  /** Every transaction, never filtered. The dashboard reads this. */
-  const [allTransactions, setAllTransactions] = useState<TransactionDto[]>([]);
-  const [categories, setCategories] = useState<CategoryDto[]>([]);
-  const [filters, setFilters] = useState<LedgerFilters>(emptyFilters);
-  const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
-  const [error, setError] = useState<string | null>(null);
-  const [listPending, setListPending] = useState(false);
-
-  const loadTransactions = useCallback(async (next: LedgerFilters) => {
-    const params = new URLSearchParams();
-    if (next.q) params.set("q", next.q);
-    if (next.from) params.set("from", next.from);
-    if (next.to) params.set("to", next.to);
-    if (next.type) params.set("type", next.type);
-    if (next.category) params.set("category", next.category);
-    const response = await fetch(`/api/transactions?${params.toString()}`);
-    if (!response.ok) await deny(response);
-    const body = (await response.json()) as { transactions: TransactionDto[] };
-    setTransactions(body.transactions);
-  }, [deny]);
+  const [summary, setSummary] = useState<SummaryResponse>(initial.summary);
+  const [transactions, setTransactions] = useState<TransactionDto[]>(initial.transactions);
+  const [accounts, setAccounts] = useState<AccountDto[]>(initial.accounts);
+  const [categories, setCategories] = useState<CategoryDto[]>(initial.categories);
 
   const refresh = useCallback(async () => {
-    const [summaryRes, categoryRes] = await Promise.all([fetch("/api/summary"), fetch("/api/categories")]);
+    const [summaryRes, accountRes, categoryRes, txRes] = await Promise.all([fetch("/api/summary"), fetch("/api/accounts"), fetch("/api/categories"), fetch("/api/transactions")]);
     if (!summaryRes.ok) await deny(summaryRes);
+    if (!accountRes.ok) await deny(accountRes);
     if (!categoryRes.ok) await deny(categoryRes);
-    const summaryBody = (await summaryRes.json()) as SummaryResponse;
-    const categoryBody = (await categoryRes.json()) as { categories: CategoryDto[] };
-    setSummary(summaryBody);
-    setCategories(categoryBody.categories);
-    const everything = await fetch("/api/transactions");
-    if (!everything.ok) await deny(everything);
-    setAllTransactions(((await everything.json()) as { transactions: TransactionDto[] }).transactions);
-    await loadTransactions(filters);
-  }, [deny, filters, loadTransactions]);
-
-  useEffect(() => {
-    let cancelled = false;
-    async function boot() {
-      try {
-        if (typeof navigator !== "undefined" && !navigator.onLine) {
-          throw new Error("You're offline. Khata can open, but the ledger lives in Postgres and needs a connection.");
-        }
-        const [summaryRes, categoryRes, txRes] = await Promise.all([
-          fetch("/api/summary"),
-          fetch("/api/categories"),
-          fetch("/api/transactions"),
-        ]);
-        if (!summaryRes.ok) await deny(summaryRes);
-        if (!categoryRes.ok) await deny(categoryRes);
-        if (!txRes.ok) await deny(txRes);
-        const summaryBody = (await summaryRes.json()) as SummaryResponse;
-        const categoryBody = (await categoryRes.json()) as { categories: CategoryDto[] };
-        const txBody = (await txRes.json()) as { transactions: TransactionDto[] };
-        if (cancelled) return;
-        setSummary(summaryBody);
-        setCategories(categoryBody.categories);
-        setTransactions(txBody.transactions);
-        setAllTransactions(txBody.transactions);
-        setStatus("ready");
-      } catch (caught) {
-        if (cancelled) return;
-        setStatus("error");
-        setError(caught instanceof Error ? caught.message : "The ledger could not be opened.");
-      }
-    }
-    void boot();
-    return () => {
-      cancelled = true;
-    };
+    if (!txRes.ok) await deny(txRes);
+    setSummary((await summaryRes.json()) as SummaryResponse);
+    setAccounts(((await accountRes.json()) as { accounts: AccountDto[] }).accounts);
+    setCategories(((await categoryRes.json()) as { categories: CategoryDto[] }).categories);
+    setTransactions(((await txRes.json()) as { transactions: TransactionDto[] }).transactions);
   }, [deny]);
 
-  async function applyFilters(next: LedgerFilters) {
-    setFilters(next);
-    setListPending(true);
-    try {
-      await loadTransactions(next);
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "The list could not be filtered.");
-    } finally {
-      setListPending(false);
-    }
-  }
-
-  async function reload() {
-    setStatus("loading");
-    setError(null);
-    try {
-      await refresh();
-      setStatus("ready");
-    } catch (caught) {
-      setStatus("error");
-      setError(caught instanceof Error ? caught.message : "The ledger could not be opened.");
-    }
+  async function write(path: string, method: string, payload?: unknown) {
+    const response = await fetch(path, {
+      method,
+      headers: payload === undefined ? undefined : { "content-type": "application/json" },
+      body: payload === undefined ? undefined : JSON.stringify(payload),
+    });
+    if (!response.ok && response.status !== 204) await deny(response);
+    await refresh();
+    return response;
   }
 
   async function saveTransaction(input: unknown, id?: string) {
-    const response = await fetch(id ? `/api/transactions/${id}` : "/api/transactions", {
-      method: id ? "PATCH" : "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(input),
-    });
-    if (!response.ok) await deny(response);
-    await refresh();
+    await write(id ? `/api/transactions/${id}` : "/api/transactions", id ? "PATCH" : "POST", input);
   }
 
   async function removeTransaction(id: string) {
-    const response = await fetch(`/api/transactions/${id}`, { method: "DELETE" });
-    if (!response.ok && response.status !== 204) await deny(response);
-    await refresh();
+    await write(`/api/transactions/${id}`, "DELETE");
   }
 
   async function saveCategory(input: unknown, id?: string) {
-    const response = await fetch(id ? `/api/categories/${id}` : "/api/categories", {
-      method: id ? "PATCH" : "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(input),
-    });
-    if (!response.ok) await deny(response);
-    await refresh();
+    await write(id ? `/api/categories/${id}` : "/api/categories", id ? "PATCH" : "POST", input);
   }
 
   async function removeCategory(id: string) {
-    const response = await fetch(`/api/categories/${id}`, { method: "DELETE" });
-    if (!response.ok && response.status !== 204) await deny(response);
-    await refresh();
+    await write(`/api/categories/${id}`, "DELETE");
+  }
+
+  async function saveAccount(name: string, id?: string) {
+    await write(id ? `/api/accounts/${id}` : "/api/accounts", id ? "PATCH" : "POST", { name });
+  }
+
+  async function removeAccount(id: string) {
+    await write(`/api/accounts/${id}`, "DELETE");
   }
 
   async function importPayload(payload: unknown): Promise<ImportResult> {
@@ -179,20 +96,16 @@ export function useLedger() {
   return {
     summary,
     transactions,
-    allTransactions,
+    accounts,
     categories,
-    filters,
-    status,
-    error,
-    listPending,
-    applyFilters,
-    reload,
+    reload: refresh,
     saveTransaction,
     removeTransaction,
     saveCategory,
     removeCategory,
+    saveAccount,
+    removeAccount,
     importPayload,
     loadSample,
-    emptyFilters,
   };
 }

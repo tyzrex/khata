@@ -51,6 +51,7 @@
   --color-display: var(--display);
   --color-disabled: var(--disabled);
   --color-brand: var(--brand);
+  --color-brand-tint: var(--brand-tint);
   --color-brand-foreground: var(--brand-foreground);
   --shadow-card: var(--elevation-card);
   --shadow-lift: var(--elevation-lift);
@@ -71,6 +72,12 @@
 /*
  * Soft-fintech tokens. Light gray canvas, white rounded cards, black pill
  * actions, one royal-blue accent with a pale-blue companion.
+ *
+ * The brand is one hue in both themes: a filled surface (`--primary`,
+ * `--brand`) keeps the same royal blue everywhere, so white-on-brand text
+ * clears contrast in either theme. Thin marks — lines, rings, borders drawn
+ * on the canvas — use `--brand-tint` instead, which is the readable tint of
+ * that same hue for the theme it sits on.
  */
 :root {
   --background: #f1f1f3;
@@ -97,6 +104,7 @@
   --warning: #d9822b;
   --interactive: #1a0fd1;
   --brand: #1a0fd1;
+  --brand-tint: #1a0fd1;
   --brand-foreground: #ffffff;
   --border: #ececf0;
   --input: #e0e0e6;
@@ -129,9 +137,9 @@
   --card-foreground: #e9e9ee;
   --popover: #16161b;
   --popover-foreground: #e9e9ee;
-  --primary: #5a4dff;
-  --primary-active: #7066ff;
-  --primary-disabled: #2b2a52;
+  --primary: #1a0fd1;
+  --primary-active: #1409ae;
+  --primary-disabled: #33307f;
   --primary-foreground: #ffffff;
   --secondary: #202027;
   --secondary-foreground: #e9e9ee;
@@ -145,7 +153,8 @@
   --credit: #34c77b;
   --warning: #f0a04b;
   --interactive: #8d89ff;
-  --brand: #5a4dff;
+  --brand: #1a0fd1;
+  --brand-tint: #8d89ff;
   --brand-foreground: #ffffff;
   --border: #25252c;
   --input: #34343c;
@@ -160,7 +169,7 @@
   --elevation-lift: 0 0 0 1px rgb(255 255 255 / 0.08), 0 16px 40px -12px rgb(0 0 0 / 0.6);
   --sidebar: #0a0a0d;
   --sidebar-foreground: #e9e9ee;
-  --sidebar-primary: #5a4dff;
+  --sidebar-primary: #1a0fd1;
   --sidebar-primary-foreground: #ffffff;
   --sidebar-accent: #1e2147;
   --sidebar-accent-foreground: #a9a6ff;

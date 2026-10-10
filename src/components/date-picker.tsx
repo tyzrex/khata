@@ -35,7 +35,7 @@ function fromConverted(day: ConvertedDate) {
 }
 
 const triggerClass =
-  "@container flex h-11 w-full min-w-0 items-center gap-3 rounded-xl bg-secondary px-4 text-left text-sm font-medium text-display outline-none transition-colors duration-200 hover:bg-secondary/70 focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 data-popup-open:ring-2 data-popup-open:ring-ring";
+  "@container flex h-11 w-full min-w-0 items-center gap-3 rounded-xl border border-input bg-card px-4 text-left text-sm font-medium text-display transition-colors duration-200 outline-none hover:border-muted-foreground focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/20 disabled:pointer-events-none disabled:opacity-50 data-popup-open:ring-2 data-popup-open:ring-ring";
 
 function Surface({
   className,

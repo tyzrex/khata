@@ -1,20 +1,25 @@
 "use client";
 
+import { zodResolver } from "@hookform/resolvers/zod";
 import { Check, Pencil, Plus, Tags, Trash2 } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useForm, useWatch } from "react-hook-form";
 import { toast } from "@/lib/status";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { SEGMENT, SEGMENT_OFF, SEGMENT_ON } from "@/components/segmented";
 import { CATEGORY_KINDS, SWATCHES, type CategoryKind } from "@/lib/constants";
+import { categoryFormSchema, type CategoryFormValues } from "@/lib/schemas";
 import type { CategoryDto } from "@/lib/types";
 
-type Draft = { name: string; kind: CategoryKind; color: string };
+const blank: CategoryFormValues = { name: "", kind: "expense", color: SWATCHES[0] };
 
-const blank: Draft = { name: "", kind: "expense", color: SWATCHES[0] };
+function fromCategory(category: CategoryDto): CategoryFormValues {
+  return { name: category.name, kind: category.kind, color: category.color };
+}
 
 const KIND_LABEL: Record<CategoryKind, string> = { expense: "Expense", income: "Income", transfer: "Transfer", any: "Any" };
 const KIND_HINT: Record<CategoryKind, string> = {
@@ -35,29 +40,50 @@ export function CategoriesView({
 }) {
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<CategoryDto | null>(null);
-  const [draft, setDraft] = useState<Draft>(blank);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const [confirming, setConfirming] = useState<string | null>(null);
 
+  const sessionKey = `${open ? "open" : "closed"}:${editing?.id ?? "new"}`;
+  const [session, setSession] = useState(sessionKey);
+  const [defaults, setDefaults] = useState<CategoryFormValues>(blank);
+
+  if (session !== sessionKey) {
+    setSession(sessionKey);
+    if (open) {
+      setDefaults(editing ? fromCategory(editing) : blank);
+      setError(null);
+      setConfirming(null);
+    }
+  }
+
+  const form = useForm<CategoryFormValues>({
+    resolver: zodResolver(categoryFormSchema),
+    defaultValues: defaults,
+  });
+
+  useEffect(() => {
+    if (!open) return;
+    form.reset(defaults);
+  }, [open, defaults, form]);
+
+  const name = useWatch({ control: form.control, name: "name" });
+  const kind = useWatch({ control: form.control, name: "kind" });
+  const color = useWatch({ control: form.control, name: "color" });
+
   function start(category?: CategoryDto) {
     setEditing(category ?? null);
-    setDraft(category ? { name: category.name, kind: category.kind, color: category.color } : blank);
+    setDefaults(category ? fromCategory(category) : blank);
     setError(null);
     setConfirming(null);
     setOpen(true);
   }
 
-  async function submit(event: React.FormEvent) {
-    event.preventDefault();
-    if (!draft.name.trim()) {
-      setError("Give the category a name.");
-      return;
-    }
+  async function submit(values: CategoryFormValues) {
     setPending(true);
     setError(null);
     try {
-      await onSave({ ...draft, name: draft.name.trim() }, editing?.id);
+      await onSave({ ...values }, editing?.id);
       toast.success(editing ? "Category updated" : "Category added");
       setOpen(false);
     } catch (caught) {
@@ -164,63 +190,88 @@ export function CategoriesView({
             <DialogTitle>{editing ? "Edit category" : "New category"}</DialogTitle>
             <DialogDescription>Renaming a category updates the entries that already use it.</DialogDescription>
           </DialogHeader>
-          <form className="grid gap-4" onSubmit={submit}>
-            <div className="flex items-center gap-3 rounded-xl bg-secondary px-3 py-2.5" aria-hidden>
-              <span className="flex size-9 shrink-0 items-center justify-center rounded-xl" style={{ background: `color-mix(in srgb, ${draft.color} 18%, transparent)` }}>
-                <span className="size-3 rounded-full" style={{ background: draft.color }} />
-              </span>
-              <span className="min-w-0 flex-1">
-                <span className="block truncate text-sm font-semibold text-display">{draft.name.trim() || "Category name"}</span>
-                <span className="block text-xs text-muted-foreground">{KIND_LABEL[draft.kind]}</span>
-              </span>
-            </div>
-            <div className="grid gap-1.5">
-              <Label htmlFor="cat-name">Name</Label>
-              <Input id="cat-name" required autoFocus maxLength={40} value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} />
-            </div>
-            <div className="grid gap-1.5">
-              <Label id="cat-kind">Kind</Label>
-              <div className={SEGMENT} role="radiogroup" aria-labelledby="cat-kind">
-                {CATEGORY_KINDS.map((kind) => (
-                  <button key={kind} type="button" role="radio" aria-checked={draft.kind === kind} className={draft.kind === kind ? SEGMENT_ON : SEGMENT_OFF} onClick={() => setDraft({ ...draft, kind })}>
-                    {KIND_LABEL[kind]}
-                  </button>
-                ))}
+          <Form {...form}>
+            <form className="grid gap-4" noValidate onSubmit={form.handleSubmit(submit)}>
+              <div className="flex items-center gap-3 rounded-xl bg-secondary px-3 py-2.5" aria-hidden>
+                <span className="flex size-9 shrink-0 items-center justify-center rounded-xl" style={{ background: `color-mix(in srgb, ${color} 18%, transparent)` }}>
+                  <span className="size-3 rounded-full" style={{ background: color }} />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm font-semibold text-display">{name.trim() || "Category name"}</span>
+                  <span className="block text-xs text-muted-foreground">{KIND_LABEL[kind]}</span>
+                </span>
               </div>
-            </div>
-            <div className="grid gap-1.5">
-              <Label id="cat-color">Color</Label>
-              <div className="flex flex-wrap gap-2" role="radiogroup" aria-labelledby="cat-color">
-                {SWATCHES.map((color) => {
-                  const on = draft.color === color;
-                  return (
-                    <button
-                      key={color}
-                      type="button"
-                      role="radio"
-                      aria-label={`Color ${color}`}
-                      aria-checked={on}
-                      className={`flex size-9 items-center justify-center rounded-lg text-white transition-transform duration-150 outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-popover ${on ? "ring-2 ring-primary ring-offset-2 ring-offset-popover" : "hover:scale-105"}`}
-                      style={{ background: color }}
-                      onClick={() => setDraft({ ...draft, color })}
-                    >
-                      {on ? <Check className="size-4" aria-hidden /> : null}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-            {error ? (
-              <p role="alert" className="rounded-xl bg-destructive/10 px-3 py-2 text-sm font-medium text-destructive">
-                {error}
-              </p>
-            ) : null}
-            <DialogFooter>
-              <Button type="submit" disabled={pending} className="max-sm:w-full">
-                {pending ? "Saving" : "Save category"}
-              </Button>
-            </DialogFooter>
-          </form>
+              <FormField
+                control={form.control}
+                name="name"
+                render={({ field }) => (
+                  <FormItem className="gap-1.5">
+                    <FormLabel>Name</FormLabel>
+                    <FormControl>
+                      <Input autoComplete="off" maxLength={40} autoFocus {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="kind"
+                render={({ field }) => (
+                  <FormItem className="gap-1.5">
+                    <FormLabel id="cat-kind">Kind</FormLabel>
+                    <div className={SEGMENT} role="radiogroup" aria-labelledby="cat-kind">
+                      {CATEGORY_KINDS.map((option) => (
+                        <button key={option} type="button" role="radio" aria-checked={field.value === option} className={field.value === option ? SEGMENT_ON : SEGMENT_OFF} onClick={() => field.onChange(option)}>
+                          {KIND_LABEL[option]}
+                        </button>
+                      ))}
+                    </div>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="color"
+                render={({ field }) => (
+                  <FormItem className="gap-1.5">
+                    <FormLabel id="cat-color">Color</FormLabel>
+                    <div className="flex flex-wrap gap-2" role="radiogroup" aria-labelledby="cat-color">
+                      {SWATCHES.map((swatch) => {
+                        const on = field.value === swatch;
+                        return (
+                          <button
+                            key={swatch}
+                            type="button"
+                            role="radio"
+                            aria-label={`Color ${swatch}`}
+                            aria-checked={on}
+                            className={`flex size-9 items-center justify-center rounded-lg text-white transition-transform duration-150 outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-popover ${on ? "ring-2 ring-primary ring-offset-2 ring-offset-popover" : "hover:scale-105"}`}
+                            style={{ background: swatch }}
+                            onClick={() => field.onChange(swatch)}
+                          >
+                            {on ? <Check className="size-4" aria-hidden /> : null}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              {error ? (
+                <p role="alert" className="rounded-xl bg-destructive/10 px-3 py-2 text-sm font-medium text-destructive">
+                  {error}
+                </p>
+              ) : null}
+              <DialogFooter>
+                <Button type="submit" disabled={pending} className="max-sm:w-full">
+                  {pending ? "Saving" : "Save category"}
+                </Button>
+              </DialogFooter>
+            </form>
+          </Form>
         </DialogContent>
       </Dialog>
     </div>

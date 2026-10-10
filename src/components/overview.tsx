@@ -1,7 +1,7 @@
 "use client";
 
 import { ArrowDownRight, ArrowUpRight, CircleCheck, HandCoins, Info, Plus, TriangleAlert, Wallet } from "lucide-react";
-import { useMemo, useState, type ReactNode } from "react";
+import { useMemo, useState, type CSSProperties, type ReactNode } from "react";
 import { CashFlowChart } from "@/components/cash-flow-chart";
 import { DateRangeBar } from "@/components/date-range-bar";
 import { PageHeader } from "@/components/page-header";
@@ -13,7 +13,6 @@ import type { BalanceScope, ShareBook } from "@/db/shares";
 import { SWATCHES } from "@/lib/constants";
 import {
   accountBalances,
-  addDays,
   balanceTrail,
   change,
   computeStats,
@@ -27,7 +26,8 @@ import {
 } from "@/lib/dashboard";
 import { useDateFormat } from "@/components/use-date-style";
 import { formatAmount, formatNpr } from "@/lib/format";
-import type { CategoryDto, TransactionDto } from "@/lib/types";
+import type { DashboardState } from "@/lib/url-state";
+import type { AccountDto, CategoryDto, TransactionDto } from "@/lib/types";
 
 type Debt = BalanceScope["youOwe"][number];
 
@@ -105,14 +105,28 @@ function MicroBars({ values, tone, lived }: { values: number[]; tone: "brand" | 
   );
 }
 
+/**
+ * A figure that keeps every digit. Inside an `@container` it shrinks to the width
+ * available instead of truncating, breaking mid-number, or spilling out of the card.
+ * The className sets the largest size as `min(<size>, var(--fit))`.
+ */
+function Fit({ text, className, reserve = 0 }: { text: string; className: string; reserve?: number }) {
+  // 175cqi: these figures average about 0.54em a character, so this leaves a little room.
+  return (
+    <span className={`block whitespace-nowrap ${className}`} style={{ "--fit": `calc(175cqi / ${text.length + reserve})` } as CSSProperties}>
+      {text}
+    </span>
+  );
+}
+
 function Figure({ label, value, foot, badge, tone, className, chart }: { label: string; value: string; foot: ReactNode; badge?: string; tone?: string; className?: string; chart?: ReactNode }) {
   return (
-    <div className={`flex min-w-0 flex-col border-border p-4 sm:p-5 2xl:p-6 ${className ?? ""}`}>
+    <div className={`@container flex min-w-0 flex-col border-border p-4 sm:p-5 2xl:p-6 ${className ?? ""}`}>
       <div className="flex items-baseline justify-between gap-2">
         <p className="label">{label}</p>
         {badge ? <span className="text-xs font-semibold text-muted-foreground tabular-nums">{badge}</span> : null}
       </div>
-      <p className={`figure mt-2 truncate text-xl sm:text-2xl 2xl:text-[28px] ${tone ?? "text-display"}`}>{value}</p>
+      <Fit text={value} className={`figure mt-2 text-[length:min(1.25rem,var(--fit))] leading-tight sm:text-[length:min(1.5rem,var(--fit))] 2xl:text-[length:min(28px,var(--fit))] ${tone ?? "text-display"}`} />
       <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">{foot}</div>
       {chart ? <div className="mt-4 flex min-h-8 flex-1 items-end">{chart}</div> : null}
     </div>
@@ -142,8 +156,11 @@ function Empty({ children }: { children: string }) {
 export function Overview({
   transactions,
   categories,
+  accounts: ledgerAccounts,
   today,
   book,
+  period,
+  onPeriod,
   onLedger,
   onAdd,
   onSplit,
@@ -155,8 +172,12 @@ export function Overview({
   /** Every transaction, unfiltered. */
   transactions: TransactionDto[];
   categories: CategoryDto[];
+  accounts: AccountDto[];
   today: string;
   book: ShareBook | null;
+  /** The period shown. It lives in the URL; see readDashboardState. */
+  period: DashboardState;
+  onPeriod: (next: DashboardState) => void;
   onLedger: () => void;
   onAdd: () => void;
   onSplit: () => void;
@@ -167,9 +188,10 @@ export function Overview({
 }) {
   const dates = useDateFormat();
   const { style } = dates;
-  const [kind, setKind] = useState<RangeKind>("month");
-  const [anchor, setAnchor] = useState(today);
-  const [custom, setCustom] = useState<DateRange>({ start: addDays(today, -29), end: today });
+  const { kind, anchor, custom } = period;
+  const setKind = (next: RangeKind) => onPeriod({ ...period, kind: next });
+  const setAnchor = (next: string) => onPeriod({ ...period, anchor: next });
+  const setCustom = (next: DateRange) => onPeriod({ ...period, kind: "custom", custom: next });
   const [sampling, setSampling] = useState(false);
   const [slice, setSlice] = useState<string | null>(null);
 
@@ -181,7 +203,7 @@ export function Overview({
   const range = useMemo(() => rangeFor(kind, anchor, { custom, all: bounds }, style.calendar), [kind, anchor, custom, bounds, style.calendar]);
   const stats = useMemo(() => computeStats(rows, range, today, style), [rows, range, today, style]);
   const previous = useMemo(() => (kind === "all" ? null : computeStats(rows, previousRange(kind, range, style.calendar), today, style)), [rows, kind, range, today, style]);
-  const accounts = useMemo(() => accountBalances(rows), [rows]);
+  const accounts = useMemo(() => accountBalances(rows, ledgerAccounts), [rows, ledgerAccounts]);
   const trail = useMemo(() => balanceTrail(rows, stats.series, stats.range.end, today), [rows, stats, today]);
   const colors = useMemo(() => new Map(categories.map((category) => [category.name, category.color])), [categories]);
 
@@ -224,6 +246,8 @@ export function Overview({
 
   // What you have: every credit minus every expense, across all accounts and all time.
   const balance = accounts.reduce((total, account) => total + account.balance, 0);
+  const balanceText = `${balance < 0 ? "−" : ""}${formatAmount(balance)}`;
+  const tileFigure = "figure mt-1.5 text-[length:min(1.125rem,var(--fit))] leading-snug";
   // Opening balance is the first close minus that bucket's own movement.
   const first = stats.series[0];
   const lived = stats.series.filter((bucket) => bucket.key <= today).length;
@@ -342,14 +366,11 @@ export function Overview({
         </div>
       ) : null}
 
-      <div className="grid gap-3 xl:grid-cols-12 2xl:gap-4">
-        <section className="flex flex-col rounded-3xl bg-brand p-5 text-brand-foreground sm:p-6 xl:col-span-4 2xl:col-span-3 2xl:p-7">
+      <div className="grid grid-cols-1 gap-3 xl:grid-cols-12 2xl:gap-4">
+        <section className="@container flex flex-col rounded-3xl bg-brand p-5 text-brand-foreground sm:p-6 xl:col-span-4 2xl:col-span-3 2xl:p-7">
           <p className="text-[13px] font-medium opacity-80">What you have</p>
-          <p className="dotmatrix mt-3 flex items-baseline gap-2 !text-brand-foreground">
-            <span className="text-[30px] sm:text-[34px] 2xl:text-[40px]">
-              {balance < 0 ? "−" : ""}
-              {formatAmount(balance)}
-            </span>
+          <p className="dotmatrix mt-3 flex min-w-0 flex-wrap items-baseline gap-x-2 !text-brand-foreground">
+            <Fit text={balanceText} reserve={3} className="text-[length:min(30px,var(--fit))] sm:text-[length:min(34px,var(--fit))] 2xl:text-[length:min(40px,var(--fit))]" />
             <span className="text-sm font-semibold tracking-normal opacity-75">NPR</span>
           </p>
           {trailMove != null ? (
@@ -396,7 +417,7 @@ export function Overview({
         </section>
       </div>
 
-      <div className="grid gap-3 xl:grid-cols-12 2xl:gap-4">
+      <div className="grid grid-cols-1 gap-3 xl:grid-cols-12 2xl:gap-4">
         <section className="rounded-3xl bg-card shadow-card p-4 sm:p-5 2xl:p-6 xl:col-span-8">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <CardHead title="Cash flow" hint={stats.granularity === "day" ? "Spending by day, or how it is pacing" : "Spending by month, or how it is pacing"} />
@@ -405,17 +426,23 @@ export function Overview({
             <CashFlowChart buckets={stats.series} previous={previous?.series} compareLabel={compare || undefined} today={today} average={stats.granularity === "day" ? stats.avgDaily : undefined} />
           </div>
           <dl className="mt-4 grid grid-cols-2 gap-x-6 gap-y-3 border-t border-border pt-4 sm:grid-cols-4">
-            <div>
+            <div className="@container min-w-0">
               <dt className="label">Average a day</dt>
-              <dd className="figure mt-1 text-lg text-display">{formatNpr(Math.round(stats.avgDaily))}</dd>
+              <dd>
+                <Fit text={formatNpr(Math.round(stats.avgDaily))} className={`${tileFigure} mt-1 text-display`} />
+              </dd>
             </div>
-            <div>
+            <div className="@container min-w-0">
               <dt className="label">{stats.projected != null ? "On pace for" : "Total spent"}</dt>
-              <dd className="figure mt-1 text-lg text-display">{formatNpr(Math.round(stats.projected ?? stats.spent))}</dd>
+              <dd>
+                <Fit text={formatNpr(Math.round(stats.projected ?? stats.spent))} className={`${tileFigure} mt-1 text-display`} />
+              </dd>
             </div>
-            <div>
+            <div className="@container min-w-0">
               <dt className="label">Biggest expense</dt>
-              <dd className="figure mt-1 truncate text-lg text-display">{stats.biggest ? formatNpr(stats.biggest.amount) : "—"}</dd>
+              <dd>
+                <Fit text={stats.biggest ? formatNpr(stats.biggest.amount) : "—"} className={`${tileFigure} mt-1 text-display`} />
+              </dd>
             </div>
             <div>
               <dt className="label">Entries</dt>
@@ -465,12 +492,14 @@ export function Overview({
                         <span className="flex items-center gap-2.5 text-sm">
                           <span className="size-2.5 shrink-0 rounded-[3px]" style={{ background: item.color }} aria-hidden />
                           <span className="min-w-0 flex-1 truncate font-medium text-display">{item.name}</span>
-                          <CategoryDelta now={item.value} before={item.name === "Everything else" ? undefined : before.get(item.name)} hasPrevious={previous != null} />
-                          <span className="w-9 shrink-0 text-right text-xs font-semibold text-muted-foreground tabular-nums">{Math.round(share * 100)}%</span>
-                          <span className="figure w-24 shrink-0 text-right text-[13px] text-display">{formatNpr(item.value)}</span>
+                          <span className="figure shrink-0 text-right text-[13px] whitespace-nowrap text-display">{formatNpr(item.value)}</span>
                         </span>
-                        <span className="mt-1.5 ml-5 block h-1 overflow-hidden rounded-full bg-secondary" aria-hidden>
-                          <span className="block h-full rounded-full" style={{ width: `${Math.max(share * 100, 2)}%`, background: item.color }} />
+                        <span className="mt-1 ml-5 flex items-center gap-2">
+                          <span className="block h-1 min-w-0 flex-1 overflow-hidden rounded-full bg-secondary" aria-hidden>
+                            <span className="block h-full rounded-full" style={{ width: `${Math.max(share * 100, 2)}%`, background: item.color }} />
+                          </span>
+                          <CategoryDelta now={item.value} before={before.get(item.name)} hasPrevious={previous != null && item.name !== "Everything else"} />
+                          <span className="w-9 shrink-0 text-right text-xs font-semibold text-muted-foreground tabular-nums">{Math.round(share * 100)}%</span>
                         </span>
                       </button>
                     </li>
@@ -482,7 +511,7 @@ export function Overview({
         </section>
       </div>
 
-      <div className="grid gap-3 xl:grid-cols-12 2xl:gap-4">
+      <div className="grid grid-cols-1 gap-3 xl:grid-cols-12 2xl:gap-4">
         <section className="flex flex-col rounded-3xl bg-card shadow-card p-4 sm:p-5 2xl:p-6 xl:col-span-4">
           <CardHead title="Splits" hint="Who owes whom" action="Balances" onAction={onBalances} />
           {book == null ? (
@@ -490,13 +519,13 @@ export function Overview({
           ) : (
             <>
               <div className="mt-4 grid grid-cols-2 gap-2">
-                <div className="rounded-2xl bg-secondary p-3">
+                <div className="@container min-w-0 rounded-2xl bg-secondary p-3">
                   <p className="label">You owe</p>
-                  <p className={owe ? "figure mt-1.5 text-lg text-warning" : "figure mt-1.5 text-lg text-muted-foreground"}>{formatNpr(owe ?? 0)}</p>
+                  <Fit text={formatNpr(owe ?? 0)} className={`${tileFigure} ${owe ? "text-warning" : "text-muted-foreground"}`} />
                 </div>
-                <div className="rounded-2xl bg-accent p-3">
+                <div className="@container min-w-0 rounded-2xl bg-accent p-3">
                   <p className="text-[13px] font-medium text-accent-foreground/70">You are owed</p>
-                  <p className={owed ? "figure mt-1.5 text-lg text-credit" : "figure mt-1.5 text-lg text-muted-foreground"}>{formatNpr(owed ?? 0)}</p>
+                  <Fit text={formatNpr(owed ?? 0)} className={`${tileFigure} ${owed ? "text-credit" : "text-muted-foreground"}`} />
                 </div>
               </div>
               {peopleRows.length === 0 ? (
@@ -518,7 +547,7 @@ export function Overview({
                         <span className="block truncate text-sm font-semibold text-display">{name}</span>
                         <span className="block text-xs text-muted-foreground">{net > 0 ? "owes you" : "you owe"}</span>
                       </span>
-                      <span className={net > 0 ? "figure text-sm text-credit" : "figure text-sm text-warning"}>{formatNpr(Math.abs(net))}</span>
+                      <span className={`figure shrink-0 text-sm ${net > 0 ? "text-credit" : "text-warning"}`}>{formatNpr(Math.abs(net))}</span>
                     </li>
                   ))}
                 </ul>
@@ -544,8 +573,8 @@ export function Overview({
               {accounts.map((account) => (
                 <li key={account.account}>
                   <div className="flex items-baseline justify-between gap-3">
-                    <span className="truncate text-sm font-semibold text-display">{account.account}</span>
-                    <span className={account.balance < 0 ? "figure text-sm text-negative" : "figure text-sm text-display"}>
+                    <span className="min-w-0 truncate text-sm font-semibold text-display">{account.account}</span>
+                    <span className={`figure shrink-0 text-sm ${account.balance < 0 ? "text-negative" : "text-display"}`}>
                       {account.balance < 0 ? "−" : ""}
                       {formatNpr(Math.abs(account.balance))}
                     </span>
@@ -580,7 +609,7 @@ export function Overview({
         </section>
       </div>
 
-      <div className="grid gap-3 xl:grid-cols-12 2xl:gap-4">
+      <div className="grid grid-cols-1 gap-3 xl:grid-cols-12 2xl:gap-4">
         <section className="rounded-3xl bg-card shadow-card p-4 sm:p-5 2xl:p-6 xl:col-span-7">
           <CardHead title={inPeriod.length ? "Recent transactions" : "Latest transactions"} hint={inPeriod.length ? "In this period" : "Nothing in this period yet"} action="See all" onAction={onLedger} />
           <ul className="mt-3 divide-y divide-border">
@@ -598,7 +627,7 @@ export function Overview({
                     </span>
                   </span>
                   <span className="deva hidden w-36 shrink-0 text-right text-xs text-muted-foreground sm:block">{dates.entry(transaction.date)}</span>
-                  <span className={incoming ? "figure w-32 shrink-0 text-right text-sm text-credit" : "figure w-32 shrink-0 text-right text-sm text-display"}>
+                  <span className={incoming ? "figure min-w-32 shrink-0 text-right text-sm whitespace-nowrap text-credit" : "figure min-w-32 shrink-0 text-right text-sm whitespace-nowrap text-display"}>
                     {formatNpr(transaction.amount, incoming ? "in" : "out")}
                   </span>
                 </li>
@@ -617,9 +646,9 @@ export function Overview({
                 {stats.topMerchants.map((merchant) => (
                   <li key={merchant.merchant}>
                     <div className="flex items-baseline justify-between gap-3">
-                      <span className="min-w-0 truncate text-sm font-semibold text-display">
-                        {merchant.merchant}
-                        <span className="ml-2 text-xs font-medium text-muted-foreground">{merchant.count}×</span>
+                      <span className="flex min-w-0 items-baseline gap-2">
+                        <span className="truncate text-sm font-semibold text-display">{merchant.merchant}</span>
+                        <span className="shrink-0 text-xs font-medium text-muted-foreground">{merchant.count}×</span>
                       </span>
                       <span className="figure shrink-0 text-sm text-display">{formatNpr(merchant.amount)}</span>
                     </div>
@@ -645,7 +674,7 @@ export function Overview({
                       <span className="block truncate text-sm font-semibold text-display">{group.name}</span>
                       <span className="block text-xs text-muted-foreground">{group.members} members</span>
                     </span>
-                    <span className={Math.abs(group.net) < 0.005 ? "text-xs font-medium text-muted-foreground" : group.net > 0 ? "figure text-sm text-credit" : "figure text-sm text-warning"}>
+                    <span className={`shrink-0 ${Math.abs(group.net) < 0.005 ? "text-xs font-medium text-muted-foreground" : group.net > 0 ? "figure text-sm text-credit" : "figure text-sm text-warning"}`}>
                       {Math.abs(group.net) < 0.005 ? "Settled" : `${group.net > 0 ? "+" : "−"}${formatNpr(Math.abs(group.net))}`}
                     </span>
                   </li>

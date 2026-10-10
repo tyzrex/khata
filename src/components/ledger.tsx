@@ -7,15 +7,13 @@ import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import type { LedgerFilters } from "@/components/use-ledger";
 import { SWATCHES, TX_TYPES, type TxType } from "@/lib/constants";
 import { useDateFormat } from "@/components/use-date-style";
 import { formatNpr } from "@/lib/format";
-import type { CategoryDto, TransactionDto } from "@/lib/types";
+import type { AccountDto, CategoryDto, TransactionDto } from "@/lib/types";
+import { EMPTY_LEDGER_FILTERS, type LedgerFilters } from "@/lib/url-state";
 
 type Link = { transactionId: string; kind: "settlement" | "expense"; title: string; shareAmount: number; bankAmount: number | null };
-
-const EMPTY_FILTERS: LedgerFilters = { q: "", from: "", to: "", type: "", category: "" };
 
 function groupByDate(rows: TransactionDto[]) {
   const groups: { date: string; items: TransactionDto[]; net: number }[] = [];
@@ -48,8 +46,8 @@ function signed(amount: number) {
 export function Ledger({
   transactions,
   categories,
+  accounts,
   filters,
-  pending,
   onFilter,
   onEdit,
   onAdd,
@@ -57,8 +55,8 @@ export function Ledger({
 }: {
   transactions: TransactionDto[];
   categories: CategoryDto[];
+  accounts: AccountDto[];
   filters: LedgerFilters;
-  pending: boolean;
   onFilter: (filters: LedgerFilters) => void;
   onEdit: (transaction: TransactionDto) => void;
   onAdd: () => void;
@@ -79,7 +77,7 @@ export function Ledger({
   }, [query, filters, onFilter]);
 
   const dirty = Boolean(filters.q || filters.from || filters.to || filters.type || filters.category);
-  const activeCount = [filters.from, filters.to, filters.type, filters.category].filter(Boolean).length;
+  const activeCount = [filters.from, filters.to, filters.type, filters.category, filters.account].filter(Boolean).length;
   const groups = groupByDate(transactions);
   const sum = totals(transactions);
   const colors = new Map(categories.map((category) => [category.name, category.color]));
@@ -135,7 +133,7 @@ export function Ledger({
             </Button>
           </div>
 
-          <div id="ledger-filters" className={`${showFilters ? "grid" : "hidden"} mt-2 grid-cols-2 gap-2 lg:mt-3 lg:grid lg:grid-cols-4`}>
+          <div id="ledger-filters" className={`${showFilters ? "grid" : "hidden"} mt-2 grid-cols-2 gap-2 lg:mt-3 lg:grid lg:grid-cols-5`}>
             <Select
               items={{ all: "All types", expense: "Expense", income: "Income", transfer: "Transfer" }}
               value={filters.type || "all"}
@@ -170,6 +168,23 @@ export function Ledger({
                 ))}
               </SelectContent>
             </Select>
+            <Select
+              items={{ all: "All accounts", ...Object.fromEntries(accounts.map((account) => [account.name, account.name])) }}
+              value={filters.account || "all"}
+              onValueChange={(value) => onFilter({ ...filters, account: !value || value === "all" ? "" : value })}
+            >
+              <SelectTrigger className="w-full" aria-label="Filter by account">
+                <SelectValue placeholder="Account" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All accounts</SelectItem>
+                {accounts.map((account) => (
+                  <SelectItem key={account.id} value={account.name}>
+                    {account.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
             <DatePicker aria-label="From date" placeholder="From date" clearable max={filters.to || undefined} value={filters.from} onChange={(from) => onFilter({ ...filters, from })} className="h-11" />
             <DatePicker aria-label="To date" placeholder="To date" clearable min={filters.from || undefined} value={filters.to} onChange={(to) => onFilter({ ...filters, to })} className="h-11" />
           </div>
@@ -178,7 +193,6 @@ export function Ledger({
             <p className="text-xs font-medium text-muted-foreground">
               {transactions.length} {transactions.length === 1 ? "entry" : "entries"}
               {dirty ? " matching" : ""}
-              {pending ? " · updating" : ""}
             </p>
             {chips.map((chip) => (
               <button
@@ -198,7 +212,7 @@ export function Ledger({
                 className="ml-auto rounded-lg px-2 py-1 text-xs font-medium text-interactive transition-colors outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring"
                 onClick={() => {
                   setQuery("");
-                  onFilter(EMPTY_FILTERS);
+                  onFilter(EMPTY_LEDGER_FILTERS);
                 }}
               >
                 Clear all
@@ -207,7 +221,7 @@ export function Ledger({
           </div>
         </section>
 
-        <div className={pending ? "opacity-60 transition-opacity duration-200" : "transition-opacity duration-200"}>
+        <div>
           {groups.length === 0 ? (
             <section className="flex flex-col items-center rounded-3xl bg-card px-6 py-16 text-center shadow-card">
               <span className="flex size-12 items-center justify-center rounded-2xl bg-accent text-accent-foreground">
@@ -222,7 +236,7 @@ export function Ledger({
                     variant="outline"
                     onClick={() => {
                       setQuery("");
-                      onFilter(EMPTY_FILTERS);
+                      onFilter(EMPTY_LEDGER_FILTERS);
                     }}
                   >
                     Clear filters

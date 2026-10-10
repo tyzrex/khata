@@ -53,10 +53,11 @@ export function InviteContent() {
     setError(null);
     try {
       const response = await fetch(`/api/invite/${encodeURIComponent(token)}/accept`, { method: "POST" });
-      const body = (await response.json().catch(() => null)) as { groupName?: string; direct?: boolean; error?: string } | null;
+      const body = (await response.json().catch(() => null)) as { groupId?: string; groupName?: string; direct?: boolean; error?: string } | null;
       if (!response.ok) throw new Error(body?.error ?? "Could not join that group.");
       toast.success(body?.direct ? `You and ${body.groupName ?? "your friend"} are connected` : `You joined ${body?.groupName ?? "the group"}`);
-      router.push(body?.direct ? "/?view=friends" : "/?view=groups");
+      const section = body?.direct ? "/friends" : "/groups";
+      router.push(body?.groupId ? `${section}/${encodeURIComponent(body.groupId)}` : section);
       router.refresh();
     } catch (caught) {
       setPhase("ready");

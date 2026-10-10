@@ -1,13 +1,16 @@
 "use client";
 
+import { zodResolver } from "@hookform/resolvers/zod";
 import { Check, Copy, MessageCircle, Share2 } from "lucide-react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
+import { useForm, useWatch } from "react-hook-form";
 import { toast } from "@/lib/status";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
+import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { inviteSchema, type InviteValues } from "@/lib/schemas";
 import type { ShareBook } from "@/db/shares";
 
 type Person = ShareBook["people"][number];
@@ -47,31 +50,44 @@ export function InviteDialog({
   actions: InviteActions;
 }) {
   const owned = book.groups.filter((group) => group.kind === "group");
-  const [choice, setChoice] = useState(groupId ?? (person ? DIRECT : (owned[0]?.id ?? NEW_GROUP)));
-  const [newName, setNewName] = useState(person ? `${person.name} & you` : "");
-  const [email, setEmail] = useState(initialEmail);
-  const [pickedPerson, setPickedPerson] = useState("none");
+  const startChoice = groupId ?? (person ? DIRECT : (owned[0]?.id ?? NEW_GROUP));
+  const [creating, setCreating] = useState(startChoice === NEW_GROUP);
   const [link, setLink] = useState<{ url: string; emailSent: boolean } | null>(null);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
+  // Only the "new group name" field changes the rules, so the schema is swapped rather than
+  // carrying a "creating" flag through the values.
+  const resolver = useMemo(() => zodResolver(inviteSchema(creating ? "creating-group" : "not-creating-group")), [creating]);
+  const form = useForm<InviteValues>({
+    resolver,
+    defaultValues: {
+      choice: startChoice,
+      newName: person ? `${person.name} & you` : "",
+      email: initialEmail,
+      pickedPerson: "none",
+    },
+  });
+
+  const choice = useWatch({ control: form.control, name: "choice" });
+  const newName = useWatch({ control: form.control, name: "newName" });
+  const email = useWatch({ control: form.control, name: "email" });
+
   const group = owned.find((item) => item.id === choice);
   const placeholders = !person && group ? group.members.filter((member) => !member.isSelf && !member.linkedUserId) : [];
-  const creating = choice === NEW_GROUP;
   const direct = choice === DIRECT;
 
-  async function submit(event: React.FormEvent) {
-    event.preventDefault();
+  async function submit(values: InviteValues) {
     setPending(true);
     setError(null);
     try {
-      let target = choice;
+      let target = values.choice;
       if (direct) {
         if (!person) throw new Error("Pick a group.");
         target = await actions.ensureDirect(person.id);
       } else if (creating) {
-        const name = newName.trim();
+        const name = values.newName.trim();
         if (!name) throw new Error("Give the group a name.");
         const id = await actions.createGroup(name, person ? [book.self.id, person.id] : [book.self.id]);
         if (!id) throw new Error("The group was created but could not be found. Reload and try again.");
@@ -79,8 +95,8 @@ export function InviteDialog({
       } else if (person && group && !group.members.some((member) => member.id === person.id)) {
         await actions.updateGroup(group.id, { memberIds: [...group.members.map((member) => member.id), person.id] });
       }
-      const personId = person ? person.id : pickedPerson === "none" ? undefined : pickedPerson;
-      const result = await actions.createInvite(target, { email: email.trim() || undefined, personId });
+      const personId = person ? person.id : values.pickedPerson === "none" ? undefined : values.pickedPerson;
+      const result = await actions.createInvite(target, { email: values.email.trim() || undefined, personId });
       setLink(result);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not create that invite.");
@@ -164,78 +180,121 @@ export function InviteDialog({
             </Button>
           </div>
         ) : (
-          <form onSubmit={(event) => void submit(event)}>
-            <FieldGroup>
+          <Form {...form}>
+            <form className="grid gap-5" noValidate onSubmit={form.handleSubmit(submit)}>
               {groupId ? null : (
-                <Field>
-                  <FieldLabel>Group</FieldLabel>
-                  <Select
-                    items={{ ...(person ? { [DIRECT]: "Just us, no group" } : {}), ...Object.fromEntries(owned.map((item) => [item.id, item.name])), [NEW_GROUP]: "New group" }}
-                    value={choice}
-                    onValueChange={(value) => value && setChoice(value)}
-                  >
-                    <SelectTrigger className="w-full">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {person ? <SelectItem value={DIRECT}>Just us, no group</SelectItem> : null}
-                      {owned.map((item) => (
-                        <SelectItem key={item.id} value={item.id}>
-                          {item.name}
-                        </SelectItem>
-                      ))}
-                      <SelectItem value={NEW_GROUP}>New group</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  {person && group && !group.members.some((member) => member.id === person.id) ? (
-                    <FieldDescription>
-                      {person.name} will be added to {group.name} first.
-                    </FieldDescription>
-                  ) : null}
-                </Field>
+                <FormField
+                  control={form.control}
+                  name="choice"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Group</FormLabel>
+                      <Select
+                        items={{ ...(person ? { [DIRECT]: "Just us, no group" } : {}), ...Object.fromEntries(owned.map((item) => [item.id, item.name])), [NEW_GROUP]: "New group" }}
+                        value={field.value}
+                        onValueChange={(value) => {
+                          if (!value) return;
+                          setCreating(value === NEW_GROUP);
+                          field.onChange(value);
+                        }}
+                      >
+                        <FormControl>
+                          <SelectTrigger className="w-full">
+                            <SelectValue />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {person ? <SelectItem value={DIRECT}>Just us, no group</SelectItem> : null}
+                          {owned.map((item) => (
+                            <SelectItem key={item.id} value={item.id}>
+                              {item.name}
+                            </SelectItem>
+                          ))}
+                          <SelectItem value={NEW_GROUP}>New group</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      {person && group && !group.members.some((member) => member.id === person.id) ? (
+                        <FormDescription>
+                          {person.name} will be added to {group.name} first.
+                        </FormDescription>
+                      ) : null}
+                    </FormItem>
+                  )}
+                />
               )}
+
               {creating ? (
-                <Field>
-                  <FieldLabel htmlFor="invite-group-name">New group name</FieldLabel>
-                  <Input id="invite-group-name" required maxLength={80} value={newName} onChange={(event) => setNewName(event.target.value)} placeholder="Trip, flat, rides" />
-                </Field>
+                <FormField
+                  control={form.control}
+                  name="newName"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>New group name</FormLabel>
+                      <FormControl>
+                        <Input autoComplete="off" placeholder="Trip, flat, rides" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
               ) : null}
-              <Field>
-                <FieldLabel htmlFor="invite-email">Email (optional)</FieldLabel>
-                <Input id="invite-email" type="email" autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="friend@example.com" />
-                <FieldDescription>With an email, only that address can accept and we send the link for you. Without one, anyone with the link can join.</FieldDescription>
-              </Field>
+
+              <FormField
+                control={form.control}
+                name="email"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Email (optional)</FormLabel>
+                    <FormControl>
+                      <Input type="email" autoComplete="email" placeholder="friend@example.com" {...field} />
+                    </FormControl>
+                    <FormDescription>With an email, only that address can accept and we send the link for you. Without one, anyone with the link can join.</FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
               {placeholders.length ? (
-                <Field>
-                  <FieldLabel>Is this someone already in the group?</FieldLabel>
-                  <Select
-                    items={{ none: "A new member", ...Object.fromEntries(placeholders.map((item) => [item.id, item.name])) }}
-                    value={pickedPerson}
-                    onValueChange={(value) => value && setPickedPerson(value)}
-                  >
-                    <SelectTrigger className="w-full">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">A new member</SelectItem>
-                      {placeholders.map((item) => (
-                        <SelectItem key={item.id} value={item.id}>
-                          {item.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <FieldDescription>Pick a name to keep their past shares and balances when they join.</FieldDescription>
-                </Field>
+                <FormField
+                  control={form.control}
+                  name="pickedPerson"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Is this someone already in the group?</FormLabel>
+                      <Select items={{ none: "A new member", ...Object.fromEntries(placeholders.map((item) => [item.id, item.name])) }} value={field.value} onValueChange={(value) => value && field.onChange(value)}>
+                        <FormControl>
+                          <SelectTrigger className="w-full">
+                            <SelectValue />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="none">A new member</SelectItem>
+                          {placeholders.map((item) => (
+                            <SelectItem key={item.id} value={item.id}>
+                              {item.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormDescription>Pick a name to keep their past shares and balances when they join.</FormDescription>
+                    </FormItem>
+                  )}
+                />
               ) : null}
-              {error ? <FieldError>{error}</FieldError> : null}
-            </FieldGroup>
-            <DialogFooter className="mt-5">
-              <Button type="submit" disabled={pending} className="w-full">
-                {pending ? "Creating" : email.trim() ? "Create link and email it" : "Create invite link"}
-              </Button>
-            </DialogFooter>
-          </form>
+
+              {error ? (
+                <p role="alert" className="rounded-xl bg-destructive/10 px-3 py-2 text-sm font-medium text-destructive">
+                  {error}
+                </p>
+              ) : null}
+
+              <DialogFooter>
+                <Button type="submit" disabled={pending} className="w-full">
+                  {pending ? "Creating" : email.trim() ? "Create link and email it" : "Create invite link"}
+                </Button>
+              </DialogFooter>
+            </form>
+          </Form>
         )}
       </DialogContent>
     </Dialog>

@@ -306,18 +306,18 @@ function PaceLines({ buckets, previous, today, compareLabel, height }: { buckets
       <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="absolute inset-0 size-full overflow-visible" aria-hidden>
         <defs>
           <linearGradient id="pace-fill" x1="0" x2="0" y1="0" y2="1">
-            <stop offset="0%" stopColor="var(--brand)" stopOpacity="0.16" />
-            <stop offset="100%" stopColor="var(--brand)" stopOpacity="0" />
+            <stop offset="0%" stopColor="var(--brand-tint)" stopOpacity="0.16" />
+            <stop offset="100%" stopColor="var(--brand-tint)" stopOpacity="0" />
           </linearGradient>
         </defs>
         <path d={path(before)} fill="none" stroke="var(--muted-foreground)" strokeWidth="1.5" strokeDasharray="4 4" strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" opacity="0.7" />
         <path d={nowArea} fill="url(#pace-fill)" />
-        <path d={nowLine} fill="none" stroke="var(--brand)" strokeWidth="2.25" strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
+        <path d={nowLine} fill="none" stroke="var(--brand-tint)" strokeWidth="2.25" strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
       </svg>
 
       <span className="pointer-events-none absolute inset-y-0 border-l border-border" style={{ left: `${x(active)}%` }} aria-hidden />
       {atBefore != null ? <Dot left={x(active)} top={100 - pct(atBefore)} className="bg-muted-foreground" /> : null}
-      {hasNow && atNow != null ? <Dot left={x(active)} top={100 - pct(atNow)} className="bg-brand" /> : null}
+      {hasNow && atNow != null ? <Dot left={x(active)} top={100 - pct(atNow)} className="bg-brand-tint" /> : null}
 
       <Slots
         buckets={buckets}

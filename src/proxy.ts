@@ -3,7 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { isAllowedWrite, trustedOrigins } from "@/lib/request-guard";
 import { safeNext } from "@/lib/return-path";
 
-const PUBLIC_PATHS = new Set(["/login", "/offline", "/manifest.webmanifest"]);
+const PUBLIC_PATHS = new Set(["/", "/accounts", "/login", "/offline", "/manifest.webmanifest"]);
 
 function isPublic(pathname: string) {
   if (PUBLIC_PATHS.has(pathname)) return true;
@@ -14,8 +14,28 @@ function isPublic(pathname: string) {
   return pathname.startsWith("/icons/") || pathname.startsWith("/splash/");
 }
 
+/** Sections used to be `/?view=ledger`; they are real routes now. Old bookmarks and installed shortcuts still land. */
+const LEGACY_VIEWS: Record<string, string> = {
+  overview: "/",
+  ledger: "/ledger",
+  categories: "/categories",
+  sync: "/sync",
+  friends: "/friends",
+  groups: "/groups",
+  balances: "/balances",
+  activity: "/activity",
+  settings: "/settings",
+};
+
 export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
+  const legacy = pathname === "/" ? LEGACY_VIEWS[request.nextUrl.searchParams.get("view") ?? ""] : undefined;
+  if (legacy) {
+    const moved = request.nextUrl.clone();
+    moved.pathname = legacy;
+    moved.searchParams.delete("view");
+    return NextResponse.redirect(moved);
+  }
   // CSRF: a cookie-authenticated write must come from this site. Better Auth runs
   // the same check on its own routes, so /api/auth is left to it.
   if (pathname.startsWith("/api/") && !pathname.startsWith("/api/auth") && !isAllowedWrite(request, trustedOrigins())) {
