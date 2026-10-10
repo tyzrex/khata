@@ -109,4 +109,8 @@ export const limits = {
   inviteLookups: createRateLimiter({ limit: 60, windowMs: 10 * 60 * 1000 }),
   /** Bulk writes (import, sample seed) per user. */
   bulkWrites: createRateLimiter({ limit: 20, windowMs: HOUR }),
+  /** Personal API keys created per user. */
+  apiKeys: createRateLimiter({ limit: 10, windowMs: HOUR }),
+  /** Writes through the /api/v1 agent API per user. Generous for a chat bot, tight for a runaway loop. */
+  agentWrites: createRateLimiter({ limit: 300, windowMs: HOUR }),
 };

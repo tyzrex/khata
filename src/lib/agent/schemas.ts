@@ -1,0 +1,154 @@
+import { z } from "zod";
+import { TX_TYPES } from "@/lib/constants";
+import { dateSchema, moneySchema } from "@/lib/schemas";
+import { SPLIT_MODES } from "@/lib/split";
+import { parseAmount, resolveDate } from "@/lib/agent/match";
+
+/**
+ * Request shapes for the /api/v1 agent API. They are forgiving about how values
+ * are written (amount strings, "yesterday", a comma list of names) and strict
+ * about what they mean, so a model's small formatting slips still land.
+ */
+
+const amount = z.preprocess(
+  (value) => {
+    const parsed = parseAmount(value);
+    return Number.isNaN(parsed) ? value : parsed;
+  },
+  z.number({ error: 'Amount must be a positive number, like 1200 or "1,200".' }).pipe(moneySchema),
+);
+
+const date = (today: string) => z.preprocess((value) => resolveDate(value, today), dateSchema);
+
+const lower = (value: unknown) => (typeof value === "string" ? value.trim().toLowerCase() : value);
+
+const name = z.string().trim().min(1).max(80);
+const note = z.string().max(500).optional().default("");
+
+/** ["Sameer", "Anita"], "Sameer, Anita" and "Sameer and Anita" all become a list. */
+const nameList = z.preprocess(
+  (value) =>
+    typeof value === "string"
+      ? value
+          .split(/,|\band\b|&/i)
+          .map((part) => part.trim())
+          .filter(Boolean)
+      : value,
+  z.array(name).max(40),
+);
+
+const txType = z.preprocess(lower, z.enum(TX_TYPES, { error: "type must be expense, income, or transfer." }));
+
+export function transactionInput(today: string) {
+  return z
+    .object({
+      amount,
+      type: txType.optional().default("expense"),
+      merchant: z.string().trim().min(1).max(160).optional(),
+      description: z.string().trim().min(1).max(160).optional(),
+      category: z.string().trim().max(80).optional(),
+      account: z.string().trim().max(40).optional(),
+      date: date(today),
+      note,
+      externalId: z.string().trim().min(1).max(200).optional(),
+    })
+    .refine((value) => value.merchant || value.description, { message: "Give a merchant or description, like \"Bhatbhateni\" or \"Lunch\".", path: ["merchant"] });
+}
+
+export type TransactionInput = z.infer<ReturnType<typeof transactionInput>>;
+
+export function transactionPatch(today: string) {
+  return z
+    .object({
+      amount: amount.optional(),
+      type: txType.optional(),
+      merchant: z.string().trim().min(1).max(160).optional(),
+      description: z.string().trim().min(1).max(160).optional(),
+      category: z.string().trim().max(80).optional(),
+      account: z.string().trim().max(40).optional(),
+      date: date(today).optional(),
+      note: z.string().max(500).optional(),
+    })
+    .refine((value) => Object.values(value).some((field) => field !== undefined), { message: "Nothing to change. Send at least one field." });
+}
+
+export const transactionQuery = z.object({
+  q: z.string().trim().max(100).optional(),
+  from: dateSchema.optional(),
+  to: dateSchema.optional(),
+  type: txType.optional(),
+  category: z.string().trim().max(80).optional(),
+  account: z.string().trim().max(40).optional(),
+  limit: z.coerce.number().int().min(1).max(500).optional().default(50),
+});
+
+export const friendInput = z
+  .object({ name: name.optional(), names: nameList.optional() })
+  .refine((value) => value.name || value.names?.length, { message: 'Send "name" or "names".', path: ["name"] });
+
+export const groupInput = z.object({
+  name,
+  members: nameList.optional().default([]),
+  createMissing: z.boolean().optional().default(false),
+});
+
+export const groupPatch = z
+  .object({
+    name: name.optional(),
+    addMembers: nameList.optional().default([]),
+    removeMembers: nameList.optional().default([]),
+    createMissing: z.boolean().optional().default(false),
+  })
+  .refine((value) => value.name || value.addMembers.length || value.removeMembers.length, { message: 'Send "name", "addMembers" or "removeMembers".' });
+
+/** `split` as a list of { person, value } or as a { name: value } map. */
+const splitEntries = z.preprocess(
+  (value) =>
+    value && typeof value === "object" && !Array.isArray(value)
+      ? Object.entries(value as Record<string, unknown>).map(([person, entry]) => ({ person, value: entry }))
+      : value,
+  z
+    .array(
+      z.object({
+        person: name,
+        value: z.preprocess((value) => (value == null ? undefined : Number.isNaN(parseAmount(value)) ? value : parseAmount(value)), z.number().finite().nonnegative().optional()),
+      }),
+    )
+    .max(40),
+);
+
+export function expenseInput(today: string) {
+  return z.object({
+    description: z.string().trim().min(1, "description is required, like \"Dinner at Thakali\".").max(160),
+    amount,
+    date: date(today),
+    group: z.string().trim().max(100).nullable().optional(),
+    paidBy: z.string().trim().max(80).nullable().optional(),
+    splitWith: nameList.optional(),
+    excludeMe: z.boolean().optional().default(false),
+    splitMode: z.preprocess(lower, z.enum(SPLIT_MODES, { error: "splitMode must be equal, exact, shares, or percent." })).optional(),
+    split: splitEntries.optional(),
+    note,
+  });
+}
+
+export const expenseQuery = z.object({
+  group: z.string().trim().max(100).optional(),
+  with: z.string().trim().max(80).optional(),
+  from: dateSchema.optional(),
+  to: dateSchema.optional(),
+  limit: z.coerce.number().int().min(1).max(200).optional().default(50),
+});
+
+export function settlementInput(today: string) {
+  return z.object({
+    from: z.string().trim().max(80).nullable().optional(),
+    to: z.string().trim().max(80).nullable().optional(),
+    amount,
+    date: date(today),
+    group: z.string().trim().max(100).nullable().optional(),
+    note,
+  });
+}
+
+export const keyInput = z.object({ name: z.string().trim().min(1, "Give the key a name, like \"Grok bot\".").max(60) });

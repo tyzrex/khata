@@ -3,7 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { isAllowedWrite, trustedOrigins } from "@/lib/request-guard";
 import { safeNext } from "@/lib/return-path";
 
-const PUBLIC_PATHS = new Set(["/", "/accounts", "/login", "/offline", "/manifest.webmanifest"]);
+const PUBLIC_PATHS = new Set(["/", "/accounts", "/login", "/offline", "/manifest.webmanifest", "/api/v1", "/api/v1/openapi.json", "/api/v1/llms.txt"]);
 
 function isPublic(pathname: string) {
   if (PUBLIC_PATHS.has(pathname)) return true;
@@ -45,8 +45,9 @@ export function proxy(request: NextRequest) {
 
   if (getSessionCookie(request)) return NextResponse.next();
 
+  // Bearer tokens (a session token or a khata_ API key) and X-API-Key are checked by the route itself.
   const authorization = request.headers.get("authorization");
-  if (pathname.startsWith("/api/") && authorization?.toLowerCase().startsWith("bearer ")) {
+  if (pathname.startsWith("/api/") && (authorization?.toLowerCase().startsWith("bearer ") || request.headers.has("x-api-key"))) {
     return NextResponse.next();
   }
 
