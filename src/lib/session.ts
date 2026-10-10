@@ -1,5 +1,6 @@
 import { headers } from "next/headers";
 import { userIdForApiKey } from "@/db/api-keys";
+import { hasPasswordCredential } from "@/db/profile";
 import { isApiKey, readApiKey } from "@/lib/agent/keys";
 import { getAuth } from "@/lib/auth";
 import { beginRequest, UnauthorizedError } from "@/lib/http";
@@ -18,7 +19,17 @@ export async function readPageSession() {
     id: session.user.id,
     name: session.user.name,
     email: session.user.email,
+    emailVerified: session.user.emailVerified === true,
   };
+}
+
+/**
+ * What the account settings screen needs beyond the session: whether this person
+ * ever set a password, which decides whether "change password" and a
+ * password-confirmed deletion are offered at all.
+ */
+export async function readAccountFlags(userId: string) {
+  return { hasPassword: await hasPasswordCredential(userId) };
 }
 
 /**

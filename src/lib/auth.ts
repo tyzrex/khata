@@ -5,7 +5,9 @@ import { bearer } from "better-auth/plugins";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
 import { getDb } from "@/db/client";
+import { purgeUserData, purgeUserVerification } from "@/db/purge-user";
 import * as schema from "@/db/schema";
+import { sendDeleteAccountVerification, sendVerificationEmail } from "@/lib/account-email";
 import { trustedOrigins } from "@/lib/request-guard";
 
 function authDatabase() {
@@ -83,6 +85,33 @@ function createAuth() {
         trustedProviders: ["google"],
       },
     },
+    emailVerification: {
+      // Without this, /change-email fails with "Verification email isn't enabled".
+      sendVerificationEmail: async ({ user, url }) => {
+        await sendVerificationEmail({ user, url });
+      },
+    },
+    user: {
+      changeEmail: {
+        enabled: true,
+        // Left off: a verified address is re-confirmed at the new one rather than swapped silently.
+      },
+      deleteUser: {
+        enabled: true,
+        // better-auth drops the user row and lets the FKs cascade, but RESTRICT against
+        // `people` can fire before its referrers go. Clear them first, in order.
+        beforeDelete: async (user) => {
+          await purgeUserData(user.id);
+        },
+        // The path a Google-only account can take: it has no password to confirm with.
+        sendDeleteAccountVerification: async ({ user, url }) => {
+          await sendDeleteAccountVerification({ user, url });
+        },
+        afterDelete: async (user) => {
+          await purgeUserVerification(user.id);
+        },
+      },
+    },
     plugins: [bearer(), nextCookies()],
   });
 }
@@ -91,12 +120,19 @@ type AuthInstance = ReturnType<typeof createAuth>;
 
 const globalForAuth = globalThis as unknown as { khataAuth?: AuthInstance; khataAuthKey?: string };
 
-// The instance is cached across hot reloads, but it bakes in env at creation
-// time. Key the cache on that env so editing .env.local (e.g. adding the Google
-// credentials) rebuilds it instead of serving a stale instance with no
-// `google` provider, which surfaces as "Provider not found".
+/**
+ * A fresh id each time this module is evaluated, so editing the options below
+ * invalidates the cached instance instead of leaving it serving the previous edit
+ * until `bun dev` is restarted. It is stable for the lifetime of one evaluation,
+ * which matters: reading the clock here instead would make the key differ between
+ * prerender and request, and Next refuses to prerender that. Production keys on
+ * env alone, since that is the only thing that can change without a redeploy.
+ */
+const moduleLoadId = crypto.randomUUID();
+
 function authConfigKey() {
   return JSON.stringify([
+    moduleLoadId,
     process.env.GOOGLE_CLIENT_ID,
     process.env.GOOGLE_CLIENT_SECRET,
     process.env.BETTER_AUTH_URL,
