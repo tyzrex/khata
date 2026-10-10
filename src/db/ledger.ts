@@ -1,6 +1,7 @@
-import { and, asc, desc, eq, gte, ilike, inArray, lte, or } from "drizzle-orm";
+import { and, asc, desc, eq, gte, ilike, lte, or } from "drizzle-orm";
 import { getDb } from "@/db/client";
-import { categories, transactions, type TransactionRow } from "@/db/schema";
+import { ensureAccounts, ensureNamedAccount } from "@/db/accounts";
+import { accounts, categories, transactions, type TransactionRow } from "@/db/schema";
 import { DEFAULT_CATEGORIES, type TxType } from "@/lib/constants";
 import { summarize, type LedgerAmount } from "@/lib/period";
 import { parseImportPayload, type ImportTransaction, type ManualTransaction } from "@/lib/schemas";
@@ -17,7 +18,7 @@ export function isUniqueViolation(error: unknown) {
   return pgCode(error) === "23505";
 }
 
-function toTransaction(row: TransactionRow): TransactionDto {
+export function toTransaction(row: TransactionRow): TransactionDto {
   return {
     id: row.id,
     externalId: row.externalId,
@@ -45,16 +46,18 @@ function toCategory(row: typeof categories.$inferSelect): CategoryDto {
   };
 }
 
+/**
+ * Give a brand-new book its starting categories. Runs on the read path, so it has
+ * to tell "never seeded" from "seeded and then renamed": seeding on any *missing*
+ * default would resurrect a name the person deliberately changed. An empty table
+ * is the only unambiguous signal, so every write path calls this before
+ * ensureNamedCategory — otherwise a first entry naming a custom category would
+ * leave the book with one category and never gain the defaults.
+ */
 export async function ensureCategories(userId: string) {
   const db = getDb();
-  // Called on every read path, so bail out cheaply once every default exists.
-  // Checking for *all* defaults (not just any row) matters: ensureNamedCategory
-  // can create a custom category first, and that must not block seeding.
-  const present = await db
-    .select({ name: categories.name })
-    .from(categories)
-    .where(and(eq(categories.userId, userId), inArray(categories.name, DEFAULT_CATEGORIES.map((category) => category.name))));
-  if (present.length >= DEFAULT_CATEGORIES.length) return;
+  const [existing] = await db.select({ id: categories.id }).from(categories).where(eq(categories.userId, userId)).limit(1);
+  if (existing) return;
   await db
     .insert(categories)
     .values(
@@ -162,6 +165,7 @@ export type TransactionFilters = {
   to?: string;
   type?: TxType;
   category?: string;
+  account?: string;
 };
 
 export async function listTransactions(userId: string, filters: TransactionFilters = {}) {
@@ -171,6 +175,7 @@ export async function listTransactions(userId: string, filters: TransactionFilte
   if (filters.to) clauses.push(lte(transactions.date, filters.to));
   if (filters.type) clauses.push(eq(transactions.type, filters.type));
   if (filters.category) clauses.push(eq(transactions.categoryName, filters.category));
+  if (filters.account) clauses.push(eq(transactions.account, filters.account));
   if (filters.q) {
     const pattern = `%${filters.q.replace(/[%_\\]/g, "")}%`;
     const search = or(
@@ -209,7 +214,9 @@ function transactionValues(userId: string, input: ManualTransaction | ImportTran
 }
 
 export async function createTransaction(userId: string, input: ManualTransaction) {
+  await ensureCategories(userId);
   await ensureNamedCategory(userId, input.category, input.type);
+  await ensureNamedAccount(userId, input.account);
   const [row] = await getDb()
     .insert(transactions)
     .values({
@@ -221,7 +228,9 @@ export async function createTransaction(userId: string, input: ManualTransaction
 }
 
 export async function updateTransaction(userId: string, id: string, input: ManualTransaction) {
+  await ensureCategories(userId);
   await ensureNamedCategory(userId, input.category, input.type);
+  await ensureNamedAccount(userId, input.account);
   const [row] = await getDb()
     .update(transactions)
     .set({
@@ -252,12 +261,23 @@ export async function deleteTransaction(userId: string, id: string) {
 export async function importTransactions(userId: string, payload: unknown): Promise<ImportResult> {
   const { rows, invalid } = parseImportPayload(payload);
   await ensureCategories(userId);
+  await ensureAccounts(userId);
   let created = 0;
   let updated = 0;
   const db = getDb();
 
   await db.transaction(async (tx) => {
     for (const row of rows) {
+      await tx
+        .insert(accounts)
+        .values({
+          id: crypto.randomUUID(),
+          userId,
+          name: row.account,
+          sortOrder: 200,
+        })
+        .onConflictDoNothing({ target: [accounts.userId, accounts.name] });
+
       await tx
         .insert(categories)
         .values({

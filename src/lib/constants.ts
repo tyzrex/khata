@@ -1,4 +1,7 @@
 export const ACCOUNTS = ["Nabil", "NIMB", "Sanima", "Splitwise", "Other"] as const;
+
+/** Seeds the `accounts` table for a new book. Ordered the way people list them. */
+export const DEFAULT_ACCOUNTS = ACCOUNTS.map((name, index) => ({ name, sortOrder: (index + 1) * 10 }));
 export const TX_TYPES = ["expense", "income", "transfer"] as const;
 export const CATEGORY_KINDS = ["expense", "income", "transfer", "any"] as const;
 

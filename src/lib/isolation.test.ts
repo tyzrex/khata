@@ -222,8 +222,19 @@ test("ledger.ts ensureCategories checks for existing rows before inserting", () 
     ledgerSrc.indexOf("export async function ensureCategories"),
     ledgerSrc.indexOf("async function ensureNamedCategory"),
   );
-  assert.ok(section.includes("inArray(categories.name"), "ensureCategories must check for the default categories specifically, not any row");
-  assert.ok(section.includes("DEFAULT_CATEGORIES.length) return"), "ensureCategories must return early once all defaults exist");
+  assert.ok(section.includes("if (existing) return"), "ensureCategories must return early once the book has any category, so a read never writes");
+  // Seeding on any *missing* default would bring a name back the moment someone
+  // renamed it: ensureCategories runs on every read, so "Nabil" would reappear
+  // alongside "My Bank" on the next page load.
+  assert.ok(!section.includes("inArray(categories.name"), "ensureCategories must not seed by looking for missing default names");
+  assert.ok(!section.includes("DEFAULT_CATEGORIES.length) return"), "seeding must not depend on counting the defaults");
+});
+
+test("accounts seeding does not resurrect a renamed default", () => {
+  const accountsSrc = src("src/db/accounts.ts");
+  const section = accountsSrc.slice(accountsSrc.indexOf("export async function ensureAccounts"), accountsSrc.indexOf("export async function listAccounts"));
+  assert.ok(section.includes("if (existing) return"), "ensureAccounts must return early once the book has any account");
+  assert.ok(!section.includes("inArray(accounts.name"), "ensureAccounts must not seed by looking for missing default names");
 });
 
 // ---------------------------------------------------------------------------

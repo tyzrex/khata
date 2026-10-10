@@ -224,9 +224,17 @@ export function change(current: number, previous: number) {
 
 export type AccountBalance = { account: string; balance: number; credits: number; spent: number };
 
-/** What sits in each account, across all time: credits in minus spend out. */
-export function accountBalances(rows: Money[]): AccountBalance[] {
+/**
+ * What sits in each account, across all time: credits in minus spend out.
+ * `known` seeds the list so an account the person set up but has not used yet
+ * still shows, holding zero, instead of silently vanishing from the card.
+ */
+export function accountBalances(rows: Money[], known: { name: string; sortOrder: number }[] = []): AccountBalance[] {
   const accounts = new Map<string, AccountBalance>();
+  const order = new Map(known.map((account) => [account.name, account.sortOrder]));
+  for (const name of order.keys()) {
+    accounts.set(name, { account: name, balance: 0, credits: 0, spent: 0 });
+  }
   for (const row of rows) {
     const entry = accounts.get(row.account) ?? { account: row.account, balance: 0, credits: 0, spent: 0 };
     if (row.type === "expense") entry.spent = roundMoney(entry.spent + row.amount);
@@ -234,7 +242,9 @@ export function accountBalances(rows: Money[]): AccountBalance[] {
     entry.balance = roundMoney(entry.credits - entry.spent);
     accounts.set(row.account, entry);
   }
-  return [...accounts.values()].sort((a, b) => b.balance - a.balance || a.account.localeCompare(b.account));
+  return [...accounts.values()].sort(
+    (a, b) => b.balance - a.balance || (order.get(a.account) ?? 999) - (order.get(b.account) ?? 999) || a.account.localeCompare(b.account),
+  );
 }
 
 export function dataBounds(rows: Money[], today: string): DateRange {

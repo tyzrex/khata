@@ -24,6 +24,12 @@ export type CategoryDto = {
   sortOrder: number;
 };
 
+export type AccountDto = {
+  id: string;
+  name: string;
+  sortOrder: number;
+};
+
 export type CategorySlice = {
   category: string;
   amount: number;

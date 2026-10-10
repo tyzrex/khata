@@ -43,6 +43,27 @@
       "when": 1791436476827,
       "tag": "0005_direct_friend_groups",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1791451226219,
+      "tag": "0006_agent_api_keys",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1791459115830,
+      "tag": "0007_accounts",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1791520135104,
+      "tag": "0008_auth_timestamps_timezone",
+      "breakpoints": true
     }
   ]
 }

@@ -35,6 +35,28 @@ export const categories = pgTable(
   ],
 );
 
+/**
+ * Where money moves through: a bank, cash in hand, a wallet. Kept as rows so a
+ * person can rename or drop one, but `transactions.account` stays denormalized
+ * text like `categoryName` — rename cascades in `db/accounts.ts` and delete is
+ * blocked while entries still point at it. Same trade the categories make.
+ */
+export const accounts = pgTable(
+  "accounts",
+  {
+    id: text("id").primaryKey(),
+    userId: ownerId(),
+    name: text("name").notNull(),
+    sortOrder: integer("sort_order").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    unique("accounts_user_name_unique").on(table.userId, table.name).nullsNotDistinct(),
+    index("accounts_user_idx").on(table.userId),
+  ],
+);
+
 export const transactions = pgTable(
   "transactions",
   {
@@ -59,6 +81,7 @@ export const transactions = pgTable(
     index("transactions_date_idx").on(table.date),
     index("transactions_type_idx").on(table.type),
     index("transactions_category_idx").on(table.categoryName),
+    index("transactions_account_idx").on(table.userId, table.account),
   ],
 );
 
@@ -219,6 +242,23 @@ export const groupUserAccess = pgTable(
     joinedAt: timestamp("joined_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [primaryKey({ columns: [table.groupId, table.userId] }), index("group_user_access_user_idx").on(table.userId)],
+);
+
+/** Personal API keys for bots and AI agents. Only a SHA-256 hash of the key is stored. */
+export const apiKeys = pgTable(
+  "api_keys",
+  {
+    id: text("id").primaryKey(),
+    userId: ownerId(),
+    name: text("name").notNull(),
+    /** The first characters of the key, shown so a person can tell keys apart. */
+    prefix: text("prefix").notNull(),
+    keyHash: text("key_hash").notNull().unique(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+  },
+  (table) => [index("api_keys_user_idx").on(table.userId)],
 );
 
 export type CategoryRow = typeof categories.$inferSelect;
