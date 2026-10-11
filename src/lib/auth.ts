@@ -121,18 +121,22 @@ type AuthInstance = ReturnType<typeof createAuth>;
 const globalForAuth = globalThis as unknown as { khataAuth?: AuthInstance; khataAuthKey?: string };
 
 /**
- * A fresh id each time this module is evaluated, so editing the options below
- * invalidates the cached instance instead of leaving it serving the previous edit
- * until `bun dev` is restarted. It is stable for the lifetime of one evaluation,
- * which matters: reading the clock here instead would make the key differ between
- * prerender and request, and Next refuses to prerender that. Production keys on
- * env alone, since that is the only thing that can change without a redeploy.
+ * Editing the options in `createAuth` must invalidate the cached instance rather
+ * than leave it serving the previous edit until `bun dev` restarts. The old fix
+ * threw a random id into the key, which does work at runtime but is fatal to
+ * prerendering: Next treats a read of randomness during a prerender pass as
+ * unstable, and `/groups/[id]` failed instant-validation with
+ * "Next.js encountered the unstable value `Math.random()`".
+ *
+ * `createAuth.toString()` gives the same signal deterministically — it changes
+ * exactly when the options below are edited, and reading it is stable across a
+ * prerender and the request that follows. Production does not need it: env alone is
+ * the only thing that can change without a redeploy.
  */
-const moduleLoadId = crypto.randomUUID();
-
 function authConfigKey() {
+  const source = process.env.NODE_ENV === "production" ? "" : createAuth.toString();
   return JSON.stringify([
-    moduleLoadId,
+    source,
     process.env.GOOGLE_CLIENT_ID,
     process.env.GOOGLE_CLIENT_SECRET,
     process.env.BETTER_AUTH_URL,
