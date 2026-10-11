@@ -2,12 +2,14 @@
 
 import { Monitor, Moon, Sun, type LucideIcon } from "lucide-react";
 import { useTheme } from "next-themes";
-import { useSyncExternalStore, type ReactNode } from "react";
+import { type ReactNode } from "react";
 import { ApiKeysCard } from "@/components/api-keys-card";
 import { Card } from "@/components/balances-card";
+import { InstallCard } from "@/components/install-card";
 import { NotificationsCard } from "@/components/notifications-card";
 import { PageHeader } from "@/components/page-header";
 import { useDateStyle } from "@/components/use-date-style";
+import { useMounted } from "@/components/use-mounted";
 import { formatLongDate, formatMonthYear } from "@/lib/format";
 import type { CalendarKind, DateStyle, Script } from "@/lib/nepali-date";
 import { cn } from "cn";
@@ -72,11 +74,7 @@ export function SettingsView({
   const { style, setCalendar, setScript } = useDateStyle();
   const { theme: stored, setTheme } = useTheme();
   // The saved theme is only known in the browser, so wait for it to avoid a hydration mismatch.
-  const mounted = useSyncExternalStore(
-    () => () => undefined,
-    () => true,
-    () => false,
-  );
+  const mounted = useMounted();
   const theme = mounted ? stored : undefined;
   const as = (next: Partial<DateStyle>): DateStyle => ({ ...style, ...next });
 
@@ -115,6 +113,7 @@ export function SettingsView({
         </Card>
 
         <div className="grid items-start gap-3 lg:col-span-2 2xl:gap-4">
+          <InstallCard />
           <NotificationsCard />
           <ApiKeysCard />
         </div>
