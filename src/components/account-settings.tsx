@@ -1,19 +1,20 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { KeyRound, LogOut, Monitor, ShieldAlert, Smartphone, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { toast } from "@/lib/status";
 import { authClient } from "@/lib/auth-client";
 import { unsubscribePushLocally } from "@/lib/push-client";
+import { deleteSession, postRevokeOtherSessions, sessionsKey, sessionsQuery } from "@/components/account-query";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import type { SessionDto } from "@/db/profile";
 
 const nameSchema = z.object({ name: z.string().trim().min(1, "Tell us what to call you").max(80, "That name is too long") });
 const emailSchema = z.object({ newEmail: z.email("Enter a valid email address").max(200, "That address is too long") });
@@ -63,34 +64,27 @@ export function AccountSettings({
   onSignOut: () => void;
 }) {
   const [showPassword, setShowPassword] = useState(false);
-  const [sessions, setSessions] = useState<SessionDto[]>([]);
-  const [sessionsError, setSessionsError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [deletePassword, setDeletePassword] = useState("");
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const router = useRouter();
 
-  const loadSessions = useCallback(async () => {
-    const response = await fetch("/api/sessions");
-    if (!response.ok) throw new Error("Sessions could not be loaded.");
-    return ((await response.json()) as { sessions: SessionDto[] }).sessions;
-  }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-    loadSessions().then(
-      (list) => {
-        if (cancelled) return;
-        setSessions(list);
-        setSessionsError(null);
-      },
-      (caught: unknown) => !cancelled && setSessionsError(caught instanceof Error ? caught.message : "Sessions could not be loaded."),
-    );
-    return () => {
-      cancelled = true;
-    };
-  }, [loadSessions]);
+  const queryClient = useQueryClient();
+  const { data: sessions, error: sessionsError } = useQuery(sessionsQuery);
+  const revokeSessionMutation = useMutation({
+    mutationFn: deleteSession,
+    // The revoked row leaves the list on its own; nothing else about the account changed.
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: sessionsKey });
+    },
+  });
+  const revokeOthersMutation = useMutation({
+    mutationFn: postRevokeOtherSessions,
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: sessionsKey });
+    },
+  });
 
   const nameForm = useForm<NameValues>({ resolver: zodResolver(nameSchema), defaultValues: { name: user.name } });
   const emailForm = useForm<EmailValues>({ resolver: zodResolver(emailSchema), defaultValues: { newEmail: user.email } });
@@ -139,25 +133,25 @@ export function AccountSettings({
 
   async function revokeSession(id: string) {
     setBusy(`revoke:${id}`);
-    const response = await fetch(`/api/sessions/${encodeURIComponent(id)}`, { method: "DELETE" });
-    setBusy(null);
-    if (!response.ok) {
+    try {
+      await revokeSessionMutation.mutateAsync(id);
+    } catch {
       toast.error("That session could not be signed out.");
-      return;
+    } finally {
+      setBusy(null);
     }
-    setSessions((current) => current.filter((item) => item.id !== id));
   }
 
-  async function revokeOthers() {
+  async function revokeOtherSessions() {
     setBusy("revoke-others");
-    const response = await fetch("/api/sessions/revoke-others", { method: "POST" });
-    setBusy(null);
-    if (!response.ok) {
+    try {
+      await revokeOthersMutation.mutateAsync();
+      toast.success("Signed out everywhere else");
+    } catch {
       toast.error("The other sessions could not be signed out.");
-      return;
+    } finally {
+      setBusy(null);
     }
-    setSessions(await loadSessions());
-    toast.success("Signed out everywhere else");
   }
 
   async function removeAccount() {
@@ -188,7 +182,7 @@ export function AccountSettings({
     router.refresh();
   }
 
-  const others = sessions.filter((item) => !item.current).length;
+  const others = (sessions ?? []).filter((item) => !item.current).length;
 
   return (
     <div className="grid gap-3 lg:grid-cols-2 2xl:gap-4">
@@ -347,19 +341,19 @@ export function AccountSettings({
             </div>
           </div>
           {others > 0 ? (
-            <Button type="button" variant="outline" size="sm" className="shrink-0" disabled={busy === "revoke-others"} onClick={() => void revokeOthers()}>
+            <Button type="button" variant="outline" size="sm" className="shrink-0" disabled={busy === "revoke-others"} onClick={() => void revokeOtherSessions()}>
               {busy === "revoke-others" ? "Signing out" : "Sign out everywhere else"}
             </Button>
           ) : null}
         </div>
 
-        {sessionsError ? <p className="mt-4 text-sm text-destructive">{sessionsError}</p> : null}
+        {sessionsError ? <p className="mt-4 text-sm text-destructive">{sessionsError.message}</p> : null}
 
         <ul className="mt-4 divide-y divide-border">
-          {sessions.length === 0 && !sessionsError ? (
+          {(sessions ?? []).length === 0 && !sessionsError ? (
             <li className="py-3 text-sm text-muted-foreground">Loading your sessions…</li>
           ) : null}
-          {sessions.map((item) => {
+          {(sessions ?? []).map((item) => {
             const { label, Icon, where } = describe(item.userAgent, item.ipAddress);
             const busyKey = `revoke:${item.id}`;
             return (

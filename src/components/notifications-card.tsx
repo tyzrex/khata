@@ -1,95 +1,44 @@
 "use client";
 
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Bell, BellOff, Loader2 } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
 import { Card } from "@/components/balances-card";
+import { DEFAULT_PUSH_PREFERENCES, patchPushPreferences, postPushTest, pushSettingsKey, pushSettingsQuery, type PushPreferences } from "@/components/push-query";
 import { Button } from "@/components/ui/button";
 import { claimPushSubscription, disableCurrentBrowserPush, enablePushNotifications, getCurrentPushSubscription } from "@/lib/push-client";
 import { toast } from "@/lib/status";
 import { cn } from "cn";
 
-type Preferences = { expenseActivity: boolean; settlementActivity: boolean; showAmounts: boolean };
-
-type PushState = {
-  loading: boolean;
-  supported: boolean;
-  configured: boolean;
-  publicKey: string | null;
-  /** This browser holds a local subscription. */
-  enabled: boolean;
-  /** Khata's copy of that subscription is attached to the signed-in account. */
-  registered: boolean;
-  permission: NotificationPermission | null;
-  preferences: Preferences;
-};
-
-const DEFAULTS: Preferences = { expenseActivity: true, settlementActivity: true, showAmounts: false };
-
-async function readError(response: Response, fallback: string) {
-  const body = (await response.json().catch(() => null)) as { error?: string } | null;
-  return body?.error ?? fallback;
-}
-
-function pushSupported() {
-  return process.env.NODE_ENV === "production" && typeof window !== "undefined" && window.isSecureContext && "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
-}
-
 export function NotificationsCard() {
-  const [state, setState] = useState<PushState>({ loading: true, supported: false, configured: false, publicKey: null, enabled: false, registered: false, permission: null, preferences: DEFAULTS });
+  const queryClient = useQueryClient();
+  const { data, isPending: loading, error } = useQuery(pushSettingsQuery);
   const [busy, setBusy] = useState<string | null>(null);
 
-const load = useCallback(async (): Promise<PushState> => {
-    if (!pushSupported()) {
-      return { loading: false, supported: false, configured: false, publicKey: null, enabled: false, registered: false, permission: null, preferences: DEFAULTS };
-    }
-    // Read the local subscription first so the server can say whether this
-    // account actually owns that endpoint, not just whether the browser has one.
-    let endpoint: string | null = null;
-    try {
-      endpoint = (await getCurrentPushSubscription())?.endpoint ?? null;
-    } catch {
-      endpoint = null;
-    }
-    const query = endpoint ? `?endpoint=${encodeURIComponent(endpoint)}` : "";
-    const response = await fetch(`/api/push${query}`);
-    if (!response.ok) throw new Error(await readError(response, "Notification settings could not be loaded."));
-    const body = (await response.json()) as { configured: boolean; publicKey: string | null; preferences: Preferences; registered: boolean };
-    return {
-      loading: false,
-      supported: true,
-      configured: body.configured,
-      publicKey: body.publicKey,
-      enabled: endpoint !== null,
-      registered: body.registered,
-      permission: Notification.permission,
-      preferences: body.preferences,
-    };
-  }, []);
+  const preferences = data?.preferences ?? DEFAULT_PUSH_PREFERENCES;
 
-  useEffect(() => {
-    let cancelled = false;
-    load().then(
-      (next) => {
-        if (!cancelled) setState(next);
-      },
-      () => {
-        if (!cancelled) setState((current) => ({ ...current, loading: false }));
-      },
-    );
-    return () => {
-      cancelled = true;
-    };
-  }, [load]);
+  /** Subscribing, unsubscribing and registering all change what this browser holds, so the
+   *  settings read is the thing that has to be re-taken after each of them. */
+  async function refresh() {
+    await queryClient.invalidateQueries({ queryKey: pushSettingsKey });
+  }
+
+  const savePreferences = useMutation({
+    mutationFn: patchPushPreferences,
+    onSuccess: refresh,
+  });
+
+  const sendTest = useMutation({ mutationFn: postPushTest });
 
   async function enable() {
-    if (!state.publicKey) {
+    if (!data?.publicKey) {
       toast.error("Khata's notification service is not configured yet.");
       return;
     }
     setBusy("enable");
     try {
-      await enablePushNotifications(state.publicKey);
-      setState((current) => ({ ...current, enabled: true, registered: true, permission: Notification.permission }));
+      await enablePushNotifications(data.publicKey);
+      await refresh();
       toast.success("Notifications are on for this browser.");
     } catch (caught) {
       toast.error(caught instanceof Error ? caught.message : "Notifications could not be enabled.");
@@ -97,11 +46,12 @@ const load = useCallback(async (): Promise<PushState> => {
       setBusy(null);
     }
   }
+
   async function disable() {
     setBusy("disable");
     try {
       await disableCurrentBrowserPush();
-      setState((current) => ({ ...current, enabled: false, registered: false, permission: typeof Notification !== "undefined" ? Notification.permission : current.permission }));
+      await refresh();
       toast.success("Notifications are off for this browser.");
     } catch (caught) {
       toast.error(caught instanceof Error ? caught.message : "Notifications could not be disabled.");
@@ -116,7 +66,7 @@ const load = useCallback(async (): Promise<PushState> => {
       const subscription = await getCurrentPushSubscription();
       if (!subscription) throw new Error("This browser has no notification subscription to claim. Enable notifications first.");
       await claimPushSubscription(subscription);
-      setState((current) => ({ ...current, enabled: true, registered: true }));
+      await refresh();
       toast.success("This browser is registered for notifications.");
     } catch (caught) {
       toast.error(caught instanceof Error ? caught.message : "This browser could not be registered.");
@@ -125,67 +75,67 @@ const load = useCallback(async (): Promise<PushState> => {
     }
   }
 
-  async function togglePreference(key: keyof Preferences) {
-    const previous = state.preferences;
+  /** Applied optimistically so the switch never lags the click, and rolled back if the write
+   *  fails — otherwise the panel would quietly disagree with the server. */
+  async function togglePreference(key: keyof PushPreferences) {
+    if (!data) return;
+    const previous = data.preferences;
     const next = { ...previous, [key]: !previous[key] };
-    setState((current) => ({ ...current, preferences: next }));
+    queryClient.setQueryData(pushSettingsKey, { ...data, preferences: next });
     try {
-      const response = await fetch("/api/push/preferences", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ [key]: next[key] }) });
-      if (!response.ok) throw new Error(await readError(response, "Preferences could not be saved."));
-      const body = (await response.json()) as { preferences: Preferences };
-      setState((current) => ({ ...current, preferences: body.preferences }));
+      await savePreferences.mutateAsync({ [key]: next[key] });
     } catch (caught) {
-      setState((current) => ({ ...current, preferences: previous }));
+      queryClient.setQueryData(pushSettingsKey, { ...data, preferences: previous });
       toast.error(caught instanceof Error ? caught.message : "Preferences could not be saved.");
     }
   }
 
-  async function sendTest() {
-    setBusy("test");
+  async function runTest() {
     try {
-      const response = await fetch("/api/push/test", { method: "POST" });
-      if (!response.ok) throw new Error(await readError(response, "The test notification could not be sent."));
+      await sendTest.mutateAsync();
       toast.success("Test sent. It should arrive in a few seconds.");
     } catch (caught) {
       toast.error(caught instanceof Error ? caught.message : "The test notification could not be sent.");
-    } finally {
-      setBusy(null);
     }
   }
 
-  const working = busy !== null;
-  const denied = state.permission === "denied";
+  const working = busy !== null || sendTest.isPending;
+  const denied = data?.permission === "denied";
 
   return (
     <Card
       title="Notifications"
       hint="Hear when someone shares an expense or settles up with you"
-      aside={state.enabled ? <Bell className="size-4 text-muted-foreground" aria-hidden /> : <BellOff className="size-4 text-muted-foreground" aria-hidden />}
+      aside={data?.enabled ? <Bell className="size-4 text-muted-foreground" aria-hidden /> : <BellOff className="size-4 text-muted-foreground" aria-hidden />}
     >
       <div className="flex flex-col gap-4">
-        {state.loading ? (
+        {loading ? (
           <p className="label py-2">Loading notifications</p>
-        ) : !state.supported ? (
+        ) : error ? (
+          <div className="rounded-2xl bg-destructive/10 p-3 text-xs leading-5 text-destructive">
+            {error instanceof Error ? error.message : "Notification settings could not be loaded."}
+          </div>
+        ) : !data?.supported ? (
           <div className="rounded-2xl bg-secondary p-3 text-xs leading-5 text-muted-foreground">
             Notifications need a production build served over HTTPS. In development Khata keeps its service worker off, so this browser cannot subscribe yet. Deploy a preview, or run{" "}
             <code className="font-mono">bun run build && bun run start</code> locally to try them.
           </div>
-        ) : !state.configured ? (
+        ) : !data?.configured ? (
           <div className="rounded-2xl bg-secondary p-3 text-xs leading-5 text-muted-foreground">
             Khata&apos;s notification service is not configured on this deployment. An operator needs to set the VAPID keys before anyone here can turn notifications on.
           </div>
         ) : (
           <>
             <div className="flex flex-wrap items-center gap-2">
-              {state.enabled ? (
+              {data?.enabled ? (
                 <>
                   <Button type="button" variant="outline" size="sm" disabled={working} onClick={() => void disable()}>
                     {busy === "disable" ? <Loader2 className="animate-spin" /> : <BellOff />}
                     Turn off
                   </Button>
-                  {state.registered ? (
-                    <Button type="button" variant="ghost" size="sm" disabled={working} onClick={() => void sendTest()}>
-                      {busy === "test" ? <Loader2 className="animate-spin" /> : null}
+                  {data?.registered ? (
+                    <Button type="button" variant="ghost" size="sm" disabled={working} onClick={() => void runTest()}>
+                      {sendTest.isPending ? <Loader2 className="animate-spin" /> : null}
                       Send a test
                     </Button>
                   ) : null}
@@ -196,7 +146,7 @@ const load = useCallback(async (): Promise<PushState> => {
                   Turn on notifications
                 </Button>
               )}
-              {state.enabled && !state.registered ? (
+              {data?.enabled && !data?.registered ? (
                 <Button type="button" variant="secondary" size="sm" disabled={working} onClick={() => void claim()}>
                   {busy === "claim" ? <Loader2 className="animate-spin" /> : null}
                   Register this browser
@@ -210,7 +160,7 @@ const load = useCallback(async (): Promise<PushState> => {
               </div>
             ) : null}
 
-            {state.enabled && !state.registered ? (
+            {data?.enabled && !data?.registered ? (
               <div className="rounded-2xl bg-secondary p-3 text-xs leading-5 text-muted-foreground">
                 This browser is subscribed, but the subscription is not attached to this account. Register it so shared activity can reach you.
               </div>
@@ -220,21 +170,21 @@ const load = useCallback(async (): Promise<PushState> => {
               <Switch
                 title="Shared expenses"
                 hint="When someone adds or edits an expense you are part of."
-                checked={state.preferences.expenseActivity}
+                checked={preferences.expenseActivity}
                 disabled={working}
                 onChange={() => void togglePreference("expenseActivity")}
               />
               <Switch
                 title="Settlements"
                 hint="When someone records a payment to you or from you."
-                checked={state.preferences.settlementActivity}
+                checked={preferences.settlementActivity}
                 disabled={working}
                 onChange={() => void togglePreference("settlementActivity")}
               />
               <Switch
                 title="Show amounts"
                 hint="Include the amount in the notification. Off by default, so a lock screen does not show what you owe."
-                checked={state.preferences.showAmounts}
+                checked={preferences.showAmounts}
                 disabled={working}
                 onChange={() => void togglePreference("showAmounts")}
               />

@@ -1,23 +1,18 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check, Copy, KeyRound, Trash2 } from "lucide-react";
-import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
+import { useState, useSyncExternalStore } from "react";
 import { useForm, useWatch } from "react-hook-form";
 import { Card, CardEmpty } from "@/components/balances-card";
+import { apiKeysKey, apiKeysQuery, deleteApiKey, postApiKey } from "@/components/api-keys-query";
 import { Button } from "@/components/ui/button";
 import { Form, FormControl, FormField, FormItem, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { useDateFormat } from "@/components/use-date-style";
 import { apiKeySchema, type ApiKeyValues } from "@/lib/schemas";
 import { toast } from "@/lib/status";
-
-type ApiKey = { id: string; name: string; prefix: string; createdAt: string; lastUsedAt: string | null };
-
-async function readError(response: Response, fallback: string) {
-  const body = (await response.json().catch(() => null)) as { error?: string } | null;
-  return body?.error ?? fallback;
-}
 
 function CopyButton({ value, label }: { value: string; label: string }) {
   const [copied, setCopied] = useState(false);
@@ -50,9 +45,8 @@ function CopyButton({ value, label }: { value: string; label: string }) {
  */
 export function ApiKeysCard() {
   const dates = useDateFormat();
-  const [keys, setKeys] = useState<ApiKey[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [pending, setPending] = useState(false);
+  const queryClient = useQueryClient();
+  const { data: keys, error, isPending: loading } = useQuery(apiKeysQuery);
   const [fresh, setFresh] = useState<{ name: string; token: string } | null>(null);
   const [confirming, setConfirming] = useState<string | null>(null);
   const form = useForm<ApiKeyValues>({
@@ -67,52 +61,40 @@ export function ApiKeysCard() {
     () => "",
   );
 
-  const load = useCallback(async () => {
-    const response = await fetch("/api/keys");
-    if (!response.ok) throw new Error(await readError(response, "Keys could not be loaded."));
-    const body = (await response.json()) as { keys: ApiKey[] };
-    return body.keys;
-  }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-    load().then(
-      (list) => !cancelled && setKeys(list),
-      (caught: unknown) => !cancelled && setError(caught instanceof Error ? caught.message : "Keys could not be loaded."),
-    );
-    return () => {
-      cancelled = true;
-    };
-  }, [load]);
-
-  async function create(values: ApiKeyValues) {
-    setPending(true);
-    try {
-      const response = await fetch("/api/keys", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name: values.name }) });
-      if (!response.ok) throw new Error(await readError(response, "Could not create that key."));
-      const body = (await response.json()) as { key: ApiKey; token: string };
+  const create = useMutation({
+    mutationFn: (values: ApiKeyValues) => postApiKey(values.name),
+    onSuccess: async (body) => {
+      // The token exists only in this response, so it is shown before the list is refetched.
       setFresh({ name: body.key.name, token: body.token });
       form.reset({ name: "" });
-      setKeys(await load());
+      await queryClient.invalidateQueries({ queryKey: apiKeysKey });
+    },
+  });
+
+  const revoke = useMutation({
+    mutationFn: deleteApiKey,
+    onSuccess: async () => {
+      setConfirming(null);
+      await queryClient.invalidateQueries({ queryKey: apiKeysKey });
+      toast.success("Key revoked");
+    },
+  });
+
+  const pending = create.isPending || revoke.isPending;
+
+  async function submit(values: ApiKeyValues) {
+    try {
+      await create.mutateAsync(values);
     } catch (caught) {
       toast.error(caught instanceof Error ? caught.message : "Could not create that key.");
-    } finally {
-      setPending(false);
     }
   }
 
-  async function revoke(id: string) {
-    setPending(true);
+  async function revokeKey(id: string) {
     try {
-      const response = await fetch(`/api/keys/${id}`, { method: "DELETE" });
-      if (!response.ok && response.status !== 204) throw new Error(await readError(response, "Could not revoke that key."));
-      setConfirming(null);
-      setKeys(await load());
-      toast.success("Key revoked");
+      await revoke.mutateAsync(id);
     } catch (caught) {
       toast.error(caught instanceof Error ? caught.message : "Could not revoke that key.");
-    } finally {
-      setPending(false);
     }
   }
 
@@ -138,7 +120,7 @@ export function ApiKeysCard() {
         ) : null}
 
         <Form {...form}>
-          <form className="flex items-start gap-2" noValidate onSubmit={form.handleSubmit(create)}>
+          <form className="flex items-start gap-2" noValidate onSubmit={form.handleSubmit(submit)}>
             <FormField
               control={form.control}
               name="name"
@@ -157,8 +139,8 @@ export function ApiKeysCard() {
           </form>
         </Form>
 
-        {error ? <p className="text-sm text-destructive">{error}</p> : null}
-        {keys === null && !error ? <p className="label py-2">Loading keys</p> : null}
+        {error ? <p className="text-sm text-destructive">{error instanceof Error ? error.message : "Keys could not be loaded."}</p> : null}
+        {loading && !error ? <p className="label py-2">Loading keys</p> : null}
         {keys?.length === 0 ? <CardEmpty>No keys yet. Create one for each bot so you can revoke them separately.</CardEmpty> : null}
         {keys?.length ? (
           <ul className="divide-y divide-border">
@@ -172,7 +154,7 @@ export function ApiKeysCard() {
                 </div>
                 {confirming === key.id ? (
                   <span className="flex shrink-0 items-center gap-2">
-                    <Button type="button" variant="destructive" size="xs" disabled={pending} onClick={() => void revoke(key.id)}>
+                    <Button type="button" variant="destructive" size="xs" disabled={pending} onClick={() => void revokeKey(key.id)}>
                       Revoke
                     </Button>
                     <Button type="button" variant="ghost" size="xs" onClick={() => setConfirming(null)}>
