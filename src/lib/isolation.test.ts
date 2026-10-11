@@ -421,6 +421,30 @@ test("production refuses a missing or placeholder auth secret, but builds still 
   assert.doesNotThrow(() => assertAuthSecret({ NODE_ENV: "development" }));
 });
 
+test("the cached auth instance is keyed without randomness", () => {
+  // A random id in the cache key invalidates at runtime but breaks prerendering:
+  // Next reads it as an unstable value and `/groups/[id]` fails instant-validation
+  // with "encountered the unstable value `Math.random()`".
+  const auth = src("src/lib/auth.ts");
+  const key = auth.slice(auth.indexOf("function authConfigKey"), auth.indexOf("export function getAuth"));
+  assert.ok(key.length > 0, "authConfigKey must still exist");
+  assert.doesNotMatch(key, /Math\.random|crypto\.randomUUID|randomUUID|Date\.now|new Date/);
+  // It must still change when the options are edited, which is what the cache is for.
+  assert.match(key, /createAuth\.toString\(\)/);
+});
+
+test("share mutations point at the requests, never at the hooks' own wrappers", () => {
+  // The hook exports wrappers named deletePerson/deleteGroup/deleteExpense/deleteSettlement,
+  // and a hoisted local function declaration shadows the same-named import. Writing
+  // `mutationFn: deletePerson` therefore points at the wrapper that calls the mutation,
+  // which recurses forever. The requests are aliased so the two can never collide again.
+  const text = src("src/components/use-shares.ts");
+  assert.doesNotMatch(text, /mutationFn:\s*delete(Person|Group|Expense|Settlement)\b/);
+  for (const name of ["Person", "Group", "Expense", "Settlement"]) {
+    assert.match(text, new RegExp(`mutationFn:\\s*requestDelete${name}\\b`));
+  }
+});
+
 test("next.config sends the security headers", () => {
   const text = src("next.config.ts");
   for (const header of ["Content-Security-Policy", "X-Content-Type-Options", "Referrer-Policy", "Permissions-Policy", "Strict-Transport-Security"]) {
