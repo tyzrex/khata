@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { SWATCHES, TX_TYPES, type TxType } from "@/lib/constants";
 import { useDateFormat } from "@/components/use-date-style";
-import { formatNpr } from "@/lib/format";
+import { formatForeign, formatNpr, formatRate } from "@/lib/format";
 import type { AccountDto, CategoryDto, TransactionDto } from "@/lib/types";
 import { EMPTY_LEDGER_FILTERS, type LedgerFilters } from "@/lib/url-state";
 
@@ -318,6 +318,14 @@ function Row({ transaction, color, links, onEdit }: { transaction: TransactionDt
             {transaction.type === "transfer" ? (
               <>
                 <span className="px-1 text-disabled">·</span>Transfer
+              </>
+            ) : null}
+            {transaction.foreignAmount != null && transaction.fxRate != null ? (
+              <>
+                <span className="px-1 text-disabled">·</span>
+                <span title={`${formatForeign(transaction.foreignAmount, transaction.currency)} at ${formatRate(transaction.fxRate)} per ${transaction.currency}`}>
+                  {formatForeign(transaction.foreignAmount, transaction.currency)} @ {formatRate(transaction.fxRate)}
+                </span>
               </>
             ) : null}
           </span>

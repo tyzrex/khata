@@ -1,3 +1,4 @@
+import { currencySymbol } from "@/lib/constants";
 import { AD_STYLE, dateView, type DateStyle } from "@/lib/nepali-date";
 
 const wholeFormat = new Intl.NumberFormat("en-IN", { maximumFractionDigits: 0 });
@@ -52,4 +53,19 @@ export function formatRange(start: string, end: string, style: DateStyle = AD_ST
 /** Grouped number with no currency prefix, for hero figures with a separate unit label. */
 export function formatAmount(amount: number) {
   return amountText(amount);
+}
+
+/**
+ * A foreign amount as it was typed, with its own symbol: "$20.00", "RM500".
+ * Only ever used next to the NPR figure it converted to, never instead of it.
+ */
+export function formatForeign(amount: number, currency: string) {
+  return `${currencySymbol(currency)}${amountText(amount)}`;
+}
+
+const rateFormat = new Intl.NumberFormat("en-IN", { minimumFractionDigits: 0, maximumFractionDigits: 4 });
+
+/** An exchange rate. Trims to what matters: "134", "134.25", "0.0123". */
+export function formatRate(rate: number) {
+  return rateFormat.format(rate);
 }

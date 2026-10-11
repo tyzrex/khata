@@ -1,20 +1,31 @@
 import type { TransactionInput } from "@/lib/agent/schemas";
-import { resolveAccount, resolveCategory } from "@/lib/agent/match";
-import type { ManualTransaction } from "@/lib/schemas";
+import { resolveAccount, resolveCategory, AgentInputError } from "@/lib/agent/match";
+import { issueMessage, manualTransactionSchema, type ManualTransaction } from "@/lib/schemas";
 
-/** An agent's loose transaction turned into the exact row the ledger stores. */
+/**
+ * An agent's loose transaction turned into the exact row the ledger stores.
+ *
+ * The candidate is run back through `manualTransactionSchema` rather than trusted
+ * as-is: that schema owns what an amount means (NPR by default, converted from a
+ * foreign currency otherwise), and the agent API has to obey the same rule as the
+ * dialog. A row that fails is reported to the caller instead of reaching an insert.
+ */
 export function toLedgerRow(input: TransactionInput, categoryNames: string[], accountNames: string[]): ManualTransaction & { externalId?: string } {
-  return {
+  const candidate = {
     date: input.date,
     type: input.type,
     amount: input.amount,
-    currency: "NPR",
+    currency: input.currency,
+    foreignAmount: input.foreignAmount,
+    fxRate: input.fxRate,
     category: resolveCategory(input.category, input.type, categoryNames),
     merchant: (input.merchant ?? input.description)!,
     account: resolveAccount(input.account, accountNames),
     note: input.note,
-    externalId: input.externalId,
   };
+  const parsed = manualTransactionSchema.safeParse(candidate);
+  if (!parsed.success) throw new AgentInputError(issueMessage(parsed.error));
+  return { ...parsed.data, externalId: input.externalId };
 }
 
 /** `{ ... }`, `[ ... ]` or `{ "transactions": [ ... ] }` as a list, plus whether one row was sent bare. */

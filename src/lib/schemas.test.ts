@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { ImportShapeError, manualTransactionSchema, MAX_AMOUNT, parseImportPayload, transactionFiltersSchema } from "./schemas";
+import { ImportShapeError, manualTransactionSchema, MAX_AMOUNT, parseImportPayload, transactionDraftSchema, transactionFiltersSchema } from "./schemas";
 import { expenseWriteSchema, settlementWriteSchema } from "./share-schemas";
 
 const row = {
@@ -45,6 +45,53 @@ test("amounts past the column range or below a paisa are refused, not a 500", ()
   assert.equal(manualTransactionSchema.safeParse({ ...manual, amount: Number.POSITIVE_INFINITY }).success, false);
   const settlement = { fromPersonId: "a", toPersonId: "b", amount: 1e13, date: "2026-10-06" };
   assert.equal(settlementWriteSchema.safeParse(settlement).success, false);
+});
+
+test("a foreign amount is converted to NPR and keeps what was typed", () => {
+  const parsed = manualTransactionSchema.parse({ ...manual, amount: undefined, currency: "USD", foreignAmount: 20, fxRate: 134.25 });
+  assert.equal(parsed.amount, 2685);
+  assert.equal(parsed.currency, "USD");
+  assert.equal(parsed.foreignAmount, 20);
+  assert.equal(parsed.fxRate, 134.25);
+});
+
+test("a half-specified conversion never reaches the database", () => {
+  assert.equal(manualTransactionSchema.safeParse({ ...manual, amount: undefined, currency: "USD", foreignAmount: 20 }).success, false);
+  assert.equal(manualTransactionSchema.safeParse({ ...manual, amount: undefined, currency: "USD", fxRate: 134 }).success, false);
+  assert.equal(manualTransactionSchema.safeParse({ ...manual, amount: undefined, currency: "USD" }).success, false);
+  // A rate alone is not money, and a converted total past the column is refused here too.
+  assert.equal(manualTransactionSchema.safeParse({ ...manual, amount: undefined, currency: "USD", foreignAmount: MAX_AMOUNT, fxRate: 2 }).success, false);
+});
+
+test("an NPR entry drops any leftover rate instead of storing it", () => {
+  // Flipping the form back to NPR must not leave the abandoned conversion on the row.
+  const parsed = manualTransactionSchema.parse({ ...manual, currency: "NPR", foreignAmount: 20, fxRate: 134 });
+  assert.equal(parsed.amount, 95);
+  assert.equal(parsed.foreignAmount, null);
+  assert.equal(parsed.fxRate, null);
+});
+
+test("currency codes are normalized and anything that is not three letters is refused", () => {
+  assert.equal(manualTransactionSchema.parse({ ...manual, currency: "usd", amount: 10, foreignAmount: 1, fxRate: 10 }).currency, "USD");
+  assert.equal(manualTransactionSchema.parse({ ...manual, currency: undefined }).currency, "NPR");
+  assert.equal(manualTransactionSchema.safeParse({ ...manual, currency: "DOLLARS" }).success, false);
+});
+
+test("the entry form derives the NPR amount from the rate it was given", () => {
+  const draft = { date: "2026-10-06", type: "expense" as const, currency: "usd", amount: "20", fxRate: "134.25", category: "Bills", merchant: "Figma", account: "Nabil", note: "" };
+  const parsed = transactionDraftSchema.parse(draft);
+  assert.equal(parsed.amount, 2685);
+  assert.equal(parsed.currency, "USD");
+  assert.equal(parsed.foreignAmount, 20);
+  assert.equal(parsed.fxRate, 134.25);
+
+  const plain = transactionDraftSchema.parse({ ...draft, currency: "NPR", amount: "95", fxRate: "" });
+  assert.equal(plain.amount, 95);
+  assert.equal(plain.foreignAmount, null);
+  assert.equal(plain.fxRate, null);
+
+  // A foreign amount with no rate is the one thing the form must not let through.
+  assert.equal(transactionDraftSchema.safeParse({ ...draft, fxRate: "" }).success, false);
 });
 
 test("shared expense ids and split values are bounded", () => {

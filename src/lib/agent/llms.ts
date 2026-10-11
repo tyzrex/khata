@@ -18,7 +18,9 @@ Auth: send the user's personal key as \`Authorization: Bearer khata_...\` (or \`
 - If a response has ok:false with \`candidates\`, ask the user which one they meant. Never guess between people: it moves money.
 - Every response has \`message\`. Read it back to the user.
 - Personal spending → POST /transactions. A bill shared with friends → POST /expenses. Someone paying back → POST /settlements.
-- Amounts are NPR. Dates are YYYY-MM-DD, "today" or "yesterday", in Asia/Kathmandu. Date defaults to today.
+- Amounts are NPR. An entry that was really made in another currency carries that too: send
+  {"currency": "USD", "foreignAmount": 20, "fxRate": 134.25} instead of "amount" and the NPR value
+  is computed from those two. Dates are YYYY-MM-DD, "today" or "yesterday", in Asia/Kathmandu. Date defaults to today.
 - Confirm with the user before any DELETE.
 
 ## Endpoints
@@ -32,6 +34,9 @@ POST /transactions {"amount": 450, "merchant": "Bajeko Sekuwa", "category": "Foo
 
 Accounts are the caller's own; /context lists them. An account name you send is matched
 case-insensitively against that list, and an unknown one is rejected rather than created.
+
+"I paid $20 for Figma, the dollar was 134.25"
+POST /transactions {"currency": "USD", "foreignAmount": 20, "fxRate": 134.25, "merchant": "Figma", "category": "Bills"}
 
 "Split dinner 1200 with Sameer and Anita, I paid"
 POST /expenses {"description": "Dinner", "amount": 1200, "splitWith": ["Sameer", "Anita"]}

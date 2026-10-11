@@ -50,8 +50,10 @@ const transactionSchema = {
     externalId: { type: ["string", "null"] },
     date: { type: "string" },
     type: { enum: TX_TYPES },
-    amount: { type: "number" },
-    currency: { const: "NPR" },
+    amount: { type: "number", description: "The NPR value. Always NPR, whatever currency the entry was typed in." },
+    currency: { type: "string", description: "The currency the entry was typed in; NPR for everything that is not foreign." },
+    foreignAmount: { type: ["number", "null"], description: "What was typed, in `currency`; null for a plain NPR entry." },
+    fxRate: { type: ["number", "null"], description: "NPR per one unit of `currency`; null for a plain NPR entry." },
     category: { type: "string" },
     merchant: { type: "string" },
     account: { type: "string" },
@@ -62,9 +64,11 @@ const transactionSchema = {
 
 const transactionInput = {
   type: "object",
-  required: ["amount"],
   properties: {
-    amount: AMOUNT,
+    amount: { ...AMOUNT, description: "The NPR value. Omit it only when `currency`, `foreignAmount` and `fxRate` are sent together; the NPR amount is then computed from them." },
+    currency: { type: "string", pattern: "^[A-Za-z]{3}$", description: "Three-letter code the amount was typed in, e.g. USD or AED. Defaults to NPR." },
+    foreignAmount: { ...AMOUNT, description: "The amount in `currency`. Send it with `currency` and `fxRate` instead of `amount`." },
+    fxRate: { type: "number", exclusiveMinimum: 0, description: "NPR per one unit of `currency`, e.g. 134.25 for a dollar." },
     type: { enum: TX_TYPES, default: "expense", description: "expense = money out (counts as spent). income = money in. transfer = moving money between your own accounts or a friend paying you back." },
     merchant: { type: "string", maxLength: 160, description: "Who was paid or what it was, e.g. \"Bhatbhateni\". Either merchant or description is required." },
     description: { type: "string", maxLength: 160, description: "Used as the merchant when merchant is missing." },
@@ -151,6 +155,7 @@ export function openApiSpec(origin: string) {
                 examples: {
                   lunch: { value: { amount: 450, merchant: "Bajeko Sekuwa", category: "Food", account: "Nabil" } },
                   salary: { value: { amount: "85,000", type: "income", merchant: "Salary", account: "NIMB", date: "2026-10-01" } },
+                  subscription: { value: { currency: "USD", foreignAmount: 20, fxRate: 134.25, merchant: "Figma", category: "Bills", account: "Nabil" } },
                 },
               },
             },

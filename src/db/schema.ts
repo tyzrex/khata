@@ -70,7 +70,12 @@ export const transactions = pgTable(
     date: date("date", { mode: "string" }).notNull(),
     type: text("type").notNull(),
     amount: numeric("amount", { precision: 14, scale: 2, mode: "number" }).notNull(),
+    /** The currency the amount was typed in. `amount` is always the NPR value. */
     currency: text("currency").notNull().default("NPR"),
+    /** What was typed, in `currency`. Null when the entry is plain NPR. */
+    foreignAmount: numeric("foreign_amount", { precision: 14, scale: 2, mode: "number" }),
+    /** NPR per one unit of `currency`, as the person entered it. Null for NPR. */
+    fxRate: numeric("fx_rate", { precision: 18, scale: 6, mode: "number" }),
     categoryName: text("category_name").notNull(),
     merchant: text("merchant").notNull(),
     account: text("account").notNull(),

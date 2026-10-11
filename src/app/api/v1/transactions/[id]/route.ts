@@ -42,11 +42,16 @@ export async function PATCH(request: NextRequest, context: Context) {
     const type = patch.type ?? current.type;
     const categoryNames = (await listCategories(userId)).map((category) => category.name);
     const accountNames = await listAccountNames(userId);
+    // The three currency fields travel together. A patch may change the amount, the
+    // rate, or the currency itself; anything it leaves out keeps the row's current
+    // value, so a rate-only edit recomputes the NPR amount instead of inventing one.
     const merged = manualTransactionSchema.safeParse({
       date: patch.date ?? current.date,
       type,
       amount: patch.amount ?? current.amount,
-      currency: "NPR",
+      currency: patch.currency ?? current.currency,
+      foreignAmount: patch.foreignAmount ?? current.foreignAmount ?? undefined,
+      fxRate: patch.fxRate ?? current.fxRate ?? undefined,
       category: patch.category ? resolveCategory(patch.category, type, categoryNames) : current.category,
       merchant: patch.merchant ?? patch.description ?? current.merchant,
       account: patch.account ? resolveAccount(patch.account, accountNames) : current.account,

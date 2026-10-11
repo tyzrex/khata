@@ -21,6 +21,20 @@ const amount = z.preprocess(
 const date = (today: string) => z.preprocess((value) => resolveDate(value, today), dateSchema);
 
 const lower = (value: unknown) => (typeof value === "string" ? value.trim().toLowerCase() : value);
+const upper = (value: unknown) => (typeof value === "string" ? value.trim().toUpperCase() : value);
+
+/** The currency an amount is written in. Left out, it means NPR — the stored value. */
+const currency = z.preprocess(upper, z.string({ error: "Currency must be a three-letter code like NPR or USD." }).regex(/^[A-Z]{3}$/, "Currency must be a three-letter code like NPR or USD."));
+
+/** NPR per one unit of `currency`. Only meaningful next to a `foreignAmount`. */
+const fxRate = z.preprocess(
+  (value) => {
+    if (value == null || value === "") return undefined;
+    const parsed = parseAmount(value);
+    return Number.isNaN(parsed) ? value : parsed;
+  },
+  z.number({ error: "Rate must be a positive number, like 134 or 1.5." }).positive("Rate must be greater than zero").max(1_000_000, "Rate is too large").optional(),
+);
 
 const name = z.string().trim().min(1).max(80);
 const note = z.string().max(500).optional().default("");
@@ -42,7 +56,7 @@ const txType = z.preprocess(lower, z.enum(TX_TYPES, { error: "type must be expen
 export function transactionInput(today: string) {
   return z
     .object({
-      amount,
+      amount: amount.optional(),
       type: txType.optional().default("expense"),
       merchant: z.string().trim().min(1).max(160).optional(),
       description: z.string().trim().min(1).max(160).optional(),
@@ -51,8 +65,15 @@ export function transactionInput(today: string) {
       date: date(today),
       note,
       externalId: z.string().trim().min(1).max(200).optional(),
+      currency: currency.optional(),
+      foreignAmount: amount.optional(),
+      fxRate,
     })
-    .refine((value) => value.merchant || value.description, { message: "Give a merchant or description, like \"Bhatbhateni\" or \"Lunch\".", path: ["merchant"] });
+    .refine((value) => value.merchant || value.description, { message: "Give a merchant or description, like \"Bhatbhateni\" or \"Lunch\".", path: ["merchant"] })
+    .refine((value) => value.amount !== undefined || (value.currency !== undefined && value.currency !== "NPR" && value.foreignAmount !== undefined && value.fxRate !== undefined), {
+      message: 'Send "amount" in NPR, or a "currency" with "foreignAmount" and "fxRate".',
+      path: ["amount"],
+    });
 }
 
 export type TransactionInput = z.infer<ReturnType<typeof transactionInput>>;
@@ -68,6 +89,9 @@ export function transactionPatch(today: string) {
       account: z.string().trim().max(40).optional(),
       date: date(today).optional(),
       note: z.string().max(500).optional(),
+      currency: currency.optional(),
+      foreignAmount: amount.optional(),
+      fxRate,
     })
     .refine((value) => Object.values(value).some((field) => field !== undefined), { message: "Nothing to change. Send at least one field." });
 }

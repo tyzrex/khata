@@ -148,8 +148,9 @@ Each row:
 | `externalId` | Stable id, unique. A Gmail message id works. Re-importing the same id updates the row. |
 | `date` | `YYYY-MM-DD` |
 | `type` | `expense`, `income`, or `transfer` |
-| `amount` | Positive number. Nepalese rupees. |
-| `currency` | `NPR` |
+| `amount` | Positive number. Nepalese rupees. Omit it when the row is foreign and carries `foreignAmount` + `fxRate`. |
+| `currency` | Optional. `NPR` (the default) or the three-letter code the entry was really made in. |
+| `foreignAmount`, `fxRate` | Optional, and only together. The amount in `currency` and NPR per one unit of it. The stored NPR value is `foreignAmount × fxRate`. |
 | `category` | Free text. Unknown names are created. |
 | `merchant` | Description shown in the ledger |
 | `account` | One of the caller's own accounts. `GET /api/v1/context` lists them; names match case-insensitively and an unknown name is rejected. |
@@ -174,6 +175,12 @@ The response is `{ "created": 0, "updated": 6, "invalid": [] }` after a second r
 Credits on the dashboard are income plus transfers. Spend is expenses only. That is why the sample week shows 820 spent and 3,600 credited, and a net of 2,780.
 
 The NIMB line is a transfer: “LAW/NIBL transfer”. The share book records Sameer’s settlement as NPR 2,018 and links it to that bank credit of NPR 2,000. The NPR 18 gap stays on the bank line.
+
+### Money in another currency
+
+Every stored amount is NPR — that is the only figure summaries, balances and splits ever read. An entry can still record what it really was: pick a currency in the entry dialog (or send `currency` with `foreignAmount` and `fxRate` on the API) and the NPR value is computed from the two, while the ledger row keeps the original, e.g. `$20 @ 134.25`. The dialog shows the converted figure live before you save.
+
+Rates are never looked up — you type them, so nothing here depends on a rates API and no historical total silently changes later. The column holds six decimals, and `manualTransactionSchema` refuses a foreign row that is missing either half, so a rate can never be stored without the amount it belongs to. Switching the dialog back to NPR drops both fields instead of leaving them behind. Shared expenses are always NPR.
 
 ## Friends, groups, and settling
 

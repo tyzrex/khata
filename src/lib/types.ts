@@ -5,8 +5,14 @@ export type TransactionDto = {
   externalId: string | null;
   date: string;
   type: TxType;
+  /** Always the NPR value. Every total, summary and split reads this and nothing else. */
   amount: number;
-  currency: "NPR";
+  /** The currency the entry was typed in. `"NPR"` for everything that is not foreign. */
+  currency: string;
+  /** What was typed, in `currency`; null for a plain NPR entry. */
+  foreignAmount: number | null;
+  /** NPR per one unit of `currency`; null for a plain NPR entry. */
+  fxRate: number | null;
   category: string;
   merchant: string;
   account: string;

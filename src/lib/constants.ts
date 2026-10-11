@@ -53,4 +53,49 @@ export const DEFAULT_CATEGORIES: {
   { name: "Other", kind: "any", color: "#7c828a", sortOrder: 100 },
 ];
 
+/**
+ * Currencies an entry may be recorded in.
+ *
+ * Every amount is still stored in NPR — that is the only thing totals, summaries
+ * and splits ever see. This list is about the currency a person *typed*: a salary
+ * that arrives in dollars, or a subscription charged abroad, should say what it
+ * really was instead of a converted number nobody can check.
+ *
+ * Any other three-letter code is accepted too. The list only decides which codes
+ * get a symbol and a friendly name in the picker.
+ */
+export const CURRENCIES = [
+  { code: "NPR", symbol: "रू", name: "Nepalese rupee" },
+  { code: "USD", symbol: "$", name: "US dollar" },
+  { code: "EUR", symbol: "€", name: "Euro" },
+  { code: "GBP", symbol: "£", name: "Pound sterling" },
+  { code: "AUD", symbol: "A$", name: "Australian dollar" },
+  { code: "CAD", symbol: "C$", name: "Canadian dollar" },
+  { code: "AED", symbol: "AED ", name: "UAE dirham" },
+  { code: "QAR", symbol: "QAR ", name: "Qatari riyal" },
+  { code: "SAR", symbol: "SAR ", name: "Saudi riyal" },
+  { code: "MYR", symbol: "RM", name: "Malaysian ringgit" },
+  { code: "KRW", symbol: "₩", name: "South Korean won" },
+  { code: "JPY", symbol: "¥", name: "Japanese yen" },
+  { code: "SGD", symbol: "S$", name: "Singapore dollar" },
+  { code: "HKD", symbol: "HK$", name: "Hong Kong dollar" },
+  { code: "CNY", symbol: "CN¥", name: "Chinese yuan" },
+  { code: "INR", symbol: "₹", name: "Indian rupee" },
+  { code: "KWD", symbol: "KWD ", name: "Kuwaiti dinar" },
+  { code: "BHD", symbol: "BHD ", name: "Bahraini dinar" },
+  { code: "OMR", symbol: "OMR ", name: "Omani rial" },
+  { code: "THB", symbol: "฿", name: "Thai baht" },
+] as const;
+
+export const DEFAULT_CURRENCY = "NPR";
+export const CURRENCY_CODES = CURRENCIES.map((currency) => currency.code);
+
+const CURRENCY_SYMBOLS = new Map<string, string>(CURRENCIES.map((currency) => [currency.code, currency.symbol]));
+
+/** The symbol for a code we ship, or the bare code for one we do not. */
+export function currencySymbol(code: string) {
+  const upper = code.trim().toUpperCase();
+  return CURRENCY_SYMBOLS.get(upper) ?? `${upper} `;
+}
+
 export const KATHMANDU = "Asia/Kathmandu";

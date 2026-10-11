@@ -41,36 +41,100 @@ const amountSchema = z.preprocess((value) => {
   return value;
 }, moneySchema);
 
-const currencySchema = z.preprocess((value) => {
-  if (value == null || value === "") return "NPR";
-  return typeof value === "string" ? value.trim().toUpperCase() : value;
-}, z.literal("NPR", { error: "Currency must be NPR" }));
+/**
+ * A currency code. NPR is the default and the only one totals ever see; any other
+ * three-letter code is kept so the entry can show what it really was.
+ */
+const currencySchema = z.preprocess(
+  (value) => (value == null || value === "" ? "NPR" : typeof value === "string" ? value.trim().toUpperCase() : value),
+  z.string().regex(/^[A-Z]{3}$/, "Currency must be a three-letter code like NPR or USD"),
+);
 
-export const importTransactionSchema = z.object({
-  externalId: z.string().trim().min(1).max(200),
-  date: dateSchema,
-  type: z.enum(TX_TYPES),
-  amount: amountSchema,
-  currency: currencySchema,
-  category: z.string().trim().min(1).max(80),
-  merchant: z.string().trim().min(1).max(160),
-  // Accounts are per-person rows, so the shape is checked here and membership in the
-  // book is settled by ensureNamedAccount, which adds the row if it is new.
-  account: accountNameSchema,
-  note: z.string().max(500).optional().default(""),
-  source: z.string().trim().min(1).max(40).optional().default("gmail"),
-});
+/** An optional number that a form or a JSON body may send as text, or as an empty string. */
+const optionalNumber = <T extends z.ZodType>(schema: T) =>
+  z.preprocess((value) => {
+    if (value == null || (typeof value === "string" && value.trim() === "")) return undefined;
+    return typeof value === "string" ? Number(value) : value;
+  }, schema.optional());
 
-export const manualTransactionSchema = z.object({
-  date: dateSchema,
-  type: z.enum(TX_TYPES),
-  amount: amountSchema,
+/** NPR per one unit of a foreign currency. Six decimals, matching the column. */
+const rateSchema = z
+  .number()
+  .finite()
+  .positive("Rate must be greater than zero")
+  .max(1_000_000, "Rate is too large")
+  .transform((value) => Math.round(value * 1e6) / 1e6);
+
+/**
+ * The fields that make an amount foreign. Both are only meaningful together, and
+ * both are refused when the currency is NPR — an NPR entry has nothing to convert.
+ */
+const currencyFields = {
+  amount: amountSchema.optional(),
   currency: currencySchema,
-  category: z.string().trim().min(1).max(80),
-  merchant: z.string().trim().min(1).max(160),
-  account: accountNameSchema,
-  note: z.string().max(500).optional().default(""),
-});
+  foreignAmount: optionalNumber(moneySchema),
+  fxRate: optionalNumber(rateSchema),
+};
+
+type CurrencyInput = { currency: string; amount?: number; foreignAmount?: number; fxRate?: number };
+
+/** Rejects a half-specified conversion before it reaches the database. */
+function checkCurrency(value: CurrencyInput, ctx: z.RefinementCtx) {
+  if (value.currency === "NPR") {
+    if (value.amount === undefined) ctx.addIssue({ code: "custom", path: ["amount"], message: "Amount must be greater than zero" });
+    return;
+  }
+  if (value.foreignAmount === undefined) ctx.addIssue({ code: "custom", path: ["foreignAmount"], message: `Enter the amount in ${value.currency}` });
+  if (value.fxRate === undefined) ctx.addIssue({ code: "custom", path: ["fxRate"], message: `Enter the NPR rate for ${value.currency}` });
+  if (value.foreignAmount === undefined || value.fxRate === undefined) return;
+  const converted = Math.round(value.foreignAmount * value.fxRate * 100) / 100;
+  if (converted > MAX_AMOUNT) ctx.addIssue({ code: "custom", path: ["foreignAmount"], message: "That is too large once converted to NPR" });
+  else if (converted < 0.01) ctx.addIssue({ code: "custom", path: ["foreignAmount"], message: "That rounds to less than a paisa" });
+}
+
+/**
+ * The stored amount is always NPR, so a foreign entry converts here and nowhere
+ * else. Deriving it instead of trusting a second number means the two can never
+ * disagree, and every summary keeps reading `amount` exactly as it did before.
+ */
+function convertedAmount(value: CurrencyInput) {
+  if (value.currency === "NPR") return { amount: value.amount as number, foreignAmount: null, fxRate: null };
+  return {
+    amount: Math.round(value.foreignAmount! * value.fxRate! * 100) / 100,
+    foreignAmount: value.foreignAmount!,
+    fxRate: value.fxRate!,
+  };
+}
+
+export const importTransactionSchema = z
+  .object({
+    externalId: z.string().trim().min(1).max(200),
+    date: dateSchema,
+    type: z.enum(TX_TYPES),
+    ...currencyFields,
+    category: z.string().trim().min(1).max(80),
+    merchant: z.string().trim().min(1).max(160),
+    // Accounts are per-person rows, so the shape is checked here and membership in the
+    // book is settled by ensureNamedAccount, which adds the row if it is new.
+    account: accountNameSchema,
+    note: z.string().max(500).optional().default(""),
+    source: z.string().trim().min(1).max(40).optional().default("gmail"),
+  })
+  .superRefine(checkCurrency)
+  .transform((value) => ({ ...value, ...convertedAmount(value) }));
+
+export const manualTransactionSchema = z
+  .object({
+    date: dateSchema,
+    type: z.enum(TX_TYPES),
+    ...currencyFields,
+    category: z.string().trim().min(1).max(80),
+    merchant: z.string().trim().min(1).max(160),
+    account: accountNameSchema,
+    note: z.string().max(500).optional().default(""),
+  })
+  .superRefine(checkCurrency)
+  .transform((value) => ({ ...value, ...convertedAmount(value) }));
 
 export const categorySchema = z.object({
   name: z.string().trim().min(1).max(40),
@@ -125,17 +189,41 @@ const rupeesText = z.string().trim().superRefine((text, ctx) => {
   else if (amount > MAX_AMOUNT) ctx.addIssue({ code: "custom", message: "Amount is too large" });
 });
 
+/** The rate a form holds while you type. `""` means the entry is plain NPR. */
+const rateText = z.string().trim().max(20);
+
 export const transactionDraftSchema = z
   .object({
     date: dateSchema,
     type: z.enum(TX_TYPES),
+    /** The currency the amount below was typed in. `NPR` unless the person changed it. */
+    currency: z
+      .string()
+      .trim()
+      .min(1)
+      .max(3)
+      .transform((value) => value.toUpperCase()),
+    /** In `currency`, not in NPR — the NPR value is derived on save. */
     amount: rupeesText,
+    /** NPR per one unit of `currency`. Empty for NPR, required otherwise. */
+    fxRate: rateText,
     category: z.string().trim().min(1, "Pick a category").max(80),
     merchant: z.string().trim().min(1, "Add a merchant or description").max(160),
     account: accountNameSchema,
     note: z.string().trim().max(500, "Note is limited to 500 characters"),
   })
-  .transform((draft) => ({ ...draft, amount: moneySchema.parse(Number(draft.amount)) }));
+  .superRefine((draft, ctx) => {
+    if (draft.currency === "NPR") return;
+    if (!/^\d+(\.\d{1,6})?$/.test(draft.fxRate) || Number(draft.fxRate) <= 0) {
+      ctx.addIssue({ code: "custom", path: ["fxRate"], message: "Enter the NPR rate, like 134.25" });
+    }
+  })
+  .transform((draft) => {
+    const entered = moneySchema.parse(Number(draft.amount));
+    if (draft.currency === "NPR") return { ...draft, amount: entered, foreignAmount: null, fxRate: null };
+    const fxRate = Math.round(Number(draft.fxRate) * 1e6) / 1e6;
+    return { ...draft, amount: Math.round(entered * fxRate * 100) / 100, foreignAmount: entered, fxRate };
+  });
 
 export type TransactionDraft = z.input<typeof transactionDraftSchema>;
 export type TransactionEntry = z.output<typeof transactionDraftSchema>;

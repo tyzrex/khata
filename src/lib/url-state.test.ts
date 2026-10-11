@@ -11,6 +11,8 @@ function row(partial: Partial<TransactionDto>): TransactionDto {
     type: "expense",
     amount: 100,
     currency: "NPR",
+    foreignAmount: null,
+    fxRate: null,
     category: "Food",
     merchant: "Bhatbhateni",
     account: "Nabil",
