@@ -6,6 +6,7 @@ import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
 import { ExpenseFeed } from "@/components/splits/expense-feed";
+import { GroupFeedFilterBar, useGroupFeedFilters } from "@/components/splits/group-feed-filters";
 import { feedOf, memberLines, SETTLED, totalsFor, type Expense, type Person, type Settlement } from "@/components/splits/ledger-math";
 import { toast } from "@/lib/status";
 import { PaymentCard } from "@/components/splits/pay-card";
@@ -13,6 +14,7 @@ import { EmptyNote, GroupTile, PersonAvatar, SplitCard, SplitCardHead } from "@/
 import { Button } from "@/components/ui/button";
 import type { BalanceScope, JoinedGroup, ShareBook } from "@/db/shares";
 import { formatNpr } from "@/lib/format";
+import { applyGroupFilters, describeGroupFeedFilters, hasGroupFeedFilters } from "@/lib/group-filters";
 
 type Debt = BalanceScope["youOwe"][number];
 
@@ -281,20 +283,46 @@ function ExpensesPanel({
   onEditSettlement: (settlement: Settlement) => void;
   onAddExpense: () => void;
 }) {
-  const feed = feedOf(group.expenses, group.settlements);
+  // Only this group's rows exist here, so filtering cannot reach another book.
+  const all = feedOf(group.expenses, group.settlements);
+  const filters = useGroupFeedFilters();
+  const feed = applyGroupFilters(all, filters.value, { members: group.members });
+  const filtering = hasGroupFeedFilters(filters.value);
+  const summary = describeGroupFeedFilters(filters.value);
+
   return (
     <SplitCard>
       <SplitCardHead
         title="Expenses"
-        hint={feed.length ? `${group.expenses.length} ${group.expenses.length === 1 ? "expense" : "expenses"} · ${group.settlements.length} ${group.settlements.length === 1 ? "payment" : "payments"}` : "Nothing yet"}
+        hint={
+          all.length
+            ? filtering
+              ? `${feed.length} of ${all.length} · ${summary.join(" · ")}`
+              : `${group.expenses.length} ${group.expenses.length === 1 ? "expense" : "expenses"} · ${group.settlements.length} ${group.settlements.length === 1 ? "payment" : "payments"}`
+            : "Nothing yet"
+        }
       />
-      {feed.length === 0 ? (
+      {all.length ? (
+        <GroupFeedFilterBar group={group} filters={filters.value} counts={all.length} />
+      ) : null}
+      {all.length === 0 ? (
         <div className="flex flex-col items-center gap-3 py-8 text-center">
           <p className="max-w-xs text-sm leading-6 text-muted-foreground">No shared expenses yet. Add the first one and everyone in the group sees it.</p>
           <Button type="button" variant="outline" size="sm" onClick={onAddExpense}>
             <Plus />
             Add expense
           </Button>
+        </div>
+      ) : feed.length === 0 ? (
+        <div className="flex flex-col items-center gap-3 py-10 text-center">
+          <p className="max-w-xs text-sm leading-6 text-muted-foreground">
+            Nothing in {group.name} matches {summary.length ? summary.join(", ") : "these filters"}.
+          </p>
+          {filtering ? (
+            <Button type="button" variant="outline" size="sm" onClick={filters.reset}>
+              Reset filters
+            </Button>
+          ) : null}
         </div>
       ) : (
         <ExpenseFeed items={feed} selfId={group.selfId} hideGroup={group.name} onEditExpense={onEditExpense} onEditSettlement={onEditSettlement} />
