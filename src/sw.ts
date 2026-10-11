@@ -114,7 +114,9 @@ self.addEventListener("push", (event) => {
       icon: "/icons/icon-192.png",
       badge: "/icons/icon-monochrome-512.png",
       data: { url },
-    }),
+      // A second push for the same record replaces the first; without this Android swaps it in silently.
+      renotify: true,
+    } as NotificationOptions),
   );
 });
 

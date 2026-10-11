@@ -22,7 +22,12 @@ const PROVIDER_SUFFIXES = [
 ] as const;
 const STALE_STATUS_CODES = new Set([404, 410]);
 const PERMANENT_STATUS_CODES = new Set([400, 401, 403]);
-const PUSH_TTL_SECONDS = 5 * 60;
+/**
+ * How long the push service holds a message for a device it cannot reach. Android phones in
+ * Doze (screen off, unplugged) only wake for queued messages in maintenance windows that can be
+ * an hour or more apart, so a short TTL means the message expires before the phone ever sees it.
+ */
+const PUSH_TTL_SECONDS = 12 * 60 * 60;
 const PUSH_TIMEOUT_MS = 10_000;
 
 export { DEFAULT_NOTIFICATION_PREFERENCES };
@@ -186,7 +191,9 @@ async function sendToTarget(
     await webPush.sendNotification(subscription, JSON.stringify(payload), {
       TTL: PUSH_TTL_SECONDS,
       timeout: PUSH_TIMEOUT_MS,
-      urgency: "normal",
+      // FCM maps "high" to high priority, the only kind that wakes a dozing Android phone.
+      // Every push here is shown to the person, which is what FCM requires to keep honouring it.
+      urgency: "high",
       vapidDetails,
     });
     try {
