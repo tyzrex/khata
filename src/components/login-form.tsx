@@ -2,6 +2,7 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Eye, EyeOff } from "lucide-react";
+import Link from "next/link";
 import { useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { authClient } from "@/lib/auth-client";
@@ -158,6 +159,13 @@ export function LoginForm({ googleEnabled }: { googleEnabled: boolean }) {
                   </button>
                 </div>
                 <FormDescription>{signingUp ? "At least 8 characters. Stored hashed, never in plain text." : undefined}</FormDescription>
+                {signingUp ? null : (
+                  <p className="text-xs leading-5">
+                    <Link className="text-interactive underline-offset-4 hover:underline" href="/reset-password">
+                      Forgot your password?
+                    </Link>
+                  </p>
+                )}
                 <FormMessage />
               </FormItem>
             )} />

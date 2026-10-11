@@ -47,7 +47,7 @@ The seed script falls back to `DATABASE_URL_UNPOOLED` if `DATABASE_URL` is empty
 
 ## Accounts
 
-Khata uses [Better Auth](https://www.better-auth.com). Email and password work without an email provider. Google is optional until the client id and secret are set. There is no shared passcode.
+Khata uses [Better Auth](https://www.better-auth.com). Email and password work without an email provider; password reset and email-change links need one (`RESEND_API_KEY`). Google is optional until the client id and secret are set. There is no shared passcode.
 
 Sessions are httpOnly cookies (`better-auth.session_token`, prefixed `__Secure-` on HTTPS), `SameSite=Lax`, and `Secure` in production. Better Auth checks the request origin on sign-in and sign-up. The signed cookie cache lasts five minutes so most page loads skip a database read. A route still calls `getSession` before it reads the ledger.
 
@@ -55,7 +55,7 @@ Every ledger and share row stores `user_id`. Queries only return the signed-in a
 
 **Settings → Your details / Password / Signed-in devices / Delete this account** covers managing the account. Name changes are immediate. Changing the email sends a confirmation link to the new address and nothing moves until it is clicked, so the sender must be a real domain — `INVITE_FROM_EMAIL`, not the `onboarding@resend.dev` sandbox. Deleting never happens in one step: Better Auth's `sendDeleteAccountVerification` short-circuits the immediate delete, so every deletion is confirmed by a link emailed to the address on the account. The password field in that dialog is an identity pre-check, and it is skipped for a Google-only account. The link's callback runs `beforeDelete`, which clears `settlements` and `shared_expenses` first: those hold `ON DELETE RESTRICT` references to `people`, and RESTRICT is checked as each row goes, so leaving them to the cascade from `user.id` can fail outright.
 
-Password reset email is still not wired up. Add an email sender later if you want reset links. Until then, keep the password, or sign in with Google using the same verified address (Google is a trusted provider for account linking).
+**Forgot password** is wired up at `/reset-password`, also linked from the sign-in screen. It emails a single-use link that expires in an hour; opening it lands back on `/reset-password?token=…`, which asks for the new password. Requests are rate limited to 5 per five minutes per address so this cannot be used to flood someone's inbox, and the response never says whether the address exists. Like every other email here it needs `RESEND_API_KEY` and a real `INVITE_FROM_EMAIL` — with no key the request still succeeds, the link is never sent, and the server logs why. A Google-only account has no password to reset: sign in with Google instead (Google is a trusted provider for account linking).
 
 Migration `0008_auth_timestamps_timezone` moves Better Auth's timestamp columns to `timestamptz`. The app runs in Asia/Kathmandu while the database is UTC, so a naive column stored local wall clock and Node read it back as UTC — expiry checks drifted by the offset, and a session list would show sessions that had already expired. Existing rows are reinterpreted in the database session's time zone; session lifetimes are 30 days, so nothing is revoked by the change.
 

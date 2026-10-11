@@ -7,7 +7,7 @@ import { Pool } from "pg";
 import { getDb } from "@/db/client";
 import { purgeUserData, purgeUserVerification } from "@/db/purge-user";
 import * as schema from "@/db/schema";
-import { sendDeleteAccountVerification, sendVerificationEmail } from "@/lib/account-email";
+import { sendDeleteAccountVerification, sendResetPasswordEmail, sendVerificationEmail } from "@/lib/account-email";
 import { trustedOrigins } from "@/lib/request-guard";
 
 function authDatabase() {
@@ -50,6 +50,12 @@ function createAuth() {
       minPasswordLength: 8,
       maxPasswordLength: 128,
       autoSignIn: true,
+      // An hour is long enough to reach an inbox and short enough that a leaked
+      // link is stale by the time anyone else finds it. The token is single-use.
+      resetPasswordTokenExpiresIn: 60 * 60,
+      sendResetPassword: async ({ user, url }) => {
+        await sendResetPasswordEmail({ user, url });
+      },
     },
     // On by default in production only; the custom rules make credential guessing slower.
     rateLimit: {
@@ -58,6 +64,10 @@ function createAuth() {
       customRules: {
         "/sign-in/email": { window: 60, max: 5 },
         "/sign-up/email": { window: 60, max: 5 },
+        // Asking for a reset sends mail, so it is capped tighter than the other
+        // endpoints: otherwise this is an open relay for someone else's inbox.
+        "/request-password-reset": { window: 300, max: 5 },
+        "/reset-password": { window: 300, max: 10 },
       },
     },
     ...(googleAuthEnabled()

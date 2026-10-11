@@ -65,6 +65,28 @@ export function sendVerificationEmail({ user, url }: { user: { name?: string | n
   );
 }
 
+/**
+ * The way back in for an email-and-password account. Only ever sent for an address
+ * that exists, and the link carries a one-use token that expires in an hour.
+ */
+export function sendResetPasswordEmail({ user, url }: { user: { name?: string | null; email: string }; url: string }) {
+  const { subject, html } = buildResetPasswordEmail({ user, url });
+  return send(user.email, subject, html);
+}
+
+/** Kept separate from the send so a test can read the mail without a provider. */
+export function buildResetPasswordEmail({ user, url }: { user: { name?: string | null; email: string }; url: string }) {
+  return {
+    subject: "Reset your Khata password",
+    html: page(
+      "Reset your Khata password",
+      `Hi ${user.name?.trim() || "there"}. Choose a new password for ${user.email}. The link works once and expires in an hour. If you did not ask for this, ignore this email — your password stays the same.`,
+      "Choose a new password",
+      url,
+    ),
+  };
+}
+
 /** Last stop before a person loses their whole ledger. */
 export function sendDeleteAccountVerification({ user, url }: { user: { name?: string | null; email: string }; url: string }) {
   return send(

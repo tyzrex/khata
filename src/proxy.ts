@@ -3,7 +3,9 @@ import { NextResponse, type NextRequest } from "next/server";
 import { isAllowedWrite, trustedOrigins } from "@/lib/request-guard";
 import { safeNext } from "@/lib/return-path";
 
-const PUBLIC_PATHS = new Set(["/", "/accounts", "/login", "/offline", "/manifest.webmanifest", "/api/v1", "/api/v1/openapi.json", "/api/v1/llms.txt"]);
+// `/reset-password` is public on purpose: a reset link has to work for someone who
+// cannot sign in, which is the whole reason they are there.
+const PUBLIC_PATHS = new Set(["/", "/accounts", "/login", "/reset-password", "/offline", "/manifest.webmanifest", "/api/v1", "/api/v1/openapi.json", "/api/v1/llms.txt"]);
 
 function isPublic(pathname: string) {
   if (PUBLIC_PATHS.has(pathname)) return true;

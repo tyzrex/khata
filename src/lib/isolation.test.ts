@@ -16,6 +16,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import test from "node:test";
+import { buildResetPasswordEmail } from "./account-email";
 import { appOrigin } from "./app-origin";
 import { assertAuthSecret } from "./auth";
 import { buildInviteEmail, inviteSender, oneLine } from "./invite-email";
@@ -404,6 +405,25 @@ test("invite email reads as a personal note and escapes user-typed names", () =>
   assert.ok(!email.html.includes("<b>Trip</b>"), "group names are escaped in HTML");
   assert.ok(email.text.includes("https://khata.example/invite/t"));
   assert.ok(!/<img|unsubscribe/i.test(email.html), "no bulk-mail markers");
+});
+
+test("the password reset mail carries the link that lands back on our own page", () => {
+  const url = "https://khata.example/api/auth/reset-password/tok123?callbackURL=%2Freset-password";
+  const email = buildResetPasswordEmail({ user: { name: "Asha <b>", email: "asha@x.example" }, url });
+  assert.equal(email.subject, "Reset your Khata password");
+  assert.ok(email.html.includes("reset-password/tok123"), "the reset link is in the mail");
+  assert.ok(email.html.includes("expires in an hour"));
+  assert.ok(!email.html.includes("<b>"), "user-typed names are escaped");
+  assert.ok(!/<img|unsubscribe/i.test(email.html), "no bulk-mail markers");
+});
+
+test("auth wires the reset-password flow", () => {
+  // This used to be missing entirely: a forgotten password locked you out unless you
+  // had Google. Send the link, bound its lifetime, and cap how often it can be asked for.
+  const auth = src("src/lib/auth.ts");
+  assert.match(auth, /sendResetPassword:/);
+  assert.match(auth, /resetPasswordTokenExpiresIn:/);
+  assert.match(auth, /"\/request-password-reset":\s*\{ window: \d+, max: \d+ \}/);
 });
 
 test("a friend's direct book cannot be renamed or re-membered", () => {
