@@ -10,20 +10,21 @@ import { formatNpr } from "@/lib/format";
 import { readJson } from "@/lib/http";
 import { todayInKathmandu } from "@/lib/period";
 import { notifySharedWrite } from "@/lib/push-notifications";
-import { requireAgentUserId } from "@/lib/session";
+import { requireAgentIdentity, requireAgentUserId } from "@/lib/session";
 
 export async function GET(request: NextRequest) {
   try {
     const userId = await requireAgentUserId(request);
     const parsed = expenseQuery.safeParse(Object.fromEntries(request.nextUrl.searchParams));
     if (!parsed.success) return fail(zodMessage(parsed.error));
-    const { group, with: withName, from, to, limit } = parsed.data;
+    const { group, with: withName, category, from, to, limit } = parsed.data;
     const book = await getShareBook(userId);
     const groupId = group ? findGroup(book, group).groupId : null;
     const wanted = withName ? normalizeName(withName) : "";
     const matches = expenseViews(book).filter(
       (expense) =>
         (!groupId || expense.groupId === groupId) &&
+        (!category || (expense.category ?? "") === category) &&
         (!from || expense.date >= from) &&
         (!to || expense.date <= to) &&
         (!wanted || expense.shares.some((share) => normalizeName(share.name).split(" ").concat(normalizeName(share.name)).includes(wanted))),
@@ -43,7 +44,8 @@ export async function GET(request: NextRequest) {
 /** Adds a shared expense by names. See the OpenAPI spec for how `splitWith`, `excludeMe` and `split` combine. */
 export async function POST(request: NextRequest) {
   try {
-    const userId = await requireAgentUserId(request);
+    const { userId, viaApiKey } = await requireAgentIdentity(request);
+    // A bot writes as you, so the write has to reach your own feed too.
     const limited = spendWrite(userId);
     if (limited) return limited;
     const parsed = expenseInput(todayInKathmandu()).safeParse(await readJson(request));
@@ -65,9 +67,9 @@ export async function POST(request: NextRequest) {
       name: share.personId === plan.scope.selfId ? "You" : (plan.scope.members.find((member) => member.id === share.personId)?.name ?? "Someone"),
       amount: share.amount,
     }));
-    if (detail) notifySharedWrite(detail);
+    if (detail) notifySharedWrite({ ...detail, includeActor: viaApiKey });
     return ok(
-      { id, groupId, description: plan.write.description, amount: plan.write.amount, date: plan.write.date, paidBy: payer, splitMode: plan.write.splitMode, shares },
+      { id, groupId, description: plan.write.description, amount: plan.write.amount, date: plan.write.date, paidBy: payer, splitMode: plan.write.splitMode, category: plan.write.category, shares },
       `Added "${plan.write.description}" ${formatNpr(plan.write.amount)} ${where}, paid by ${payer}. ${describeSplits(plan.scope, plan.write.splitMode, plan.splits)}`,
       201,
     );

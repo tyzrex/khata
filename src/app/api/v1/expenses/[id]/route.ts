@@ -3,7 +3,7 @@ import { deleteSharedExpense, describeSharedWrite, getShareBook } from "@/db/sha
 import { agentError, fail, ok, spendWrite } from "@/lib/agent/respond";
 import { expenseViews } from "@/lib/agent/views";
 import { notifySharedWrite } from "@/lib/push-notifications";
-import { requireAgentUserId } from "@/lib/session";
+import { requireAgentIdentity, requireAgentUserId } from "@/lib/session";
 
 type Context = { params: Promise<{ id: string }> };
 
@@ -23,7 +23,8 @@ export async function GET(request: NextRequest, context: Context) {
 
 export async function DELETE(request: NextRequest, context: Context) {
   try {
-    const userId = await requireAgentUserId(request);
+    const { userId, viaApiKey } = await requireAgentIdentity(request);
+    // A bot writes as you, so the write has to reach your own feed too.
     const limited = spendWrite(userId);
     if (limited) return limited;
     const { id } = await context.params;
@@ -31,7 +32,7 @@ export async function DELETE(request: NextRequest, context: Context) {
     if (!expense) return fail(MISSING, 404);
     await deleteSharedExpense(userId, id);
     const detail = await describeSharedWrite(userId, { kind: "expense", action: "deleted", expenseId: id });
-    if (detail) notifySharedWrite(detail);
+    if (detail) notifySharedWrite({ ...detail, includeActor: viaApiKey });
     return ok({ id }, `Deleted "${expense.description}" (${expense.date}). Balances are updated.`);
   } catch (error) {
     return agentError(error);

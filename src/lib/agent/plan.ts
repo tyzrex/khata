@@ -1,4 +1,5 @@
 import type { BalanceScope, ShareBook } from "@/db/shares";
+import type { SharedCategory } from "@/lib/constants";
 import { formatNpr } from "@/lib/format";
 import { buildSplits, ShareInputError, type BuiltSplit, type SplitMode, type SplitParticipant } from "@/lib/split";
 import { AgentInputError, isSelfWord, matchNamed, matchPerson, type Named } from "@/lib/agent/match";
@@ -133,6 +134,8 @@ export type ExpenseRequest = {
   excludeMe?: boolean;
   splitMode?: SplitMode;
   split?: SplitEntry[];
+  /** One of `SHARED_CATEGORIES`, or null when the agent did not pick one. */
+  category?: SharedCategory | null;
 };
 
 export type ExpensePlan = {
@@ -146,6 +149,7 @@ export type ExpensePlan = {
     paidById: string;
     groupId: string | null;
     splitMode: SplitMode;
+    category: string | null;
     note: string;
     participants: SplitParticipant[];
     transactionIds: string[];
@@ -238,6 +242,7 @@ export function planExpense(book: ShareBook, request: ExpenseRequest, opts: { ac
       paidById: paidById!,
       groupId: scope.groupId,
       splitMode: fitted.mode,
+      category: request.category ?? null,
       note: request.note,
       participants: fitted.participants,
       transactionIds: [],

@@ -8,12 +8,13 @@ import { formatNpr } from "@/lib/format";
 import { readJson } from "@/lib/http";
 import { todayInKathmandu } from "@/lib/period";
 import { notifySharedWrite } from "@/lib/push-notifications";
-import { requireAgentUserId } from "@/lib/session";
+import { requireAgentIdentity } from "@/lib/session";
 
 /** Records a payment that settles some or all of a balance. It does not touch the bank ledger. */
 export async function POST(request: NextRequest) {
   try {
-    const userId = await requireAgentUserId(request);
+    const { userId, viaApiKey } = await requireAgentIdentity(request);
+    // A bot writes as you, so the write has to reach your own feed too.
     const limited = spendWrite(userId);
     if (limited) return limited;
     const parsed = settlementInput(todayInKathmandu()).safeParse(await readJson(request));
@@ -27,7 +28,7 @@ export async function POST(request: NextRequest) {
     const to = personName(plan.scope, plan.write.toPersonId);
     const where = plan.directWith || plan.scope.kind !== "group" ? "" : ` in ${whereText(plan.scope)}`;
     const sentence = `${from[0]!.toUpperCase()}${from.slice(1)} paid ${to} ${formatNpr(plan.write.amount)}${where}`;
-    if (detail) notifySharedWrite(detail);
+    if (detail) notifySharedWrite({ ...detail, includeActor: viaApiKey });
     return ok({ id, groupId, from, to, amount: plan.write.amount, date: plan.write.date }, `Recorded: ${sentence}.`, 201);
   } catch (error) {
     return agentError(error);

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { TX_TYPES } from "@/lib/constants";
+import { SHARED_CATEGORIES, TX_TYPES } from "@/lib/constants";
 import { dateSchema, moneySchema } from "@/lib/schemas";
 import { SPLIT_MODES } from "@/lib/split";
 import { parseAmount, resolveDate } from "@/lib/agent/match";
@@ -128,6 +128,8 @@ export function expenseInput(today: string) {
     excludeMe: z.boolean().optional().default(false),
     splitMode: z.preprocess(lower, z.enum(SPLIT_MODES, { error: "splitMode must be equal, exact, shares, or percent." })).optional(),
     split: splitEntries.optional(),
+    /** One of the fixed shared categories. Omit it and the expense stays uncategorised. */
+    category: z.preprocess(lower, z.enum(SHARED_CATEGORIES, { error: `category must be one of: ${SHARED_CATEGORIES.join(", ")}.` })).optional(),
     note,
   });
 }
@@ -135,6 +137,7 @@ export function expenseInput(today: string) {
 export const expenseQuery = z.object({
   group: z.string().trim().max(100).optional(),
   with: z.string().trim().max(80).optional(),
+  category: z.enum(SHARED_CATEGORIES).optional(),
   from: dateSchema.optional(),
   to: dateSchema.optional(),
   limit: z.coerce.number().int().min(1).max(200).optional().default(50),
