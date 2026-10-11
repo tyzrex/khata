@@ -18,12 +18,24 @@ import { formatNpr } from "@/lib/format";
 import { settleSchema, type SettleValues } from "@/lib/schemas";
 import type { TransactionDto } from "@/lib/types";
 
+type Settlement = ShareBook["settlements"][number];
+
 export type SettleDraft = {
   fromId: string;
   toId: string;
   amount: string;
   groupId: string;
 };
+
+const auditDate = new Intl.DateTimeFormat("en-NP", {
+  dateStyle: "medium",
+  timeStyle: "short",
+  timeZone: "Asia/Kathmandu",
+});
+
+function formatAuditDate(value: string) {
+  return auditDate.format(new Date(value));
+}
 
 type SettleFormValues = {
   fromPersonId: string;
@@ -36,53 +48,55 @@ type SettleFormValues = {
   transactionId: string;
 };
 
+function defaultsFor(today: string, draft: SettleDraft, settlement?: Settlement): SettleFormValues {
+  return {
+    fromPersonId: settlement?.fromPersonId ?? draft.fromId,
+    toPersonId: settlement?.toPersonId ?? draft.toId,
+    amount: settlement ? String(settlement.amount) : draft.amount,
+    date: settlement?.date ?? today,
+    groupId: settlement?.groupId ?? (draft.groupId || "none"),
+    note: settlement?.note ?? "",
+    transactionId: settlement?.transaction?.id ?? "none",
+  };
+}
+
 export function SettleDialog({
   open,
   today,
   book,
   transactions,
   draft,
+  settlement,
   groupLocked = false,
   onOpenChange,
   onSave,
+  onDelete,
 }: {
   open: boolean;
   today: string;
   book: ShareBook;
   transactions: TransactionDto[];
   draft: SettleDraft;
+  settlement?: Settlement;
   groupLocked?: boolean;
   onOpenChange: (open: boolean) => void;
-  onSave: (input: unknown) => Promise<void>;
+  onSave: (input: unknown, id?: string) => Promise<void>;
+  onDelete: (id: string) => Promise<void>;
 }) {
-  const sessionKey = `${open ? "open" : "closed"}:${draft.fromId}:${draft.toId}:${draft.amount}:${draft.groupId}`;
+  const sessionKey = `${open ? "open" : "closed"}:${settlement?.id ?? "new"}:${settlement?.version ?? ""}:${draft.fromId}:${draft.toId}:${draft.amount}:${draft.groupId}`;
   const [session, setSession] = useState(sessionKey);
-  const [defaults, setDefaults] = useState<SettleFormValues>(() => ({
-    fromPersonId: draft.fromId,
-    toPersonId: draft.toId,
-    amount: draft.amount,
-    date: today,
-    groupId: draft.groupId || "none",
-    note: "",
-    transactionId: "none",
-  }));
+  const [defaults, setDefaults] = useState<SettleFormValues>(() => defaultsFor(today, draft, settlement));
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   if (session !== sessionKey) {
     setSession(sessionKey);
     if (open) {
-      setDefaults({
-        fromPersonId: draft.fromId,
-        toPersonId: draft.toId,
-        amount: draft.amount,
-        date: today,
-        groupId: draft.groupId || "none",
-        note: "",
-        transactionId: "none",
-      });
+      setDefaults(defaultsFor(today, draft, settlement));
       setError(null);
       setPending(false);
+      setConfirmDelete(false);
     }
   }
 
@@ -128,8 +142,9 @@ export function SettleDialog({
         groupId: values.groupId === "none" ? null : values.groupId,
         note: values.note,
         transactionId: values.transactionId === "none" ? null : values.transactionId,
-      });
-      toast.success("Settlement recorded");
+        ...(settlement ? { version: settlement.version } : {}),
+      }, settlement?.id);
+      toast.success(settlement ? "Settlement updated" : "Settlement recorded");
       onOpenChange(false);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not record that settlement.");
@@ -150,8 +165,8 @@ export function SettleDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[88dvh] overflow-y-auto sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>Settle up</DialogTitle>
-          <DialogDescription>Record money that changed hands. A linked bank line stays in your personal ledger.</DialogDescription>
+          <DialogTitle>{settlement ? "Edit settlement" : "Settle up"}</DialogTitle>
+          <DialogDescription>{settlement ? "Update the payment details. A linked bank line stays in your personal ledger." : "Record money that changed hands. A linked bank line stays in your personal ledger."}</DialogDescription>
         </DialogHeader>
         <Form {...form}>
           <form className="grid gap-5" noValidate onSubmit={form.handleSubmit(submit)}>
@@ -346,19 +361,62 @@ export function SettleDialog({
               )}
             />
 
+            {settlement ? (
+              <section aria-label="Settlement history" className="rounded-xl bg-secondary/70 px-3 py-2.5 text-xs text-muted-foreground">
+                <p>Added by {settlement.createdByName ?? "Someone"} · {formatAuditDate(settlement.createdAt)}</p>
+                {settlement.version > 1 ? <p className="mt-0.5">Last edited by {settlement.updatedByName ?? "Someone"} · {formatAuditDate(settlement.updatedAt)}</p> : null}
+              </section>
+            ) : null}
+
             {error ? (
               <p role="alert" className="rounded-xl bg-destructive/10 px-3 py-2 text-sm font-medium text-destructive">
                 {error}
               </p>
             ) : null}
 
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-                Cancel
-              </Button>
-              <Button type="submit" disabled={pending}>
-                {pending ? "Saving" : value > 0 ? `Record ${formatNpr(value)}` : "Record payment"}
-              </Button>
+            <DialogFooter className="gap-2 max-sm:flex-col-reverse sm:justify-between">
+              {settlement ? (
+                confirmDelete ? (
+                  <span className="flex gap-2 max-sm:w-full">
+                    <Button
+                      type="button"
+                      variant="destructive"
+                      className="max-sm:flex-1"
+                      disabled={pending}
+                      onClick={() => {
+                        setPending(true);
+                        setError(null);
+                        void onDelete(settlement.id)
+                          .then(() => {
+                            toast.success("Settlement removed");
+                            onOpenChange(false);
+                          })
+                          .catch((caught: unknown) => setError(caught instanceof Error ? caught.message : "Could not remove that settlement."))
+                          .finally(() => setPending(false));
+                      }}
+                    >
+                      {pending ? "Deleting" : "Yes, delete"}
+                    </Button>
+                    <Button type="button" variant="ghost" className="max-sm:flex-1" disabled={pending} onClick={() => setConfirmDelete(false)}>
+                      Keep
+                    </Button>
+                  </span>
+                ) : (
+                  <Button type="button" variant="ghost" className="max-sm:w-full hover:text-destructive" disabled={pending} onClick={() => setConfirmDelete(true)}>
+                    Delete settlement
+                  </Button>
+                )
+              ) : (
+                <span className="max-sm:hidden" />
+              )}
+              <span className="flex gap-2 max-sm:w-full">
+                <Button type="button" variant="outline" className="max-sm:flex-1" onClick={() => onOpenChange(false)}>
+                  Cancel
+                </Button>
+                <Button type="submit" className="max-sm:flex-1" disabled={pending}>
+                  {pending ? "Saving" : settlement ? "Save settlement" : value > 0 ? `Record ${formatNpr(value)}` : "Record payment"}
+                </Button>
+              </span>
             </DialogFooter>
           </form>
         </Form>

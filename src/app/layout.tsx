@@ -79,7 +79,7 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   // The app themes by class with dark as default and ignores the OS setting, so the browser
   // chrome follows the default; the app should rewrite this tag when the user switches theme.
-  themeColor: "#0a0a0d",
+  themeColor: "#000000",
   colorScheme: "dark light",
   width: "device-width",
   initialScale: 1,

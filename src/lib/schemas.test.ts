@@ -52,6 +52,17 @@ test("shared expense ids and split values are bounded", () => {
   assert.equal(expenseWriteSchema.safeParse(expense).success, true);
   assert.equal(expenseWriteSchema.safeParse({ ...expense, paidById: "x".repeat(101) }).success, false);
   assert.equal(expenseWriteSchema.safeParse({ ...expense, participants: [{ personId: "p", weight: 1e9 }] }).success, false);
+  assert.equal(expenseWriteSchema.safeParse({ ...expense, version: 1 }).success, true);
+  assert.equal(expenseWriteSchema.safeParse({ ...expense, version: 0 }).success, false);
+  assert.equal(expenseWriteSchema.safeParse({ ...expense, version: 1.5 }).success, false);
+});
+
+test("settlement versions are optional positive integers", () => {
+  const settlement = { fromPersonId: "a", toPersonId: "b", amount: 100, date: "2026-10-06" };
+  assert.equal(settlementWriteSchema.safeParse(settlement).success, true);
+  assert.equal(settlementWriteSchema.safeParse({ ...settlement, version: 2 }).success, true);
+  assert.equal(settlementWriteSchema.safeParse({ ...settlement, version: -1 }).success, false);
+  assert.equal(settlementWriteSchema.safeParse({ ...settlement, version: 2.1 }).success, false);
 });
 
 test("ledger filters accept blanks and reject malformed values", () => {

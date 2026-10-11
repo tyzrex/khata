@@ -5,6 +5,18 @@ export const DEFAULT_ACCOUNTS = ACCOUNTS.map((name, index) => ({ name, sortOrder
 export const TX_TYPES = ["expense", "income", "transfer"] as const;
 export const CATEGORY_KINDS = ["expense", "income", "transfer", "any"] as const;
 
+/**
+ * Categories for shared expenses.
+ *
+ * Deliberately a fixed vocabulary rather than the owner's personal ledger
+ * categories: a joined member can read every expense in the group, so reusing
+ * the owner's private category list would leak what they spend on into a book
+ * they are only part of. Seven fixed values cost almost nothing and keep the
+ * shared book self-contained. `null` on a row means "not categorised yet".
+ */
+export const SHARED_CATEGORIES = ["Food", "Transport", "Stay", "Shopping", "Bills", "Entertainment", "Other"] as const;
+export type SharedCategory = (typeof SHARED_CATEGORIES)[number];
+
 export type AccountName = (typeof ACCOUNTS)[number];
 export type TxType = (typeof TX_TYPES)[number];
 export type CategoryKind = (typeof CATEGORY_KINDS)[number];

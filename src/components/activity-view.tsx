@@ -1,8 +1,6 @@
 "use client";
 
 import { ArrowRightLeft, Landmark, Receipt } from "lucide-react";
-import { toast } from "@/lib/status";
-import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/page-header";
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
 import type { ShareBook } from "@/db/shares";
@@ -39,11 +37,11 @@ function groupByDay(items: Item[]) {
 export function ActivityView({
   book,
   onEditExpense,
-  onDeleteSettlement,
+  onEditSettlement,
 }: {
   book: ShareBook;
   onEditExpense: (expense: Expense) => void;
-  onDeleteSettlement: (id: string) => Promise<void>;
+  onEditSettlement: (settlement: Settlement) => void;
 }) {
   const dates = useDateFormat();
   const items: Item[] = [
@@ -73,7 +71,13 @@ export function ActivityView({
                 </span>
               </h2>
               <ul className="divide-y divide-border rounded-3xl bg-card p-1.5 shadow-card">
-                {day.items.map((item) => (item.kind === "expense" ? <ExpenseRow key={item.id} expense={item.expense} selfId={book.self.id} onOpen={() => onEditExpense(item.expense)} /> : <SettlementRow key={item.id} settlement={item.settlement} selfId={book.self.id} onDelete={onDeleteSettlement} />))}
+                {day.items.map((item) =>
+                  item.kind === "expense" ? (
+                    <ExpenseRow key={item.id} expense={item.expense} selfId={book.self.id} onOpen={() => onEditExpense(item.expense)} />
+                  ) : (
+                    <SettlementRow key={item.id} settlement={item.settlement} selfId={book.self.id} onOpen={() => onEditSettlement(item.settlement)} />
+                  ),
+                )}
               </ul>
             </li>
           ))}
@@ -112,49 +116,40 @@ function ExpenseRow({ expense, selfId, onOpen }: { expense: Expense; selfId: str
   );
 }
 
-function SettlementRow({ settlement, selfId, onDelete }: { settlement: Settlement; selfId: string; onDelete: (id: string) => Promise<void> }) {
+function SettlementRow({ settlement, selfId, onOpen }: { settlement: Settlement; selfId: string; onOpen: () => void }) {
   const bank = settlement.transaction;
   const from = settlement.fromPersonId === selfId ? "You" : settlement.fromName;
   const to = settlement.toPersonId === selfId ? "you" : settlement.toName;
   return (
-    <li className="flex items-start gap-3 px-2.5 py-2.5">
-      <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-credit/12 text-credit" aria-hidden>
-        <ArrowRightLeft className="size-4" />
-      </span>
-      <span className="min-w-0 flex-1">
-        <span className="block truncate text-sm font-semibold text-display">
-          {from} paid {to}
+    <li>
+      <button
+        type="button"
+        className="flex w-full items-start gap-3 rounded-2xl px-2.5 py-2.5 text-left transition-colors duration-200 outline-none hover:bg-secondary focus-visible:ring-2 focus-visible:ring-ring"
+        onClick={onOpen}
+      >
+        <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-credit/12 text-credit" aria-hidden>
+          <ArrowRightLeft className="size-4" />
         </span>
-        <span className="mt-0.5 block truncate text-xs text-muted-foreground">
-          Settlement{settlement.groupName ? ` · ${settlement.groupName}` : ""}
-        </span>
-        {bank ? (
-          <span className="mt-1 flex items-center gap-1.5 text-xs text-disabled">
-            <Landmark className="size-3 shrink-0" aria-hidden />
-            <span className="truncate">
-              {bank.merchant} {formatNpr(bank.amount)}
-              {bank.amount !== settlement.amount ? ` · ${formatNpr(Math.abs(bank.amount - settlement.amount))} apart` : ""}
-            </span>
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-sm font-semibold text-display">
+            {from} paid {to}
           </span>
-        ) : null}
-        {settlement.note ? <span className="mt-1 block text-xs leading-5 text-muted-foreground">{settlement.note}</span> : null}
-      </span>
-      <span className="flex shrink-0 flex-col items-end gap-0.5">
-        <span className="figure text-sm text-credit">{formatNpr(settlement.amount)}</span>
-        <Button
-          type="button"
-          variant="ghost"
-          size="xs"
-          className="min-h-0 text-xs hover:text-destructive"
-          onClick={() => {
-            void onDelete(settlement.id).catch((caught: unknown) => {
-              toast.error(caught instanceof Error ? caught.message : "Could not remove that settlement.");
-            });
-          }}
-        >
-          Remove
-        </Button>
-      </span>
+          <span className="mt-0.5 block truncate text-xs text-muted-foreground">
+            Settlement{settlement.groupName ? ` · ${settlement.groupName}` : ""}
+          </span>
+          {bank ? (
+            <span className="mt-1 flex items-center gap-1.5 text-xs text-disabled">
+              <Landmark className="size-3 shrink-0" aria-hidden />
+              <span className="truncate">
+                {bank.merchant} {formatNpr(bank.amount)}
+                {bank.amount !== settlement.amount ? ` · ${formatNpr(Math.abs(bank.amount - settlement.amount))} apart` : ""}
+              </span>
+            </span>
+          ) : null}
+          {settlement.note ? <span className="mt-1 block text-xs leading-5 text-muted-foreground">{settlement.note}</span> : null}
+        </span>
+        <span className="figure shrink-0 text-sm text-credit">{formatNpr(settlement.amount)}</span>
+      </button>
     </li>
   );
 }

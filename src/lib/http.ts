@@ -1,6 +1,6 @@
 import { unstable_rethrow } from "next/navigation";
 import { connection } from "next/server";
-import { NotFoundError } from "@/db/shares";
+import { ConflictError, NotFoundError } from "@/db/shares";
 import { ShareInputError } from "@/lib/split";
 
 /** Largest JSON body any route accepts. Imports cap at 500 rows, well under this. */
@@ -63,6 +63,7 @@ function pgCode(error: unknown): string | undefined {
 export function shareError(error: unknown) {
   if (error instanceof ShareInputError) return badRequest(error.message);
   if (error instanceof NotFoundError) return Response.json({ error: error.message }, { status: 404 });
+  if (error instanceof ConflictError) return Response.json({ error: error.message }, { status: 409 });
   // Two writes raced past the application checks and hit a unique constraint (a bank
   // line linked twice, a person added twice). The database kept it consistent.
   if (pgCode(error) === "23505") return Response.json({ error: "That was just changed elsewhere. Refresh and try again." }, { status: 409 });

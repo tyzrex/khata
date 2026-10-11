@@ -1,11 +1,13 @@
 "use client";
 
 import { cn } from "cn";
-import { ArrowLeft, HandCoins, Pencil, Plus, Send } from "lucide-react";
+import { ArrowLeft, HandCoins, LogOut, Pencil, Plus, Send } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useState } from "react";
 import { ExpenseFeed } from "@/components/splits/expense-feed";
 import { feedOf, memberLines, SETTLED, totalsFor, type Expense, type Person, type Settlement } from "@/components/splits/ledger-math";
+import { toast } from "@/lib/status";
 import { PaymentCard } from "@/components/splits/pay-card";
 import { EmptyNote, GroupTile, PersonAvatar, SplitCard, SplitCardHead } from "@/components/splits-ui";
 import { Button } from "@/components/ui/button";
@@ -85,19 +87,27 @@ export function GroupDetail({
   onSettle,
   onAddExpense,
   onEditExpense,
+  onEditSettlement,
   onInvite,
   onEdit,
+  onLeaveGroup,
 }: {
   group: GroupView;
   backHref: string;
   onSettle: (debt: Debt, groupId: string) => void;
   onAddExpense: () => void;
   onEditExpense: (expense: Expense) => void;
+  onEditSettlement: (settlement: Settlement) => void;
   /** Only for groups you own. */
   onInvite?: () => void;
   onEdit?: () => void;
+  /** Only for groups you joined. */
+  onLeaveGroup?: () => Promise<void>;
 }) {
   const [tab, setTab] = useTab();
+  const [confirmingLeave, setConfirmingLeave] = useState(false);
+  const [leaving, setLeaving] = useState(false);
+  const [leaveError, setLeaveError] = useState<string | null>(null);
   const { youOwe, youAreOwed } = group.balances;
   const yourDebts = [...youOwe, ...youAreOwed];
   const owner = group.entry.kind === "owned" ? "You manage this group" : `Owned by ${group.entry.group.ownerName}`;
@@ -107,6 +117,20 @@ export function GroupDetail({
     // One open balance: go straight to paying it. Several: show who, so the person picks.
     if (yourDebts.length === 1) onSettle(yourDebts[0]!, group.id);
     else setTab("balances");
+  }
+
+  async function leaveGroup() {
+    if (!onLeaveGroup) return;
+    setLeaving(true);
+    setLeaveError(null);
+    try {
+      await onLeaveGroup();
+      toast.success(`Left ${group.name}`);
+    } catch (caught) {
+      setLeaveError(caught instanceof Error ? caught.message : "Could not leave that group.");
+    } finally {
+      setLeaving(false);
+    }
   }
 
   return (
@@ -134,6 +158,22 @@ export function GroupDetail({
               <Button type="button" variant="outline" size="icon-sm" aria-label={`Edit ${group.name}`} title="Edit group" onClick={onEdit}>
                 <Pencil className="size-4" />
               </Button>
+            ) : onLeaveGroup ? (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="shrink-0 text-muted-foreground"
+                aria-expanded={confirmingLeave}
+                aria-controls="leave-group-confirmation"
+                onClick={() => {
+                  setConfirmingLeave((current) => !current);
+                  setLeaveError(null);
+                }}
+              >
+                <LogOut className="size-4" />
+                Leave group
+              </Button>
             ) : null}
           </div>
 
@@ -145,6 +185,26 @@ export function GroupDetail({
               </li>
             ))}
           </ul>
+
+          {confirmingLeave && onLeaveGroup ? (
+            <div id="leave-group-confirmation" className="mt-4 rounded-xl bg-secondary px-3 py-3">
+              <p className="text-sm font-semibold text-display">Leave {group.name}?</p>
+              <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                {yourDebts.length
+                  ? "Settle every open balance first. This keeps money owed to you or by you from becoming inaccessible."
+                  : "The group keeps its expense and payment history. You will lose access to the group and its future updates."}
+              </p>
+              {leaveError ? <p role="alert" className="mt-2 text-xs font-medium text-destructive">{leaveError}</p> : null}
+              <div className="mt-3 flex flex-wrap justify-end gap-2">
+                <Button type="button" variant="ghost" size="sm" disabled={leaving} onClick={() => setConfirmingLeave(false)}>
+                  Keep access
+                </Button>
+                <Button type="button" variant="destructive" size="sm" disabled={leaving || yourDebts.length > 0} onClick={() => void leaveGroup()}>
+                  {leaving ? "Leaving" : yourDebts.length ? "Balance still open" : "Leave group"}
+                </Button>
+              </div>
+            </div>
+          ) : null}
         </div>
 
         <div className={cn("flex flex-col gap-4 border-t border-border px-4 py-4 sm:flex-row sm:items-end sm:justify-between sm:px-5 2xl:px-6", settled ? "bg-secondary/50" : group.net > 0 ? "bg-credit/6" : "bg-warning/6")}>
@@ -202,7 +262,7 @@ export function GroupDetail({
       </SplitCard>
 
       <div role="tabpanel" id={`group-panel-${tab}`} aria-labelledby={`group-tab-${tab}`} className="min-w-0">
-        {tab === "expenses" ? <ExpensesPanel group={group} onEditExpense={onEditExpense} onAddExpense={onAddExpense} /> : null}
+        {tab === "expenses" ? <ExpensesPanel group={group} onEditExpense={onEditExpense} onEditSettlement={onEditSettlement} onAddExpense={onAddExpense} /> : null}
         {tab === "balances" ? <BalancesPanel group={group} onSettle={onSettle} /> : null}
         {tab === "totals" ? <TotalsPanel group={group} /> : null}
       </div>
@@ -210,7 +270,17 @@ export function GroupDetail({
   );
 }
 
-function ExpensesPanel({ group, onEditExpense, onAddExpense }: { group: GroupView; onEditExpense: (expense: Expense) => void; onAddExpense: () => void }) {
+function ExpensesPanel({
+  group,
+  onEditExpense,
+  onEditSettlement,
+  onAddExpense,
+}: {
+  group: GroupView;
+  onEditExpense: (expense: Expense) => void;
+  onEditSettlement: (settlement: Settlement) => void;
+  onAddExpense: () => void;
+}) {
   const feed = feedOf(group.expenses, group.settlements);
   return (
     <SplitCard>
@@ -227,7 +297,7 @@ function ExpensesPanel({ group, onEditExpense, onAddExpense }: { group: GroupVie
           </Button>
         </div>
       ) : (
-        <ExpenseFeed items={feed} selfId={group.selfId} hideGroup={group.name} onEditExpense={onEditExpense} />
+        <ExpenseFeed items={feed} selfId={group.selfId} hideGroup={group.name} onEditExpense={onEditExpense} onEditSettlement={onEditSettlement} />
       )}
     </SplitCard>
   );

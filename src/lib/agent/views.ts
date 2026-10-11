@@ -70,6 +70,7 @@ export type ExpenseView = {
   groupId: string | null;
   paidBy: string;
   splitMode: string;
+  category: string | null;
   shares: { name: string; amount: number }[];
   yourShare: number;
   note: string;
@@ -96,6 +97,7 @@ function expenseView(expense: ShareBook["expenses"][number], selfId: string): Ex
     groupId: expense.groupId,
     paidBy,
     splitMode: expense.splitMode,
+    category: expense.category,
     shares: expense.splits.map((split) => ({ name: label(split.personId, split.name), amount: split.amount })),
     yourShare,
     note: expense.note,

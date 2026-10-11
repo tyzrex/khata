@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { SHARED_CATEGORIES } from "@/lib/constants";
 import { dateSchema, issueMessage, MAX_AMOUNT, moneySchema } from "@/lib/schemas";
 import { SPLIT_MODES } from "@/lib/split";
 
@@ -25,6 +26,8 @@ export const expenseWriteSchema = z.object({
   paidById: id,
   groupId: id.nullable().optional(),
   splitMode: z.enum(SPLIT_MODES),
+  /** Fixed shared vocabulary, not the owner's personal ledger categories. */
+  category: z.enum(SHARED_CATEGORIES).nullish(),
   note: z.string().max(500).optional().default(""),
   participants: z
     .array(
@@ -37,6 +40,7 @@ export const expenseWriteSchema = z.object({
     .min(1)
     .max(40),
   transactionIds: z.array(id).max(20).optional().default([]),
+  version: z.number().int().positive().optional(),
 });
 
 export const settlementWriteSchema = z.object({
@@ -47,6 +51,7 @@ export const settlementWriteSchema = z.object({
   groupId: id.nullable().optional(),
   note: z.string().max(500).optional().default(""),
   transactionId: id.nullable().optional(),
+  version: z.number().int().positive().optional(),
 });
 
 export function shareIssue(error: z.ZodError) {

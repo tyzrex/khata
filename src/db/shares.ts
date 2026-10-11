@@ -1,4 +1,4 @@
-import { and, eq, inArray, notInArray } from "drizzle-orm";
+import { and, desc, eq, inArray, notInArray, sql } from "drizzle-orm";
 import { getDb } from "@/db/client";
 import {
   expenseTransactions,
@@ -7,12 +7,14 @@ import {
   groups,
   people,
   settlements,
+  sharedExpenseRevisions,
   sharedExpenses,
   sharedSplits,
   transactions,
   user,
 } from "@/db/schema";
 import { sampleExpenses, sampleGroup, samplePeople, sampleSettlements } from "@/lib/sample-book";
+import type { SharedActivity } from "@/db/push-activity";
 import {
   buildSplits,
   netsFromDebts,
@@ -28,6 +30,13 @@ export class NotFoundError extends Error {
   constructor(message: string) {
     super(message);
     this.name = "NotFoundError";
+  }
+}
+
+export class ConflictError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ConflictError";
   }
 }
 
@@ -55,7 +64,24 @@ export type BalanceScope = {
   simplified: DebtDto[];
 };
 
-type ExpenseDto = {
+export type ExpenseRevisionSnapshot = {
+  description: string;
+  amount: number;
+  date: string;
+  paidByName: string;
+  splitMode: string;
+  note: string;
+};
+
+export type ExpenseRevisionDto = {
+  actorName: string;
+  action: "updated" | "deleted";
+  version: number;
+  createdAt: string;
+  snapshot: ExpenseRevisionSnapshot;
+};
+
+export type ExpenseDto = {
   id: string;
   groupId: string | null;
   groupName: string | null;
@@ -65,12 +91,20 @@ type ExpenseDto = {
   paidById: string;
   paidByName: string;
   splitMode: SplitMode;
+  /** One of SHARED_CATEGORIES, or null when unset. */
+  category: string | null;
   note: string;
+  createdByName: string | null;
+  updatedByName: string | null;
+  version: number;
+  createdAt: string;
+  updatedAt: string;
+  revisions: ExpenseRevisionDto[];
   splits: { personId: string; name: string; amount: number; weight: number | null }[];
   transactionIds: string[];
 };
 
-type SettlementDto = {
+export type SettlementDto = {
   id: string;
   groupId: string | null;
   groupName: string | null;
@@ -81,6 +115,11 @@ type SettlementDto = {
   amount: number;
   date: string;
   note: string;
+  createdByName: string | null;
+  updatedByName: string | null;
+  version: number;
+  createdAt: string;
+  updatedAt: string;
   transaction: { id: string; merchant: string; amount: number; account: string; date: string; type: string } | null;
 };
 
@@ -125,6 +164,29 @@ export type ShareBook = {
 
 function nameOf(list: PersonDto[], id: string) {
   return list.find((person) => person.id === id)?.name ?? "Someone";
+}
+
+function iso(value: Date) {
+  return value.toISOString();
+}
+
+async function loadUserNames(ids: (string | null)[]) {
+  const unique = [...new Set(ids.filter((id): id is string => Boolean(id)))];
+  if (!unique.length) return new Map<string, string>();
+  const rows = await getDb().select({ id: user.id, name: user.name }).from(user).where(inArray(user.id, unique));
+  return new Map(rows.map((row) => [row.id, row.name]));
+}
+
+function revisionsFor(expenseId: string, rows: (typeof sharedExpenseRevisions.$inferSelect)[]): ExpenseRevisionDto[] {
+  return rows
+    .filter((revision) => revision.expenseId === expenseId)
+    .map((revision) => ({
+      actorName: revision.actorName,
+      action: revision.action as ExpenseRevisionDto["action"],
+      version: revision.version,
+      createdAt: iso(revision.createdAt),
+      snapshot: revision.snapshot,
+    }));
 }
 
 function scopeFor(debts: { fromId: string; toId: string; amount: number }[], selfId: string, roster: PersonDto[], personIds: string[]): BalanceScope {
@@ -195,10 +257,21 @@ async function loadJoinedGroup(userId: string, groupId: string, ownerId: string)
     .where(and(eq(sharedExpenses.userId, ownerId), eq(sharedExpenses.groupId, groupId)));
   const expenseIds = expenseRows.map((expense) => expense.id);
   const splitRows = expenseIds.length ? await db.select().from(sharedSplits).where(inArray(sharedSplits.expenseId, expenseIds)) : [];
+  const revisionRows = expenseIds.length
+    ? await db
+        .select()
+        .from(sharedExpenseRevisions)
+        .where(and(eq(sharedExpenseRevisions.ownerUserId, ownerId), inArray(sharedExpenseRevisions.expenseId, expenseIds)))
+        .orderBy(desc(sharedExpenseRevisions.createdAt), desc(sharedExpenseRevisions.version))
+    : [];
   const settlementRows = await db
     .select()
     .from(settlements)
     .where(and(eq(settlements.userId, ownerId), eq(settlements.groupId, groupId)));
+  const accountNames = await loadUserNames([
+    ...expenseRows.flatMap((expense) => [expense.createdByUserId, expense.updatedByUserId]),
+    ...settlementRows.flatMap((settlement) => [settlement.createdByUserId, settlement.updatedByUserId]),
+  ]);
 
   const debts = pairwiseDebts(
     expenseRows.map((expense) => ({
@@ -246,7 +319,14 @@ async function loadJoinedGroup(userId: string, groupId: string, ownerId: string)
         paidById: expense.paidById,
         paidByName: nameOf(roster, expense.paidById),
         splitMode: expense.splitMode as SplitMode,
+        category: expense.category,
         note: expense.note,
+        createdByName: expense.createdByUserId ? accountNames.get(expense.createdByUserId) ?? null : null,
+        updatedByName: expense.updatedByUserId ? accountNames.get(expense.updatedByUserId) ?? null : null,
+        version: expense.version,
+        createdAt: iso(expense.createdAt),
+        updatedAt: iso(expense.updatedAt),
+        revisions: revisionsFor(expense.id, revisionRows),
         splits: splitRows
           .filter((split) => split.expenseId === expense.id)
           .map((split) => ({ personId: split.personId, name: nameOf(roster, split.personId), amount: split.amount, weight: split.weight })),
@@ -265,6 +345,11 @@ async function loadJoinedGroup(userId: string, groupId: string, ownerId: string)
         amount: settlement.amount,
         date: settlement.date,
         note: settlement.note,
+        createdByName: settlement.createdByUserId ? accountNames.get(settlement.createdByUserId) ?? null : null,
+        updatedByName: settlement.updatedByUserId ? accountNames.get(settlement.updatedByUserId) ?? null : null,
+        version: settlement.version,
+        createdAt: iso(settlement.createdAt),
+        updatedAt: iso(settlement.updatedAt),
         transaction: null,
       }))
       .sort((a, b) => b.date.localeCompare(a.date) || b.id.localeCompare(a.id)),
@@ -284,10 +369,21 @@ export async function getShareBook(userId: string): Promise<ShareBook> {
   const expenseRows = await db.select().from(sharedExpenses).where(eq(sharedExpenses.userId, userId));
   const expenseIds = expenseRows.map((expense) => expense.id);
   const splitRows = expenseIds.length ? await db.select().from(sharedSplits).where(inArray(sharedSplits.expenseId, expenseIds)) : [];
+  const revisionRows = expenseIds.length
+    ? await db
+        .select()
+        .from(sharedExpenseRevisions)
+        .where(and(eq(sharedExpenseRevisions.ownerUserId, userId), inArray(sharedExpenseRevisions.expenseId, expenseIds)))
+        .orderBy(desc(sharedExpenseRevisions.createdAt), desc(sharedExpenseRevisions.version))
+    : [];
   const linkRows = expenseIds.length
     ? await db.select().from(expenseTransactions).where(inArray(expenseTransactions.expenseId, expenseIds))
     : [];
   const settlementRows = await db.select().from(settlements).where(eq(settlements.userId, userId));
+  const accountNames = await loadUserNames([
+    ...expenseRows.flatMap((expense) => [expense.createdByUserId, expense.updatedByUserId]),
+    ...settlementRows.flatMap((settlement) => [settlement.createdByUserId, settlement.updatedByUserId]),
+  ]);
   const linkedIds = [
     ...new Set([
       ...linkRows.map((link) => link.transactionId),
@@ -352,7 +448,14 @@ export async function getShareBook(userId: string): Promise<ShareBook> {
       paidById: expense.paidById,
       paidByName: nameOf(roster, expense.paidById),
       splitMode: expense.splitMode as SplitMode,
+      category: expense.category,
       note: expense.note,
+      createdByName: expense.createdByUserId ? accountNames.get(expense.createdByUserId) ?? null : null,
+      updatedByName: expense.updatedByUserId ? accountNames.get(expense.updatedByUserId) ?? null : null,
+      version: expense.version,
+      createdAt: iso(expense.createdAt),
+      updatedAt: iso(expense.updatedAt),
+      revisions: revisionsFor(expense.id, revisionRows),
       splits: splitRows
         .filter((split) => split.expenseId === expense.id)
         .map((split) => ({
@@ -379,6 +482,11 @@ export async function getShareBook(userId: string): Promise<ShareBook> {
         amount: settlement.amount,
         date: settlement.date,
         note: settlement.note,
+        createdByName: settlement.createdByUserId ? accountNames.get(settlement.createdByUserId) ?? null : null,
+        updatedByName: settlement.updatedByUserId ? accountNames.get(settlement.updatedByUserId) ?? null : null,
+        version: settlement.version,
+        createdAt: iso(settlement.createdAt),
+        updatedAt: iso(settlement.updatedAt),
         transaction: bank
           ? { id: bank.id, merchant: bank.merchant, amount: bank.amount, account: bank.account, date: bank.date, type: bank.type }
           : null,
@@ -596,6 +704,27 @@ export async function updateGroup(userId: string, id: string, input: { name?: st
   });
 }
 
+export async function leaveGroup(userId: string, groupId: string) {
+  const [access] = await getDb()
+    .select({ ownerUserId: groupUserAccess.ownerUserId })
+    .from(groupUserAccess)
+    .where(and(eq(groupUserAccess.groupId, groupId), eq(groupUserAccess.userId, userId), eq(groupUserAccess.role, "member")))
+    .limit(1);
+  if (!access) throw new NotFoundError("That group membership was not found.");
+
+  const group = await loadJoinedGroup(userId, groupId, access.ownerUserId);
+  if (!group) throw new NotFoundError("That group membership was not found.");
+  if (group.balances.youOwe.length || group.balances.youAreOwed.length) {
+    throw new ShareInputError("Settle your open balance before leaving this group.");
+  }
+
+  const [removed] = await getDb()
+    .delete(groupUserAccess)
+    .where(and(eq(groupUserAccess.groupId, groupId), eq(groupUserAccess.userId, userId), eq(groupUserAccess.role, "member")))
+    .returning({ groupId: groupUserAccess.groupId });
+  if (!removed) throw new NotFoundError("That group membership was not found.");
+}
+
 export async function deleteGroup(userId: string, id: string) {
   const db = getDb();
   const [group] = await db
@@ -672,6 +801,48 @@ async function rowScope(actorId: string, row: { userId: string; groupId: string 
   return access && access.ownerUserId === row.userId ? { ownerId: row.userId, isOwner: false } : null;
 }
 
+async function mutationScope(
+  actorId: string,
+  row: { userId: string; groupId: string | null; createdByUserId: string | null },
+): Promise<Scope | null> {
+  const scope = await rowScope(actorId, row);
+  if (!scope || (!scope.isOwner && row.createdByUserId !== actorId)) return null;
+  return scope;
+}
+
+async function expenseRevision(
+  actorId: string,
+  expense: typeof sharedExpenses.$inferSelect,
+  action: "updated" | "deleted",
+) {
+  const [payer] = await getDb()
+    .select({ name: people.name, isSelf: people.isSelf })
+    .from(people)
+    .where(and(eq(people.id, expense.paidById), eq(people.userId, expense.userId)))
+    .limit(1);
+  const names = await loadUserNames([actorId, expense.userId]);
+  const paidByName = payer?.isSelf ? names.get(expense.userId) ?? payer.name : payer?.name ?? "Someone";
+  return {
+    id: crypto.randomUUID(),
+    expenseId: expense.id,
+    ownerUserId: expense.userId,
+    groupId: expense.groupId,
+    actorUserId: actorId,
+    actorName: names.get(actorId) ?? "Someone",
+    action,
+    version: expense.version,
+    snapshot: {
+      description: expense.description,
+      amount: expense.amount,
+      date: expense.date,
+      paidByName,
+      splitMode: expense.splitMode,
+      category: expense.category,
+      note: expense.note,
+    },
+  };
+}
+
 async function writeExpense(
   actorId: string,
   id: string,
@@ -682,20 +853,34 @@ async function writeExpense(
     paidById: string;
     groupId?: string | null;
     splitMode: SplitMode;
+    category?: string | null;
     note: string;
     participants: { personId: string; amount?: number; weight?: number }[];
     transactionIds: string[];
+    version?: number;
   },
-  existing: { userId: string; groupId: string | null } | null,
+  existing: typeof sharedExpenses.$inferSelect | null,
 ) {
   const personIds = [input.paidById, ...input.participants.map((participant) => participant.personId)];
   let scope: Scope;
   if (existing) {
-    const current = await rowScope(actorId, existing);
+    const current = await mutationScope(actorId, existing);
     if (!current) throw new NotFoundError("That shared expense is not in the book.");
-    if (current.isOwner) scope = await groupScope(actorId, input.groupId);
-    else if ((input.groupId ?? null) === existing.groupId) scope = current;
-    else throw new ShareInputError("Only the group owner can move an expense to another group.");
+    if (input.version === undefined) throw new ShareInputError("Include the current version to update this shared expense.");
+    if (input.version !== existing.version) {
+      throw new ConflictError("This shared expense changed since you opened it. Refresh it and try again.");
+    }
+    if (current.isOwner) {
+      const requested = await groupScope(actorId, input.groupId);
+      if (!requested.isOwner || requested.ownerId !== existing.userId) {
+        throw new ShareInputError("An expense can only be moved within its owner's ledger.");
+      }
+      scope = requested;
+    } else if ((input.groupId ?? null) === existing.groupId) {
+      scope = current;
+    } else {
+      throw new ShareInputError("Only the group owner can move an expense to another group.");
+    }
   } else {
     scope = await groupScope(actorId, input.groupId);
   }
@@ -711,9 +896,11 @@ async function writeExpense(
     participants: input.participants,
   });
   const links = scope.isOwner ? await assertExpenseLinks(scope.ownerId, input.transactionIds, existing ? id : undefined) : [];
+  const revision = existing ? await expenseRevision(actorId, existing, "updated") : null;
   const now = new Date();
   await getDb().transaction(async (tx) => {
     if (existing) {
+      await tx.insert(sharedExpenseRevisions).values(revision!);
       const [updated] = await tx
         .update(sharedExpenses)
         .set({
@@ -723,12 +910,15 @@ async function writeExpense(
           amount: input.amount,
           paidById: input.paidById,
           splitMode: input.splitMode,
+          category: input.category ?? null,
           note: input.note,
+          updatedByUserId: actorId,
+          version: sql`${sharedExpenses.version} + 1`,
           updatedAt: now,
         })
-        .where(and(eq(sharedExpenses.id, id), eq(sharedExpenses.userId, existing.userId)))
+        .where(and(eq(sharedExpenses.id, id), eq(sharedExpenses.userId, existing.userId), eq(sharedExpenses.version, input.version!)))
         .returning();
-      if (!updated) throw new NotFoundError("That shared expense is not in the book.");
+      if (!updated) throw new ConflictError("This shared expense changed since you opened it. Refresh it and try again.");
       await tx.delete(sharedSplits).where(eq(sharedSplits.expenseId, id));
       if (scope.isOwner) await tx.delete(expenseTransactions).where(eq(expenseTransactions.expenseId, id));
     } else {
@@ -736,12 +926,15 @@ async function writeExpense(
         id,
         userId: scope.ownerId,
         groupId: input.groupId ?? null,
+        createdByUserId: actorId,
+        updatedByUserId: actorId,
         description: input.description,
         date: input.date,
         amount: input.amount,
         currency: "NPR",
         paidById: input.paidById,
         splitMode: input.splitMode,
+        category: input.category ?? null,
         note: input.note,
       });
     }
@@ -762,13 +955,191 @@ async function writeExpense(
 
 type ExpenseInput = Parameters<typeof writeExpense>[2];
 
+export type SharedWriteActivity =
+  | {
+      kind: "expense";
+      action: "added" | "updated" | "deleted";
+      expenseId: string;
+    }
+  | {
+      kind: "settlement";
+      action: "recorded" | "updated" | "deleted";
+      settlementId: string;
+    };
+
+/**
+ * Notification detail for a shared write, read after the write committed: the
+ * recipient accounts plus the rendered activity (actor name, deep-link URL,
+ * dedupe tag). Routes pass the result straight to `notifySharedWrite`.
+ *
+ * Reads post-commit so creates, version-checked updates, and deletes all share
+ * one path; a row that no longer resolves (deleted, or a join the owner never
+ * sees as their own group) yields null and the route skips the push.
+ */
+export async function describeSharedWrite(
+  actorId: string,
+  activity: SharedWriteActivity,
+): Promise<{ actorId: string; ownerId: string; groupId: string | null; personIds: string[]; activity: SharedActivity } | null> {
+  if (activity.kind === "expense") return describeExpenseWrite(actorId, activity.expenseId, activity.action);
+  return describeSettlementWrite(actorId, activity.settlementId, activity.action);
+}
+
+async function describeExpenseWrite(
+  actorId: string,
+  expenseId: string,
+  action: "added" | "updated" | "deleted",
+): Promise<{ actorId: string; ownerId: string; groupId: string | null; personIds: string[]; activity: SharedActivity } | null> {
+  if (action === "deleted") return describeDeletedExpense(actorId, expenseId);
+  const [expense] = await getDb().select().from(sharedExpenses).where(eq(sharedExpenses.id, expenseId)).limit(1);
+  if (!expense) return null;
+  const group = expense.groupId ? await groupLabel(expense.userId, expense.groupId) : null;
+  if (expense.groupId && !group) return null;
+  const url = writeUrl("expense", group);
+  const [actorName, splits] = await Promise.all([
+    displayName(actorId),
+    getDb().select({ personId: sharedSplits.personId }).from(sharedSplits).where(eq(sharedSplits.expenseId, expenseId)),
+  ]);
+  return {
+    actorId,
+    ownerId: expense.userId,
+    groupId: expense.groupId,
+    personIds: [...new Set([expense.paidById, ...splits.map((split) => split.personId)])],
+    activity: {
+      kind: "expense",
+      action,
+      actorName,
+      description: expense.description,
+      amount: expense.amount,
+      title: group?.title ?? "Shared expense",
+      url,
+      tag: `khata-expense-${expenseId}`,
+    },
+  };
+}
+
+/** Deletes remove the row, so rebuild the push from the latest audit snapshot. */
+async function describeDeletedExpense(
+  actorId: string,
+  expenseId: string,
+): Promise<{ actorId: string; ownerId: string; groupId: string | null; personIds: string[]; activity: SharedActivity } | null> {
+  const [revision] = await getDb()
+    .select()
+    .from(sharedExpenseRevisions)
+    .where(eq(sharedExpenseRevisions.expenseId, expenseId))
+    .orderBy(desc(sharedExpenseRevisions.createdAt))
+    .limit(1);
+  if (!revision || revision.action !== "deleted") return null;
+  const group = revision.groupId ? await groupLabel(revision.ownerUserId, revision.groupId) : null;
+  if (revision.groupId && !group) return null;
+  const url = writeUrl("expense", group);
+  const actorName = await displayName(actorId);
+  return {
+    actorId,
+    ownerId: revision.ownerUserId,
+    groupId: revision.groupId,
+    personIds: await expenseSnapshotPersonIds(revision.ownerUserId, revision.groupId),
+    activity: {
+      kind: "expense",
+      action: "deleted",
+      actorName,
+      description: revision.snapshot.description,
+      amount: revision.snapshot.amount,
+      title: group?.title ?? "Shared expense",
+      url,
+      tag: `khata-expense-${expenseId}`,
+    },
+  };
+}
+
+async function describeSettlementWrite(
+  actorId: string,
+  settlementId: string,
+  action: "recorded" | "updated" | "deleted",
+): Promise<{ actorId: string; ownerId: string; groupId: string | null; personIds: string[]; activity: SharedActivity } | null> {
+  const [settlement] = await getDb().select().from(settlements).where(eq(settlements.id, settlementId)).limit(1);
+  // Settlements keep no audit trail, so a delete has nothing to describe.
+  if (!settlement) return null;
+  const group = settlement.groupId ? await groupLabel(settlement.userId, settlement.groupId) : null;
+  if (settlement.groupId && !group) return null;
+  const url = writeUrl("settlement", group);
+  const [actorName, payerName, receiverName] = await Promise.all([
+    displayName(actorId),
+    personLabel(settlement.userId, settlement.fromPersonId),
+    personLabel(settlement.userId, settlement.toPersonId),
+  ]);
+  return {
+    actorId,
+    ownerId: settlement.userId,
+    groupId: settlement.groupId,
+    personIds: [settlement.fromPersonId, settlement.toPersonId],
+    activity: {
+      kind: "settlement",
+      action,
+      actorName,
+      payerName,
+      receiverName,
+      amount: settlement.amount,
+      title: group?.title ?? "Settlement",
+      url,
+      tag: `khata-settlement-${settlementId}`,
+    },
+  };
+}
+
+/** People who could be affected by a deleted expense: its group, or the whole book. */
+async function expenseSnapshotPersonIds(ownerId: string, groupId: string | null): Promise<string[]> {
+  if (!groupId) {
+    const rows = await getDb().select({ id: people.id }).from(people).where(eq(people.userId, ownerId));
+    return rows.map((row) => row.id);
+  }
+  const rows = await getDb().select({ personId: groupMembers.personId }).from(groupMembers).where(eq(groupMembers.groupId, groupId));
+  return rows.map((row) => row.personId);
+}
+
+type GroupLabel = { title: string; path: string };
+
+async function groupLabel(ownerId: string, groupId: string): Promise<GroupLabel | null> {
+  const [group] = await getDb()
+    .select({ name: groups.name, kind: groups.kind })
+    .from(groups)
+    .where(and(eq(groups.id, groupId), eq(groups.userId, ownerId)))
+    .limit(1);
+  if (!group) return null;
+  if (group.kind === "direct") {
+    const [owner] = await getDb().select({ name: user.name }).from(user).where(eq(user.id, ownerId)).limit(1);
+    return { title: owner?.name ?? "Shared expense", path: `/friends/${encodeURIComponent(groupId)}` };
+  }
+  return { title: group.name, path: `/groups/${encodeURIComponent(groupId)}` };
+}
+
+function writeUrl(kind: "expense" | "settlement", group: GroupLabel | null): string {
+  if (!group) return kind === "expense" ? "/friends" : "/balances";
+  return group.path;
+}
+
+async function displayName(userId: string): Promise<string> {
+  const [account] = await getDb().select({ name: user.name }).from(user).where(eq(user.id, userId)).limit(1);
+  return account?.name?.trim() || "Someone";
+}
+
+async function personLabel(ownerId: string, personId: string): Promise<string> {
+  const [person] = await getDb()
+    .select({ name: people.name, isSelf: people.isSelf })
+    .from(people)
+    .where(and(eq(people.id, personId), eq(people.userId, ownerId)))
+    .limit(1);
+  if (!person) return "Someone";
+  if (person.isSelf) return (await displayName(ownerId)) || "You";
+  return person.name;
+}
+
 export async function createSharedExpense(userId: string, input: ExpenseInput) {
   return writeExpense(userId, crypto.randomUUID(), input, null);
 }
 
 export async function updateSharedExpense(userId: string, id: string, input: ExpenseInput) {
   const [existing] = await getDb()
-    .select({ userId: sharedExpenses.userId, groupId: sharedExpenses.groupId })
+    .select()
     .from(sharedExpenses)
     .where(eq(sharedExpenses.id, id))
     .limit(1);
@@ -777,17 +1148,21 @@ export async function updateSharedExpense(userId: string, id: string, input: Exp
 }
 
 export async function deleteSharedExpense(userId: string, id: string) {
-  const [existing] = await getDb()
-    .select({ userId: sharedExpenses.userId, groupId: sharedExpenses.groupId })
-    .from(sharedExpenses)
-    .where(eq(sharedExpenses.id, id))
-    .limit(1);
-  const scope = existing ? await rowScope(userId, existing) : null;
-  if (!scope) throw new NotFoundError("That shared expense is not in the book.");
-  await getDb().delete(sharedExpenses).where(and(eq(sharedExpenses.id, id), eq(sharedExpenses.userId, scope.ownerId)));
+  const [existing] = await getDb().select().from(sharedExpenses).where(eq(sharedExpenses.id, id)).limit(1);
+  const scope = existing ? await mutationScope(userId, existing) : null;
+  if (!existing || !scope) throw new NotFoundError("That shared expense is not in the book.");
+  const revision = await expenseRevision(userId, existing, "deleted");
+  await getDb().transaction(async (tx) => {
+    await tx.insert(sharedExpenseRevisions).values(revision);
+    const [deleted] = await tx
+      .delete(sharedExpenses)
+      .where(and(eq(sharedExpenses.id, id), eq(sharedExpenses.userId, scope.ownerId), eq(sharedExpenses.version, existing.version)))
+      .returning({ id: sharedExpenses.id });
+    if (!deleted) throw new ConflictError("This shared expense changed just before deletion. Refresh it and try again.");
+  });
 }
 
-export async function createSettlement(userId: string, input: {
+type SettlementInput = {
   fromPersonId: string;
   toPersonId: string;
   amount: number;
@@ -795,9 +1170,36 @@ export async function createSettlement(userId: string, input: {
   groupId?: string | null;
   note: string;
   transactionId?: string | null;
-}) {
+  version?: number;
+};
+
+async function settlementWriteScope(
+  actorId: string,
+  input: SettlementInput,
+  existing: typeof settlements.$inferSelect | null,
+): Promise<Scope> {
+  if (!existing) return groupScope(actorId, input.groupId);
+  const current = await mutationScope(actorId, existing);
+  if (!current) throw new NotFoundError("That settlement is not in the book.");
+  if (!current.isOwner) {
+    if ((input.groupId ?? null) !== existing.groupId) {
+      throw new ShareInputError("Only the group owner can move a settlement to another group.");
+    }
+    return current;
+  }
+  const requested = await groupScope(actorId, input.groupId);
+  if (!requested.isOwner || requested.ownerId !== existing.userId) {
+    throw new ShareInputError("A settlement can only be moved within its owner's ledger.");
+  }
+  return requested;
+}
+
+async function validateSettlementWrite(
+  scope: Scope,
+  input: SettlementInput,
+  exceptSettlementId?: string,
+) {
   if (input.fromPersonId === input.toPersonId) throw new ShareInputError("A settlement needs two different people.");
-  const scope = await groupScope(userId, input.groupId);
   await requirePeople(scope.ownerId, [input.fromPersonId, input.toPersonId]);
   const transactionId = input.transactionId ?? null;
   if (!scope.isOwner) {
@@ -808,7 +1210,7 @@ export async function createSettlement(userId: string, input: {
     const [bank] = await getDb()
       .select({ id: transactions.id })
       .from(transactions)
-      .where(and(eq(transactions.id, transactionId), eq(transactions.userId, userId)))
+      .where(and(eq(transactions.id, transactionId), eq(transactions.userId, scope.ownerId)))
       .limit(1);
     if (!bank) throw new ShareInputError("That bank line is not in the ledger.");
     const [expenseLink] = await getDb()
@@ -820,15 +1222,23 @@ export async function createSettlement(userId: string, input: {
     const [other] = await getDb()
       .select({ id: settlements.id })
       .from(settlements)
-      .where(and(eq(settlements.transactionId, transactionId), eq(settlements.userId, userId)))
+      .where(and(eq(settlements.transactionId, transactionId), eq(settlements.userId, scope.ownerId)))
       .limit(1);
-    if (other) throw new ShareInputError("That bank line is already linked to a settlement.");
+    if (other && other.id !== exceptSettlementId) throw new ShareInputError("That bank line is already linked to a settlement.");
   }
+  return transactionId;
+}
+
+export async function createSettlement(userId: string, input: SettlementInput) {
+  const scope = await settlementWriteScope(userId, input, null);
+  const transactionId = await validateSettlementWrite(scope, input);
   const id = crypto.randomUUID();
   await getDb().insert(settlements).values({
     id,
     userId: scope.ownerId,
     groupId: input.groupId ?? null,
+    createdByUserId: userId,
+    updatedByUserId: userId,
     fromPersonId: input.fromPersonId,
     toPersonId: input.toPersonId,
     amount: input.amount,
@@ -840,15 +1250,44 @@ export async function createSettlement(userId: string, input: {
   return id;
 }
 
+export async function updateSettlement(userId: string, id: string, input: SettlementInput) {
+  const [existing] = await getDb().select().from(settlements).where(eq(settlements.id, id)).limit(1);
+  if (!existing) throw new NotFoundError("That settlement is not in the book.");
+  const scope = await settlementWriteScope(userId, input, existing);
+  if (input.version === undefined) throw new ShareInputError("Include the current version to update this settlement.");
+  if (input.version !== existing.version) {
+    throw new ConflictError("This settlement changed since you opened it. Refresh it and try again.");
+  }
+  const transactionId = await validateSettlementWrite(scope, input, id);
+  const [updated] = await getDb()
+    .update(settlements)
+    .set({
+      groupId: input.groupId ?? null,
+      fromPersonId: input.fromPersonId,
+      toPersonId: input.toPersonId,
+      amount: input.amount,
+      date: input.date,
+      note: input.note,
+      transactionId,
+      updatedByUserId: userId,
+      version: sql`${settlements.version} + 1`,
+      updatedAt: new Date(),
+    })
+    .where(and(eq(settlements.id, id), eq(settlements.userId, existing.userId), eq(settlements.version, input.version)))
+    .returning({ id: settlements.id });
+  if (!updated) throw new ConflictError("This settlement changed since you opened it. Refresh it and try again.");
+  return id;
+}
+
 export async function deleteSettlement(userId: string, id: string) {
-  const [existing] = await getDb()
-    .select({ userId: settlements.userId, groupId: settlements.groupId })
-    .from(settlements)
-    .where(eq(settlements.id, id))
-    .limit(1);
-  const scope = existing ? await rowScope(userId, existing) : null;
-  if (!scope) throw new NotFoundError("That settlement is not in the book.");
-  await getDb().delete(settlements).where(and(eq(settlements.id, id), eq(settlements.userId, scope.ownerId)));
+  const [existing] = await getDb().select().from(settlements).where(eq(settlements.id, id)).limit(1);
+  const scope = existing ? await mutationScope(userId, existing) : null;
+  if (!existing || !scope) throw new NotFoundError("That settlement is not in the book.");
+  const [deleted] = await getDb()
+    .delete(settlements)
+    .where(and(eq(settlements.id, id), eq(settlements.userId, scope.ownerId), eq(settlements.version, existing.version)))
+    .returning({ id: settlements.id });
+  if (!deleted) throw new ConflictError("This settlement changed just before deletion. Refresh it and try again.");
 }
 
 export async function seedSampleBook(userId: string) {
@@ -923,6 +1362,8 @@ export async function seedSampleBook(userId: string) {
           id: expenseId,
           userId,
           groupId: expenseGroupId,
+          createdByUserId: userId,
+          updatedByUserId: userId,
           description: expense.description,
           date: expense.date,
           amount: expense.amount,
@@ -935,6 +1376,7 @@ export async function seedSampleBook(userId: string) {
           target: sharedExpenses.id,
           set: {
             groupId: expenseGroupId,
+            updatedByUserId: userId,
             description: expense.description,
             date: expense.date,
             amount: expense.amount,
@@ -973,6 +1415,8 @@ export async function seedSampleBook(userId: string) {
           id: settlementId,
           userId,
           groupId: settlementGroupId,
+          createdByUserId: userId,
+          updatedByUserId: userId,
           fromPersonId,
           toPersonId,
           amount: settlement.amount,
@@ -985,6 +1429,7 @@ export async function seedSampleBook(userId: string) {
           target: settlements.id,
           set: {
             groupId: settlementGroupId,
+            updatedByUserId: userId,
             fromPersonId,
             toPersonId,
             amount: settlement.amount,

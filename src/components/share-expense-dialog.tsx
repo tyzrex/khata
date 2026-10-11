@@ -18,6 +18,7 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import type { ShareBook } from "@/db/shares";
 import { PersonMark } from "@/components/balances-card";
 import { useDateFormat } from "@/components/use-date-style";
+import { SHARED_CATEGORIES } from "@/lib/constants";
 import { formatNpr } from "@/lib/format";
 import { shareExpenseSchema, splitParticipantSchema, type ShareExpenseValues } from "@/lib/schemas";
 import { buildSplits, ShareInputError, type SplitMode } from "@/lib/split";
@@ -53,6 +54,17 @@ const modes: { id: SplitMode; label: string }[] = [
   { id: "percent", label: "Percent" },
 ];
 
+const splitModeLabel: Record<string, string> = Object.fromEntries(modes.map((mode) => [mode.id, mode.label]));
+const auditDate = new Intl.DateTimeFormat("en-NP", {
+  dateStyle: "medium",
+  timeStyle: "short",
+  timeZone: "Asia/Kathmandu",
+});
+
+function formatAuditDate(value: string) {
+  return auditDate.format(new Date(value));
+}
+
 function rowsFor(people: ShareBook["people"], expense?: Expense, memberIds?: string[]): Row[] {
   return people.map((person) => {
     const split = expense?.splits.find((item) => item.personId === person.id);
@@ -66,18 +78,24 @@ function rowsFor(people: ShareBook["people"], expense?: Expense, memberIds?: str
   });
 }
 
-function draftFor(book: ShareBook, today: string, expense?: Expense, groupId?: string | null): ShareExpenseDraft {
+/**
+ * `duplicate` seeds the same fields as editing but as a *new* expense: today's date,
+ * no linked bank lines. Authorship, version and revision history are not copied
+ * because they are never on the draft — they come from the caller.
+ */
+function draftFor(book: ShareBook, today: string, expense?: Expense, groupId?: string | null, duplicate = false): ShareExpenseDraft {
   const members = groupId ? book.groups.find((group) => group.id === groupId)?.members.map((member) => member.id) : undefined;
   return {
     description: expense?.description ?? "",
     amount: expense ? String(expense.amount) : "",
-    date: expense?.date || today,
+    date: expense?.date && !duplicate ? expense.date : today,
     paidById: expense?.paidById ?? book.self.id,
     groupId: expense?.groupId ?? groupId ?? "none",
     splitMode: expense?.splitMode ?? "equal",
+    category: (expense?.category ?? "") as ShareExpenseDraft["category"],
     note: expense?.note ?? "",
     participants: rowsFor(book.people, expense, members),
-    transactionIds: expense?.transactionIds ?? [],
+    transactionIds: duplicate ? [] : (expense?.transactionIds ?? []),
   };
 }
 
@@ -104,18 +122,22 @@ export function ShareExpenseDialog({
   onSave: (input: unknown, id?: string) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
 }) {
-  const sessionKey = `${open ? "open" : "closed"}:${expense?.id ?? "new"}:${groupId ?? ""}:${today}`;
+  const [duplicate, setDuplicate] = useState(false);
+  const sessionKey = `${open ? "open" : "closed"}:${expense?.id ?? "new"}:${duplicate ? ":dup" : ""}:${groupId ?? ""}:${today}`;
   const [session, setSession] = useState(sessionKey);
-  const [defaults, setDefaults] = useState<ShareExpenseDraft>(() => draftFor(book, today, expense, groupId));
+  const [defaults, setDefaults] = useState<ShareExpenseDraft>(() => draftFor(book, today, expense, groupId, duplicate));
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   if (session !== sessionKey) {
     setSession(sessionKey);
     if (open) {
-      setDefaults(draftFor(book, today, expense, groupId));
+      setDefaults(draftFor(book, today, expense, groupId, duplicate));
       setError(null);
       setPending(false);
+      setConfirmDelete(false);
+      setDuplicate(false);
     }
   }
 
@@ -183,6 +205,7 @@ export function ShareExpenseDialog({
     setPending(true);
     setError(null);
     try {
+      const editing = Boolean(expense) && !duplicate;
       await onSave(
         {
           description: values.description,
@@ -194,10 +217,12 @@ export function ShareExpenseDialog({
           note: values.note,
           participants: values.participants,
           transactionIds: values.transactionIds,
+          category: values.category === "" ? null : values.category,
+          ...(editing ? { version: expense!.version } : {}),
         },
-        expense?.id,
+        editing ? expense!.id : undefined,
       );
-      toast.success(expense ? "Shared expense updated" : "Shared expense added");
+      toast.success(editing ? "Shared expense updated" : "Shared expense added");
       onOpenChange(false);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not save that expense.");
@@ -220,22 +245,54 @@ export function ShareExpenseDialog({
       footer={
         <DialogFooter className="mt-3 gap-2 max-sm:flex-col-reverse sm:justify-between">
           {expense ? (
-            <Button
-              type="button"
-              variant="destructive"
-              className="max-sm:w-full"
-              disabled={pending}
-              onClick={() => {
-                void onDelete(expense.id)
-                  .then(() => {
-                    toast.success("Shared expense removed");
-                    onOpenChange(false);
-                  })
-                  .catch((caught: unknown) => setError(caught instanceof Error ? caught.message : "Could not remove that expense."));
-              }}
-            >
-              Delete
-            </Button>
+            confirmDelete ? (
+              <span className="flex gap-2 max-sm:w-full">
+                <Button
+                  type="button"
+                  variant="destructive"
+                  className="max-sm:flex-1"
+                  disabled={pending}
+                  onClick={() => {
+                    setPending(true);
+                    setError(null);
+                    void onDelete(expense.id)
+                      .then(() => {
+                        toast.success("Shared expense removed");
+                        onOpenChange(false);
+                      })
+                      .catch((caught: unknown) => setError(caught instanceof Error ? caught.message : "Could not remove that expense."))
+                      .finally(() => setPending(false));
+                  }}
+                >
+                  {pending ? "Deleting" : "Yes, delete"}
+                </Button>
+                <Button type="button" variant="ghost" className="max-sm:flex-1" disabled={pending} onClick={() => setConfirmDelete(false)}>
+                  Keep
+                </Button>
+              </span>
+            ) : (
+              <>
+                <Button type="button" variant="ghost" className="max-sm:flex-1" disabled={pending} onClick={() => setConfirmDelete(true)}>
+                  Delete expense
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="max-sm:w-full"
+                  disabled={pending}
+                  title="Start a new expense with the same people, amounts and split"
+                  onClick={() => {
+                    // Re-seed from the same row but as a new one: today's date, no linked
+                    // bank lines, and no version so the save path creates rather than updates.
+                    setDefaults(draftFor(book, today, expense, groupId, true));
+                    setDuplicate(true);
+                    setConfirmDelete(false);
+                  }}
+                >
+                  Duplicate
+                </Button>
+              </>
+            )
           ) : (
             <span className="max-sm:hidden" />
           )}
@@ -463,6 +520,31 @@ export function ShareExpenseDialog({
                   </FormItem>
                 )}
               />
+              <FormField
+                control={form.control}
+                name="category"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Category</FormLabel>
+                    <Select value={field.value || "none"} onValueChange={(next) => field.onChange(next === "none" ? "" : next)}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="No category" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="none">No category</SelectItem>
+                        {SHARED_CATEGORIES.map((name) => (
+                          <SelectItem key={name} value={name}>
+                            {name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
               {bankLines.length ? (
                 <FormField
                   control={form.control}
@@ -494,6 +576,42 @@ export function ShareExpenseDialog({
                     </FormItem>
                   )}
                 />
+              ) : null}
+              {expense ? (
+                <section aria-labelledby="expense-audit-title" className="rounded-xl bg-secondary/70 px-3 py-2.5 text-xs text-muted-foreground">
+                  <h3 id="expense-audit-title" className="font-semibold text-foreground">History</h3>
+                  <p className="mt-1">
+                    Added by {expense.createdByName ?? "Someone"} · {formatAuditDate(expense.createdAt)}
+                  </p>
+                  {expense.revisions.length > 0 ? (
+                    <p className="mt-0.5">
+                      Last edited by {expense.updatedByName ?? "Someone"} · {formatAuditDate(expense.updatedAt)}
+                    </p>
+                  ) : null}
+                  <details className="mt-2">
+                    <summary className="w-fit cursor-pointer rounded-sm font-medium text-interactive outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                      {expense.revisions.length} {expense.revisions.length === 1 ? "revision" : "revisions"}
+                    </summary>
+                    {expense.revisions.length > 0 ? (
+                      <ol className="mt-2 divide-y divide-border">
+                        {[...expense.revisions]
+                          .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+                          .map((revision) => (
+                            <li key={`${revision.version}-${revision.createdAt}`} className="py-2 first:pt-0 last:pb-0">
+                              <p className="font-medium text-foreground">
+                                {revision.actorName} {revision.action} it · {formatAuditDate(revision.createdAt)}
+                              </p>
+                              <p className="mt-1 leading-5">
+                                Before: {revision.snapshot.description} · {formatNpr(revision.snapshot.amount)} · paid by {revision.snapshot.paidByName} · {splitModeLabel[revision.snapshot.splitMode] ?? revision.snapshot.splitMode}
+                              </p>
+                            </li>
+                          ))}
+                      </ol>
+                    ) : (
+                      <p className="mt-2">No earlier versions.</p>
+                    )}
+                  </details>
+                </section>
               ) : null}
               {error ? <FieldError>{error}</FieldError> : null}
             </FieldGroup>

@@ -38,21 +38,3 @@ export async function purgeUserData(userId: string) {
 export async function purgeUserVerification(userId: string) {
   await getDb().execute(sql`DELETE FROM "verification" WHERE "value" = ${userId}`);
 }
-
-/** What a person would lose, so the confirmation can be specific about it. */
-export async function accountFootprint(userId: string) {
-  const db = getDb();
-  const tally = async (table: string) => {
-    const result = await db.execute<{ n: number }>(sql`SELECT count(*)::int AS n FROM ${sql.identifier(table)} WHERE "user_id" = ${userId}`);
-    return Number(result.rows[0]?.n ?? 0);
-  };
-  const [entries, people, groups, expenses, settlements, keys] = await Promise.all([
-    tally("transactions"),
-    tally("people"),
-    tally("groups"),
-    tally("shared_expenses"),
-    tally("settlements"),
-    tally("api_keys"),
-  ]);
-  return { entries, people, groups, expenses, settlements, keys };
-}

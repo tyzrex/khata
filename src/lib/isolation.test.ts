@@ -213,6 +213,29 @@ test("shares.ts deleteGroup removes the group's expenses and settlements", () =>
   assert.ok(section.includes("tx.delete(settlements)"), "deleteGroup must delete the group's settlements");
 });
 
+test("shared writes require creator or owner access and reject stale versions", () => {
+  const sharesSrc = src("src/db/shares.ts");
+  const permission = sharesSrc.slice(sharesSrc.indexOf("async function mutationScope"), sharesSrc.indexOf("async function expenseRevision"));
+  assert.match(permission, /row\.createdByUserId !== actorId/, "members must only mutate entries they created");
+  assert.match(sharesSrc, /input\.version !== existing\.version/, "updates must compare the version the editor opened");
+  assert.match(sharesSrc, /insert\(sharedExpenseRevisions\)/, "expense updates and deletes must preserve an audit revision");
+});
+
+test("leaving a group is member-only and blocked by open balances", () => {
+  const sharesSrc = src("src/db/shares.ts");
+  const section = sharesSrc.slice(sharesSrc.indexOf("export async function leaveGroup"), sharesSrc.indexOf("export async function deleteGroup"));
+  assert.match(section, /eq\(groupUserAccess\.role, "member"\)/, "an owner row must never be removed by leaveGroup");
+  assert.match(section, /group\.balances\.youOwe\.length \|\| group\.balances\.youAreOwed\.length/, "members must settle before losing access");
+});
+
+test("migration 0009 backfills authorship and preserves expense revisions", () => {
+  const migration = src("drizzle/0009_vengeful_magik.sql");
+  assert.match(migration, /CREATE TABLE "shared_expense_revisions"/);
+  assert.match(migration, /UPDATE "shared_expenses" SET "created_by_user_id" = "user_id"/);
+  assert.match(migration, /UPDATE "settlements" SET "created_by_user_id" = "user_id"/);
+  assert.ok(!migration.includes('FOREIGN KEY ("expense_id")'), "revision history must survive expense deletion");
+});
+
 // ---------------------------------------------------------------------------
 // 12. ensureCategories must not write on every read path.
 // ---------------------------------------------------------------------------

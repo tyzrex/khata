@@ -110,6 +110,25 @@ Vercel’s own deployment protection (team SSO) is separate. Once this app has a
 
 Install Khata from the browser once it is served over HTTPS (or localhost). The manifest, icons, and service worker are part of the production build. API calls are not cached, so an offline open shows the shell and asks for the network before it invents a balance.
 
+### Push notifications
+
+Khata sends a web push when someone shares an expense or records a settlement in a book you are part of. Generate a VAPID key pair once and put it in `.env.local` locally and in the Vercel project for production:
+
+```bash
+bun run vapid:generate   # prints a public/private pair
+```
+
+Set all three of `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` and `VAPID_SUBJECT` (a `mailto:` or `https://` contact). The public key reaches the browser; the private key signs every send and must never be committed. If any of the three is missing the app still runs, but the Settings card says the notification service is not configured and nothing is ever sent.
+
+People turn notifications on per browser under **Settings → Notifications**, alongside three account-wide preferences: shared expenses, settlements, and whether to include amounts. Amounts are off by default so a lock screen does not show what someone owes. `POST /api/push/test` sends a test to the caller's own subscriptions, rate limited to 5 an hour.
+
+Two things follow from push being per browser and the endpoint being unique per subscription:
+
+- A browser can only be registered to one account. Signing in as somebody else moves that endpoint, which is why signing out detaches it first — the next person on a shared device does not inherit the previous one's notifications.
+- A subscription row is removed automatically when the push service reports it gone (404/410), and after repeated permanent failures. The Settings card offers "Register this browser" if the browser holds a subscription the account no longer owns.
+
+Push only works against a production build over HTTPS. `bun run dev` disables the service worker, and the client refuses to subscribe there; use `bun run build && bun run start`, or a preview deployment. Delivery is fire-and-forget: a push that fails never turns a committed expense or settlement into an error.
+
 ## Daily JSON import
 
 `POST /api/import` accepts either shape:
@@ -162,7 +181,9 @@ People, groups, shared expenses, and settlements live in their own tables. They 
 
 - Equal, exact, shares, and percent splits. Amounts are stored in paisa so a split always adds up to the total.
 - Balances are per person: you owe, you are owed, and what other people owe each other. A simplified list shows the fewest payments with the same nets.
-- A settlement can point at one bank transaction. Cine Mark is linked to the two Nabil charges the same way, without merging those charges into the share total.
+- Shared expenses record who added and last edited them, keep prior revisions, and reject stale edits instead of silently overwriting someone else's change. Group owners can correct any entry; members can only change entries they created.
+- Settlements can be edited, are protected by the same owner-or-creator rule, and can point at one bank transaction. Cine Mark is linked to the two Nabil charges the same way, without merging those charges into the share total.
+- Members can leave a joined group once their balances are settled. Historical entries remain with the group.
 - `bun run db:seed` and **Load sample week** load both the bank week and Biker Gang (You, Sameer, Anita, Rajan).
 
 After the sample, you owe Anita NPR 2,000, Sameer owes you NPR 1,425, and Rajan owes you NPR 300.
@@ -192,7 +213,7 @@ The rest is DNS and cannot be fixed in code:
 3. Keep invites on that subdomain only. Do not send newsletters or marketing from the same address.
 4. New domains start with no reputation. The first invites can still land in Promotions or spam; replies and "Move to Primary" from recipients teach Gmail quickly.
 
-Migration `0003_multi_user_invites` adds `group_invites`, `group_user_access`, and `people.linked_user_id`, and backfills owner rows for existing groups. Run `bun run db:migrate`.
+Migration `0003_multi_user_invites` adds `group_invites`, `group_user_access`, and `people.linked_user_id`, and backfills owner rows for existing groups. Migration `0009_vengeful_magik` adds expense/settlement authorship, optimistic versions, and durable shared-expense revisions. Run `bun run db:migrate`.
 
 ## Pages
 

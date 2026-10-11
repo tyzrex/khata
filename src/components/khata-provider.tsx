@@ -15,6 +15,7 @@ import type { TransactionDto } from "@/lib/types";
 
 type Debt = Pick<BalanceScope["youOwe"][number], "fromId" | "toId" | "amount">;
 type Expense = ShareBook["expenses"][number];
+type Settlement = ShareBook["settlements"][number];
 
 function suggestGroup(book: ShareBook, fromId: string, toId: string) {
   const hits = book.groups.filter((group) =>
@@ -48,13 +49,26 @@ function useKhataState(snapshot: KhataSnapshot) {
   const frame = useFrame();
   const [composer, setComposer] = useState<{ open: boolean; editing?: TransactionDto }>({ open: false });
   const [expense, setExpense] = useState<{ open: boolean; groupId: string | null; editing?: Expense }>({ open: false, groupId: null });
-  const [settle, setSettle] = useState<{ open: boolean; draft: SettleDraft }>({ open: false, draft: blankSettle });
+  const [settle, setSettle] = useState<{ open: boolean; draft: SettleDraft; editing?: Settlement }>({ open: false, draft: blankSettle });
 
   function openSettle(debt: Debt, groupId = "") {
     const book = shares.book;
     const fromId = debt.fromId || book.self.id;
     const toId = debt.toId || book.people.find((person) => person.id !== fromId)?.id || book.self.id;
     setSettle({ open: true, draft: { fromId, toId, amount: debt.amount ? String(debt.amount) : "", groupId: groupId || suggestGroup(book, fromId, toId) } });
+  }
+
+  function openSettlement(editing: Settlement) {
+    setSettle({
+      open: true,
+      editing,
+      draft: {
+        fromId: editing.fromPersonId,
+        toId: editing.toPersonId,
+        amount: String(editing.amount),
+        groupId: editing.groupId ?? "",
+      },
+    });
   }
 
   return {
@@ -66,6 +80,7 @@ function useKhataState(snapshot: KhataSnapshot) {
     openEdit: (transaction: TransactionDto) => setComposer({ open: true, editing: transaction }),
     openExpense: (groupId: string | null, editing?: Expense) => setExpense({ open: true, groupId, editing }),
     openSettle,
+    openSettlement,
     inviteActions: { ensureDirect: shares.ensureDirect, createGroup: shares.addGroup, updateGroup: shares.updateGroup, createInvite: shares.createInvite },
     loadSample: async () => {
       const result = await ledger.loadSample();
@@ -122,7 +137,7 @@ function KhataReady({ snapshot, children }: { snapshot: KhataSnapshot; children:
   const book = khata.shares.book;
   const fresh = frame.pending === "split";
   const expenseScope = scopeBook(book, fresh ? null : (expense.editing?.groupId ?? expense.groupId));
-  const settleScope = scopeBook(book, settle.draft.groupId);
+  const settleScope = scopeBook(book, settle.editing?.groupId ?? settle.draft.groupId);
 
   return (
     <KhataContext value={khata}>
@@ -162,8 +177,10 @@ function KhataReady({ snapshot, children }: { snapshot: KhataSnapshot; children:
         groupLocked={settleScope.locked}
         transactions={settleScope.locked ? [] : khata.ledger.transactions}
         draft={settle.draft}
+        settlement={settle.editing}
         onOpenChange={(open) => setSettle((current) => ({ ...current, open }))}
         onSave={khata.shares.saveSettlement}
+        onDelete={khata.shares.deleteSettlement}
       />
     </KhataContext>
   );

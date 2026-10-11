@@ -71,7 +71,14 @@ export function ResponsiveOverlay({
           {description ? <DrawerDescription>{description}</DrawerDescription> : null}
         </DrawerHeader>
         <div className="min-h-0 flex-1 overflow-y-auto px-4">{children}</div>
-        {footer ? <div className="mt-auto shrink-0 border-t border-border bg-card px-4 pt-1">{footer}</div> : null}
+        {/*
+          `pb-[calc(0.75rem+env(safe-area-inset-bottom))]` is load-bearing. The drawer's
+          popup runs to the bottom edge of the screen and the viewport is
+          viewport-fit=cover, so without it the action sat flush against the edge — and
+          under the home indicator on any notched phone. `bg-popover` matches the drawer
+          it sits in; `bg-card` made the footer darker than the body above it.
+        */}
+        {footer ? <div className="mt-auto shrink-0 border-t border-border bg-popover px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))]">{footer}</div> : null}
       </DrawerContent>
     </Drawer>
   );

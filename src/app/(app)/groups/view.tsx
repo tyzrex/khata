@@ -17,9 +17,12 @@ export function GroupsPage() {
       onSettle={(debt, groupId) => khata.openSettle(debt, groupId)}
       onAddExpense={(groupId) => khata.openExpense(groupId)}
       onEditExpense={(expense) => khata.openExpense(expense.groupId, expense)}
+      onEditSettlement={khata.openSettlement}
       onCreateGroup={khata.shares.createGroup}
       onUpdateGroup={khata.shares.updateGroup}
       onDeleteGroup={khata.shares.deleteGroup}
+      onLeaveGroup={khata.shares.leaveGroup}
+      onFriends={() => router.push("/friends")}
       inviteActions={khata.inviteActions}
     />
   );

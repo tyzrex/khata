@@ -2,7 +2,7 @@
 
 import { cn } from "cn";
 import { HandCoins } from "lucide-react";
-import { effectOf, runsBy, type Expense, type FeedItem, who } from "@/components/splits/ledger-math";
+import { effectOf, runsBy, type Expense, type FeedItem, type Settlement, who } from "@/components/splits/ledger-math";
 import { useDateFormat } from "@/components/use-date-style";
 import { formatNpr } from "@/lib/format";
 import { dateView } from "@/lib/nepali-date";
@@ -41,6 +41,7 @@ export function ExpenseFeed({
   withId,
   hideGroup,
   onEditExpense,
+  onEditSettlement,
 }: {
   items: FeedItem[];
   selfId: string;
@@ -49,6 +50,7 @@ export function ExpenseFeed({
   /** A group name not worth repeating on every row. */
   hideGroup?: string;
   onEditExpense: (expense: Expense) => void;
+  onEditSettlement?: (settlement: Settlement) => void;
 }) {
   const dates = useDateFormat();
   const months = runsBy(items, (item) => dates.monthYear(item.date));
@@ -81,20 +83,17 @@ export function ExpenseFeed({
                     </span>
                     <EffectReadout expense={item.expense} selfId={selfId} withId={withId} />
                   </button>
+                ) : onEditSettlement ? (
+                  <button
+                    type="button"
+                    className="flex w-full items-center gap-3 rounded-2xl px-2 py-2 text-left transition-colors duration-200 outline-none hover:bg-secondary focus-visible:ring-2 focus-visible:ring-ring active:bg-accent/60"
+                    onClick={() => onEditSettlement(item.settlement)}
+                  >
+                    <SettlementContent settlement={item.settlement} selfId={selfId} date={dates.entry(item.date)} />
+                  </button>
                 ) : (
                   <div className="flex items-center gap-3 px-2 py-2">
-                    <span className="flex w-11 shrink-0 items-center justify-center self-stretch rounded-xl bg-credit/10 text-credit" aria-hidden>
-                      <HandCoins className="size-4" />
-                    </span>
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate text-sm font-medium text-display">
-                        {who(item.settlement.fromPersonId, item.settlement.fromName, selfId)} paid {who(item.settlement.toPersonId, item.settlement.toName, selfId, true)}{" "}
-                        <span className="figure">{formatNpr(item.settlement.amount)}</span>
-                      </span>
-                      <span className="deva mt-0.5 block truncate text-xs text-muted-foreground">
-                        {dates.entry(item.date)} · Payment{item.settlement.note ? ` · ${item.settlement.note}` : ""}
-                      </span>
-                    </span>
+                    <SettlementContent settlement={item.settlement} selfId={selfId} date={dates.entry(item.date)} />
                   </div>
                 )}
               </li>
@@ -103,5 +102,24 @@ export function ExpenseFeed({
         </section>
       ))}
     </div>
+  );
+}
+
+function SettlementContent({ settlement, selfId, date }: { settlement: Settlement; selfId: string; date: string }) {
+  return (
+    <>
+      <span className="flex w-11 shrink-0 items-center justify-center self-stretch rounded-xl bg-credit/10 text-credit" aria-hidden>
+        <HandCoins className="size-4" />
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-sm font-medium text-display">
+          {who(settlement.fromPersonId, settlement.fromName, selfId)} paid {who(settlement.toPersonId, settlement.toName, selfId, true)}{" "}
+          <span className="figure">{formatNpr(settlement.amount)}</span>
+        </span>
+        <span className="deva mt-0.5 block truncate text-xs text-muted-foreground">
+          {date} · Payment{settlement.note ? ` · ${settlement.note}` : ""}
+        </span>
+      </span>
+    </>
   );
 }

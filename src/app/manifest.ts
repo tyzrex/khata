@@ -19,8 +19,8 @@ export default function manifest(): MetadataRoute.Manifest {
     // No window-controls-overlay: the layout does not reserve the titlebar area on desktop installs.
     display_override: ["standalone", "minimal-ui"],
     orientation: "any",
-    background_color: "#0a0a0d",
-    theme_color: "#0a0a0d",
+    background_color: "#000000",
+    theme_color: "#000000",
     lang: "en",
     dir: "ltr",
     categories: ["finance", "productivity", "utilities"],

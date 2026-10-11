@@ -8,6 +8,7 @@ import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { toast } from "@/lib/status";
 import { authClient } from "@/lib/auth-client";
+import { unsubscribePushLocally } from "@/lib/push-client";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
@@ -179,6 +180,10 @@ export function AccountSettings({
     }
     // Same treatment as signing out: leave nothing cached on the device.
     navigator.serviceWorker?.controller?.postMessage({ type: "khata:sign-out" });
+    // The account is gone, so there is nothing left to authenticate against: clear the
+    // browser's own subscription instead, or this device keeps a subscription that no
+    // server row backs. Best effort only — the redirect must not wait on it.
+    void unsubscribePushLocally().catch(() => undefined);
     router.push("/login");
     router.refresh();
   }

@@ -64,6 +64,27 @@
       "when": 1791520135104,
       "tag": "0008_auth_timestamps_timezone",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1791689812470,
+      "tag": "0009_vengeful_magik",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1791692155780,
+      "tag": "0010_push_notifications",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1791695020690,
+      "tag": "0011_shared_expense_category",
+      "breakpoints": true
     }
   ]
 }

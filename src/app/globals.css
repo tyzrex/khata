@@ -100,8 +100,10 @@
   --accent-foreground: #1a0fd1;
   --destructive: #e5383b;
   --negative: #e5383b;
-  --credit: #12a150;
-  --warning: #d9822b;
+  /* #12a150 was 3.37:1 on white and 2.98:1 on the canvas — below AA for the small
+   * green figures that carry meaning. Darkened to clear 4.5:1 on both. */
+  --credit: #0d7a3e;
+  --warning: #b2610c;
   --interactive: #1a0fd1;
   --brand: #1a0fd1;
   --brand-tint: #1a0fd1;
@@ -127,54 +129,125 @@
   --sidebar-accent-foreground: #1a0fd1;
   --sidebar-border: #ececf0;
   --sidebar-ring: #1a0fd1;
+
+  /*
+   * The dashboard hero's brand bloom. Vercel keeps colour out of its chrome and lets
+   * one mesh gradient do the work; a solid brand fill on a dashboard is the same idea
+   * taken too far — on a light canvas a full indigo card is fine, but in dark it
+   * became the loudest thing on a screen meant for long sessions. So the hero is a
+   * normal card and the brand arrives as light falling on it from two corners.
+   * Opacity is low here and high in `.dark`, where there is no ambient light to
+   * scatter it.
+   */
+  --hero-bloom-a: rgb(0 112 243 / 0.2);
+  --hero-bloom-b: rgb(121 40 202 / 0.12);
+  --hero-bloom-c: rgb(0 223 216 / 0.1);
 }
 
+/*
+ * Dark is the default theme here, so it is built first and on a stricter rule
+ * than light: a dashboard lives in this one, and everything has to stay legible
+ * for a long session.
+ *
+ * Three ideas carry it, all taken from the Vercel/Geist dark system:
+ *
+ * 1. Pure neutral greys, no blue cast. The old dark mixed #0a0a0d / #16161b /
+ *    #202027 — three near-identical blues whose only separation was a couple of
+ *    percent of luminance, so the canvas, the cards and the wells all read as one
+ *    smear. Here the ramp is a real stack: #000 canvas, #0a0a0a card, #111111
+ *    popover, #141414 inset, #1a1a1a hover. Each step is small but deliberate.
+ * 2. Hairlines carry the structure, shadows do not. Every surface sits on a 1px
+ *    white-at-8% ring; the shadow tokens stay for menus and dialogs. This is why
+ *    the card can be only 4% off the canvas and still have a clean edge.
+ * 3. The blue is stepped, not reused. `--primary` is the filled action and keeps
+ *    white text at 4.55:1 — it cannot get much brighter without dropping below
+ *    AA. Every place blue is read rather than filled (links, chart lines, active
+ *    nav, focus) uses `--brand-tint` at 8.4:1 on a card. The light theme's
+ *    royal blue is 2.0:1 on this canvas, which is the whole reason the old dark
+ *    theme felt murky: the one colour doing the work was the one you could not
+ *    see.
+ *
+ * Text ladder, checked against the card (#0a0a0a): #ffffff 19.8, #ededed 16.9,
+ * #a1a1a1 7.7, #a8c7ff 11.6, #7aa8ff 8.4, #8a8a8a 5.7. Nothing below AA, and
+ * `--disabled` deliberately stays readable — greyed-out text that cannot be read
+ * is worse than text that is merely quiet.
+ */
 .dark {
-  --background: #0a0a0d;
-  --foreground: #e9e9ee;
+  --background: #000000;
+  --foreground: #ededed;
   --display: #ffffff;
-  --card: #16161b;
-  --card-foreground: #e9e9ee;
-  --popover: #16161b;
-  --popover-foreground: #e9e9ee;
-  --primary: #1a0fd1;
-  --primary-active: #1409ae;
-  --primary-disabled: #33307f;
+  --card: #0a0a0a;
+  --card-foreground: #ededed;
+  --popover: #111111;
+  --popover-foreground: #ededed;
+  --primary: #0070f3;
+  --primary-active: #0068d6;
+  --primary-disabled: #26262a;
   --primary-foreground: #ffffff;
-  --secondary: #202027;
-  --secondary-foreground: #e9e9ee;
-  --muted: #202027;
-  --muted-foreground: #9a9aa4;
-  --disabled: #6c6c76;
-  --accent: #1e2147;
-  --accent-foreground: #a9a6ff;
-  --destructive: #ff5a5d;
-  --negative: #ff5a5d;
-  --credit: #34c77b;
-  --warning: #f0a04b;
-  --interactive: #8d89ff;
-  --brand: #1a0fd1;
-  --brand-tint: #8d89ff;
+  --secondary: #1a1a1a;
+  --secondary-foreground: #ededed;
+  --muted: #141414;
+  --muted-foreground: #a1a1a1;
+  --disabled: #8a8a8a;
+  --accent: #16233a;
+  --accent-foreground: #a8c7ff;
+  --destructive: #ff6369;
+  --negative: #ff6369;
+  --credit: #3ecf8e;
+  --warning: #f5a94b;
+  --interactive: #7aa8ff;
+  --brand: #0070f3;
+  --brand-tint: #7aa8ff;
   --brand-foreground: #ffffff;
-  --border: #25252c;
-  --input: #34343c;
-  --ring: #8d89ff;
-  --chart-1: #8d89ff;
-  --chart-2: #34c77b;
-  --chart-3: #ff5a5d;
-  --chart-4: #f0a04b;
-  --chart-5: #6c6c76;
-  --chart-soft: #4d78c8;
-  --elevation-card: 0 0 0 1px rgb(255 255 255 / 0.055);
-  --elevation-lift: 0 0 0 1px rgb(255 255 255 / 0.08), 0 16px 40px -12px rgb(0 0 0 / 0.6);
-  --sidebar: #0a0a0d;
-  --sidebar-foreground: #e9e9ee;
-  --sidebar-primary: #1a0fd1;
+  --border: #1f1f1f;
+  --input: #2e2e2e;
+  --ring: #5b9bff;
+  --chart-1: #7aa8ff;
+  --chart-2: #3ecf8e;
+  --chart-3: #ff6369;
+  --chart-4: #f5a94b;
+  --chart-5: #8f8f8f;
+  --chart-soft: #6ba3ff;
+  /* The ring is the edge. On #0a0a0a it reads as the #171717 hairline, which is what separates a card from the canvas. */
+  --elevation-card: 0 0 0 1px rgb(255 255 255 / 0.08);
+  --elevation-lift: 0 0 0 1px rgb(255 255 255 / 0.12), 0 16px 40px -12px rgb(0 0 0 / 0.8);
+  --sidebar: #000000;
+  --sidebar-foreground: #ededed;
+  --sidebar-primary: #0070f3;
   --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #1e2147;
-  --sidebar-accent-foreground: #a9a6ff;
-  --sidebar-border: #25252c;
-  --sidebar-ring: #8d89ff;
+  --sidebar-accent: #16233a;
+  --sidebar-accent-foreground: #a8c7ff;
+  --sidebar-border: #1f1f1f;
+  --sidebar-ring: #5b9bff;
+
+  /* Same two corners, turned up: on a black card the bloom is the only light source. */
+  --hero-bloom-a: rgb(0 112 243 / 0.55);
+  --hero-bloom-b: rgb(121 40 202 / 0.28);
+  --hero-bloom-c: rgb(0 223 216 / 0.22);
+}
+
+/* The bloom itself. Position and blur live here so both themes share one shape. */
+.hero-bloom {
+  position: absolute;
+  pointer-events: none;
+  border-radius: 9999px;
+  filter: blur(40px);
+}
+
+.hero-bloom-a {
+  top: -6rem;
+  right: -4rem;
+  width: 18rem;
+  height: 18rem;
+  background: radial-gradient(circle, var(--hero-bloom-a), transparent 70%);
+}
+
+.hero-bloom-b {
+  bottom: -7rem;
+  left: -4rem;
+  width: 16rem;
+  height: 16rem;
+  background: radial-gradient(circle, var(--hero-bloom-b), transparent 65%);
 }
 
 @layer base {

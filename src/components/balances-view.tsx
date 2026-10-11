@@ -175,7 +175,7 @@ export function BalancesView({ book, onSettle }: { book: ShareBook; onSettle: (d
           ) : null}
 
           {book.overall.others.length ? (
-            <Card title="Between others" hint="Balances you can see but are not part of">
+            <Card title="Between others" hint="Inside your books, but nothing for you to pay">
               <ul className="grid gap-2 sm:grid-cols-2">
                 {book.overall.others.map((debt) => (
                   <PaymentCard key={`${debt.fromId}-${debt.toId}`} debt={debt} selfId={book.self.id} />

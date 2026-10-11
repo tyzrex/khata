@@ -5,6 +5,7 @@ import { useTheme } from "next-themes";
 import { useSyncExternalStore, type ReactNode } from "react";
 import { ApiKeysCard } from "@/components/api-keys-card";
 import { Card } from "@/components/balances-card";
+import { NotificationsCard } from "@/components/notifications-card";
 import { PageHeader } from "@/components/page-header";
 import { useDateStyle } from "@/components/use-date-style";
 import { formatLongDate, formatMonthYear } from "@/lib/format";
@@ -114,6 +115,7 @@ export function SettingsView({
         </Card>
 
         <div className="grid items-start gap-3 lg:col-span-2 2xl:gap-4">
+          <NotificationsCard />
           <ApiKeysCard />
         </div>
       </div>

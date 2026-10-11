@@ -1,0 +1,271 @@
+import webPush, { type PushSubscription as WebPushSubscription } from "web-push";
+import { after } from "next/server";
+import { and, eq, inArray } from "drizzle-orm";
+import { getDb } from "@/db/client";
+import type { SharedActivity } from "@/db/push-activity";
+import { groupMembers, groupUserAccess, people } from "@/db/schema";
+import {
+  DEFAULT_NOTIFICATION_PREFERENCES,
+  listPushDeliveryTargets,
+  recordPushFailure,
+  recordPushSuccess,
+  type NotificationPreferences,
+  type PushDeliveryTarget,
+} from "@/db/push-notifications";
+
+const PROVIDER_SUFFIXES = [
+  "fcm.googleapis.com",
+  "push.services.mozilla.com",
+  "web.push.apple.com",
+  "notify.windows.com",
+] as const;
+const STALE_STATUS_CODES = new Set([404, 410]);
+const PERMANENT_STATUS_CODES = new Set([400, 401, 403]);
+const PUSH_TTL_SECONDS = 5 * 60;
+const PUSH_TIMEOUT_MS = 10_000;
+
+export { DEFAULT_NOTIFICATION_PREFERENCES };
+export type { NotificationPreferences };
+export type { SharedActivity } from "@/db/push-activity";
+
+export type PushPayload = {
+  title: string;
+  body: string;
+  url: string;
+  tag: string;
+};
+
+export type PushDeliveryResult = {
+  configured: boolean;
+  attempted: number;
+  sent: number;
+  failed: number;
+  removed: number;
+};
+
+type VapidConfiguration = {
+  subject: string;
+  publicKey: string;
+  privateKey: string;
+};
+
+function vapidConfiguration(env: Record<string, string | undefined> = process.env): VapidConfiguration | null {
+  const publicKey = env.VAPID_PUBLIC_KEY?.trim();
+  const privateKey = env.VAPID_PRIVATE_KEY?.trim();
+  const subject = env.VAPID_SUBJECT?.trim();
+  return publicKey && privateKey && subject ? { publicKey, privateKey, subject } : null;
+}
+
+export function getPushPublicConfiguration(env: Record<string, string | undefined> = process.env) {
+  const configuration = vapidConfiguration(env);
+  return {
+    configured: configuration !== null,
+    publicKey: configuration?.publicKey ?? null,
+  };
+}
+
+export function isAllowedPushEndpoint(value: string) {
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    return false;
+  }
+  if (url.protocol !== "https:" || url.username || url.password || (url.port && url.port !== "443")) return false;
+  const hostname = url.hostname.toLowerCase();
+  return PROVIDER_SUFFIXES.some((suffix) => hostname === suffix || hostname.endsWith(`.${suffix}`));
+}
+
+/**
+ * Who should hear about a shared write. The owner always knows (they wrote it),
+ * so resolve everyone else with a linked Khata account: the other members of a
+ * group write via `group_user_access`, or the other person in a direct book via
+ * their linked `people` row. Unknown or unlinked people resolve to nobody.
+ */
+export async function resolveSharedWriteRecipients(input: {
+  actorId: string;
+  ownerId: string;
+  groupId: string | null;
+  personIds: string[];
+}): Promise<string[]> {
+  const { actorId, ownerId, groupId, personIds } = input;
+  const linked = await linkedAccounts(ownerId, personIds);
+  const recipients = new Set<string>();
+
+  if (groupId) {
+    const [members, access] = await Promise.all([groupMemberUserIds(groupId, ownerId), groupAccessUserIds(groupId, ownerId)]);
+    for (const userId of [...members, ...access]) {
+      if (userId !== actorId && linked.has(userId)) recipients.add(userId);
+    }
+    return [...recipients];
+  }
+
+  for (const userId of linked.values()) {
+    if (userId !== actorId) recipients.add(userId);
+  }
+  return [...recipients];
+}
+
+/** linkedUserId for each person row the owner holds, keyed by user id. */
+async function linkedAccounts(ownerId: string, personIds: string[]): Promise<Set<string>> {
+  const unique = [...new Set(personIds)];
+  if (!unique.length) return new Set();
+  const rows = await getDb()
+    .select({ linkedUserId: people.linkedUserId })
+    .from(people)
+    .where(and(eq(people.userId, ownerId), inArray(people.id, unique)));
+  return new Set(rows.map((row) => row.linkedUserId).filter((value): value is string => Boolean(value)));
+}
+
+/** Linked accounts reachable through group membership rows. */
+async function groupMemberUserIds(groupId: string, ownerId: string): Promise<string[]> {
+  const rows = await getDb()
+    .select({ linkedUserId: people.linkedUserId })
+    .from(groupMembers)
+    .innerJoin(people, and(eq(people.id, groupMembers.personId), eq(people.userId, ownerId)))
+    .where(eq(groupMembers.groupId, groupId));
+  return rows.map((row) => row.linkedUserId).filter((value): value is string => Boolean(value));
+}
+
+/** Linked accounts with direct access to the group (invite-accepted members). */
+async function groupAccessUserIds(groupId: string, ownerId: string): Promise<string[]> {
+  const rows = await getDb()
+    .select({ userId: groupUserAccess.userId })
+    .from(groupUserAccess)
+    .where(and(eq(groupUserAccess.groupId, groupId), eq(groupUserAccess.ownerUserId, ownerId)));
+  return rows.map((row) => row.userId);
+}
+
+function nprAmount(amount: number) {
+  return `NPR ${new Intl.NumberFormat("en-NP", { minimumFractionDigits: 0, maximumFractionDigits: 2 }).format(amount)}`;
+}
+
+export function buildPushPayload(
+  activity: SharedActivity,
+  preferences: NotificationPreferences = DEFAULT_NOTIFICATION_PREFERENCES,
+): PushPayload {
+  const detail =
+    activity.kind === "expense"
+      ? `${activity.actorName} ${activity.action} “${activity.description}”`
+      : `${activity.actorName} ${activity.action} payment: ${activity.payerName} → ${activity.receiverName}`;
+  return {
+    title: activity.title,
+    body: preferences.showAmounts ? `${detail} · ${nprAmount(activity.amount)}` : detail,
+    url: activity.url,
+    tag: activity.tag,
+  };
+}
+
+function statusCode(error: unknown) {
+  if (!error || typeof error !== "object" || !("statusCode" in error)) return undefined;
+  return typeof error.statusCode === "number" ? error.statusCode : undefined;
+}
+
+function emptyResult(configured: boolean): PushDeliveryResult {
+  return { configured, attempted: 0, sent: 0, failed: 0, removed: 0 };
+}
+
+async function sendToTarget(
+  target: PushDeliveryTarget,
+  payload: PushPayload,
+  vapidDetails: VapidConfiguration,
+): Promise<Pick<PushDeliveryResult, "sent" | "failed" | "removed">> {
+  const subscription: WebPushSubscription = {
+    endpoint: target.endpoint,
+    keys: { p256dh: target.p256dh, auth: target.auth },
+  };
+  try {
+    await webPush.sendNotification(subscription, JSON.stringify(payload), {
+      TTL: PUSH_TTL_SECONDS,
+      timeout: PUSH_TIMEOUT_MS,
+      urgency: "normal",
+      vapidDetails,
+    });
+    try {
+      await recordPushSuccess(target.id);
+    } catch {
+      // Delivery succeeded; metrics persistence must not turn it into a failed financial write.
+    }
+    return { sent: 1, failed: 0, removed: 0 };
+  } catch (error) {
+    const status = statusCode(error);
+    const stale = status !== undefined && STALE_STATUS_CODES.has(status);
+    const failureCount = target.failureCount + 1;
+    const remove = stale || (status !== undefined && PERMANENT_STATUS_CODES.has(status) ? failureCount >= 3 : failureCount >= 5);
+    try {
+      await recordPushFailure(target.id, remove);
+    } catch {
+      // A tracking failure must not expose subscription details or fail the caller.
+    }
+    return { sent: 0, failed: 1, removed: remove ? 1 : 0 };
+  }
+}
+
+async function deliver(
+  targets: PushDeliveryTarget[],
+  payloadFor: (target: PushDeliveryTarget) => PushPayload,
+): Promise<PushDeliveryResult> {
+  const configuration = vapidConfiguration();
+  if (!configuration) return emptyResult(false);
+  const deliveries = await Promise.all(targets.map((target) => sendToTarget(target, payloadFor(target), configuration)));
+  return deliveries.reduce<PushDeliveryResult>(
+    (total, result) => ({
+      ...total,
+      sent: total.sent + result.sent,
+      failed: total.failed + result.failed,
+      removed: total.removed + result.removed,
+    }),
+    { ...emptyResult(true), attempted: targets.length },
+  );
+}
+
+export async function sendSharedActivityPush(userIds: string[], activity: SharedActivity): Promise<PushDeliveryResult> {
+  if (!vapidConfiguration()) return emptyResult(false);
+  const targets = (await listPushDeliveryTargets(userIds)).filter((target) =>
+    activity.kind === "expense" ? target.preferences.expenseActivity : target.preferences.settlementActivity,
+  );
+  return deliver(targets, (target) => buildPushPayload(activity, target.preferences));
+}
+
+export async function sendTestPush(userId: string): Promise<PushDeliveryResult> {
+  if (!vapidConfiguration()) return emptyResult(false);
+  const targets = await listPushDeliveryTargets([userId]);
+  return deliver(targets, () => ({
+    title: "Khata notifications are ready",
+    body: "You’ll receive shared expense and settlement activity here.",
+    url: "/",
+    tag: "khata-test",
+  }));
+}
+
+/**
+ * Fan out a shared write to every linked account except the actor. Fire-and-forget
+ * from routes: the financial write already committed, so a push failure must never
+ * surface as an expense or settlement error. `sendSharedActivityPush` applies each
+ * person's preferences and privacy choice.
+ */
+export function notifySharedWrite(input: {
+  actorId: string;
+  ownerId: string;
+  groupId: string | null;
+  personIds: string[];
+  activity: SharedActivity;
+}) {
+  const { actorId, ownerId, groupId, personIds, activity } = input;
+  const run = async () => {
+    try {
+      const recipients = await resolveSharedWriteRecipients({ actorId, ownerId, groupId, personIds });
+      if (!recipients.length) return;
+      await sendSharedActivityPush(recipients, activity);
+    } catch (error) {
+      console.error("Shared push fan-out failed", error);
+    }
+  };
+  // `after` keeps the delivery inside the request lifecycle on the server without
+  // delaying the response; elsewhere this is a plain background task.
+  try {
+    after(run);
+  } catch {
+    void run();
+  }
+}

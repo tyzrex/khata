@@ -10,10 +10,12 @@
     "build": "next build && serwist build serwist.config.mjs",
     "start": "next start -p 3847 -H 0.0.0.0",
     "lint": "eslint",
-    "test": "bun test src/lib/period.test.ts src/lib/schemas.test.ts src/lib/split.test.ts src/lib/isolation.test.ts src/lib/dashboard.test.ts src/lib/nepali-date.test.ts src/lib/format.test.ts src/lib/agent-resolve.test.ts src/lib/url-state.test.ts",
+    "test": "bun test src/lib/period.test.ts src/lib/schemas.test.ts src/lib/split.test.ts src/lib/isolation.test.ts src/lib/dashboard.test.ts src/lib/nepali-date.test.ts src/lib/format.test.ts src/lib/agent-resolve.test.ts src/lib/url-state.test.ts src/db/shares-permissions.test.ts",
+    "test:db": "bun test src/db/shares-permissions.test.ts",
     "db:generate": "bunx drizzle-kit generate",
     "db:migrate": "bunx drizzle-kit migrate",
-    "db:seed": "bun src/db/seed.ts"
+    "db:seed": "bun src/db/seed.ts",
+    "vapid:generate": "web-push generate-vapid-keys --json"
   },
   "dependencies": {
     "@base-ui/react": "^1.8.0",
@@ -34,9 +36,10 @@
     "react": "19.3.0",
     "react-dom": "19.3.0",
     "react-hook-form": "^7.89.0",
+    "server-only": "^0.0.1",
     "shadcn": "^4.21.3",
-    "sonner": "^2.0.8",
     "tw-animate-css": "^1.4.0",
+    "web-push": "^3.6.7",
     "zod": "^4.6.5"
   },
   "devDependencies": {
@@ -47,6 +50,8 @@
     "@types/pg": "^8.23.1",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@types/web-push": "^3.6.4",
+    "bun-types": "^1.4.3",
     "drizzle-kit": "^0.31.11",
     "esbuild": "^0.28.2",
     "eslint": "^9",

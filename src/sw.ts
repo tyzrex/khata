@@ -89,4 +89,55 @@ self.addEventListener("message", (event) => {
   }
 });
 
+type PushPayload = { title?: string; body?: string; url?: string; tag?: string };
+
+/**
+ * Push notifications carry shared expense and settlement activity. The payload
+ * holds only a title, a body (amounts only when the recipient opted in), and a
+ * deep link — the worker never fetches, so no private data enters the cache.
+ */
+self.addEventListener("push", (event) => {
+  let payload: PushPayload = {};
+  try {
+    payload = (event.data?.json() as PushPayload | null) ?? {};
+  } catch {
+    payload = {};
+  }
+  const title = typeof payload.title === "string" && payload.title ? payload.title : "Khata";
+  const body = typeof payload.body === "string" && payload.body ? payload.body : "Shared activity in your book.";
+  const url = typeof payload.url === "string" && payload.url.startsWith("/") ? payload.url : "/";
+  const tag = typeof payload.tag === "string" && payload.tag ? payload.tag : "khata-shared";
+  event.waitUntil(
+    self.registration.showNotification(title, {
+      body,
+      tag,
+      icon: "/icons/icon-192.png",
+      badge: "/icons/icon-monochrome-512.png",
+      data: { url },
+    }),
+  );
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const raw = (event.notification.data as { url?: unknown } | null)?.url;
+  const url = typeof raw === "string" && raw.startsWith("/") ? raw : "/";
+  event.waitUntil(
+    (async () => {
+      const windows = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+      const open = windows.find((client) => "focus" in client);
+      const target = new URL(url, self.location.origin).href;
+      if (open && "navigate" in open && typeof open.navigate === "function") {
+        await open.navigate(target);
+        return open.focus();
+      }
+      if (open) {
+        await open.focus();
+        return;
+      }
+      await self.clients.openWindow(target);
+    })(),
+  );
+});
+
 serwist.addEventListeners();

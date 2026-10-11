@@ -111,6 +111,8 @@ export const limits = {
   bulkWrites: createRateLimiter({ limit: 20, windowMs: HOUR }),
   /** Personal API keys created per user. */
   apiKeys: createRateLimiter({ limit: 10, windowMs: HOUR }),
+  /** Test push notifications sent per user. */
+  pushTests: createRateLimiter({ limit: 5, windowMs: HOUR }),
   /** Writes through the /api/v1 agent API per user. Generous for a chat bot, tight for a runaway loop. */
   agentWrites: createRateLimiter({ limit: 300, windowMs: HOUR }),
 };

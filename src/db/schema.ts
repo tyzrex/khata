@@ -1,8 +1,11 @@
+import { sql } from "drizzle-orm";
 import {
   boolean,
+  check,
   date,
   index,
   integer,
+  jsonb,
   numeric,
   pgTable,
   primaryKey,
@@ -132,6 +135,9 @@ export const sharedExpenses = pgTable(
     id: text("id").primaryKey(),
     userId: ownerId(),
     groupId: text("group_id").references(() => groups.id, { onDelete: "set null" }),
+    createdByUserId: text("created_by_user_id").references(() => user.id, { onDelete: "set null" }),
+    updatedByUserId: text("updated_by_user_id").references(() => user.id, { onDelete: "set null" }),
+    version: integer("version").notNull().default(1),
     description: text("description").notNull(),
     date: date("date", { mode: "string" }).notNull(),
     amount: numeric("amount", { precision: 14, scale: 2, mode: "number" }).notNull(),
@@ -140,6 +146,8 @@ export const sharedExpenses = pgTable(
       .notNull()
       .references(() => people.id, { onDelete: "restrict" }),
     splitMode: text("split_mode").notNull(),
+    /** One of `SHARED_CATEGORIES`, or null when the author did not pick one. */
+    category: text("category"),
     note: text("note").notNull().default(""),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
@@ -148,6 +156,40 @@ export const sharedExpenses = pgTable(
     index("shared_expenses_user_idx").on(table.userId),
     index("shared_expenses_date_idx").on(table.date),
     index("shared_expenses_group_idx").on(table.groupId),
+  ],
+);
+
+export const sharedExpenseRevisions = pgTable(
+  "shared_expense_revisions",
+  {
+    id: text("id").primaryKey(),
+    // Intentionally not a foreign key: deleting an expense must not erase its audit history.
+    expenseId: text("expense_id").notNull(),
+    ownerUserId: text("owner_user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    groupId: text("group_id"),
+    actorUserId: text("actor_user_id").references(() => user.id, { onDelete: "set null" }),
+    actorName: text("actor_name").notNull(),
+    action: text("action").notNull(),
+    version: integer("version").notNull(),
+    snapshot: jsonb("snapshot")
+      .$type<{
+        description: string;
+        amount: number;
+        date: string;
+        paidByName: string;
+        splitMode: string;
+        note: string;
+      }>()
+      .notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    check("shared_expense_revisions_action_check", sql`${table.action} in ('updated', 'deleted')`),
+    index("shared_expense_revisions_expense_created_idx").on(table.expenseId, table.createdAt),
+    index("shared_expense_revisions_owner_idx").on(table.ownerUserId),
+    index("shared_expense_revisions_group_idx").on(table.groupId),
   ],
 );
 
@@ -186,6 +228,9 @@ export const settlements = pgTable(
     id: text("id").primaryKey(),
     userId: ownerId(),
     groupId: text("group_id").references(() => groups.id, { onDelete: "set null" }),
+    createdByUserId: text("created_by_user_id").references(() => user.id, { onDelete: "set null" }),
+    updatedByUserId: text("updated_by_user_id").references(() => user.id, { onDelete: "set null" }),
+    version: integer("version").notNull().default(1),
     fromPersonId: text("from_person_id")
       .notNull()
       .references(() => people.id, { onDelete: "restrict" }),
@@ -244,7 +289,36 @@ export const groupUserAccess = pgTable(
   (table) => [primaryKey({ columns: [table.groupId, table.userId] }), index("group_user_access_user_idx").on(table.userId)],
 );
 
-/** Personal API keys for bots and AI agents. Only a SHA-256 hash of the key is stored. */
+/** Devices a person enabled for Web Push. One row per browser subscription; the endpoint moves between accounts when claimed. */
+export const pushSubscriptions = pgTable(
+  "push_subscriptions",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    endpoint: text("endpoint").notNull().unique(),
+    p256dh: text("p256dh").notNull(),
+    auth: text("auth").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+    lastSuccessAt: timestamp("last_success_at", { withTimezone: true }),
+    failureCount: integer("failure_count").notNull().default(0),
+  },
+  (table) => [index("push_subscriptions_user_idx").on(table.userId)],
+);
+
+export const notificationPreferences = pgTable("notification_preferences", {
+  userId: text("user_id")
+    .primaryKey()
+    .references(() => user.id, { onDelete: "cascade" }),
+  expenseActivity: boolean("expense_activity").notNull().default(true),
+  settlementActivity: boolean("settlement_activity").notNull().default(true),
+  showAmounts: boolean("show_amounts").notNull().default(false),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 export const apiKeys = pgTable(
   "api_keys",
   {

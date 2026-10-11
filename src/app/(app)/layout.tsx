@@ -1,3 +1,4 @@
+import { io } from "next/cache";
 import { redirect } from "next/navigation";
 import { Suspense } from "react";
 import { AppFrame } from "@/components/app-frame";
@@ -21,8 +22,12 @@ export default function AppLayout({ children }: LayoutProps<"/">) {
 }
 
 async function SignedIn({ children }: { children: React.ReactNode }) {
-  const session = (await readPageSession()) ?? { id: "eGPFK3GRvJacQN3aBOnNfLZhASVH80yd", name: "Test User", email: "test2@example.com", emailVerified: true };
+  const session = await readPageSession();
   if (!session) redirect("/login");
+  // "Today" is read from the clock, which Cache Components refuses to bake into the
+  // static shell. `io()` suspends here instead, so the shell still prerenders and only
+  // this boundary streams in — and unlike `connection()`, it stays prefetchable.
+  await io();
   const initial = loadInitialData(session.id);
   return (
     <AppFrame user={{ name: session.name, email: session.email }} today={todayInKathmandu()}>

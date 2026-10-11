@@ -56,6 +56,7 @@ export function useShares(initial: ShareBook) {
     createGroup: (name: string, memberIds: string[]) => sendVoid("/api/groups", "POST", { name, memberIds }),
     updateGroup: (id: string, input: { name?: string; memberIds?: string[] }) => sendVoid(`/api/groups/${id}`, "PATCH", input),
     deleteGroup: (id: string) => sendVoid(`/api/groups/${id}`, "DELETE"),
+    leaveGroup: (id: string) => sendVoid(`/api/groups/${id}/leave`, "POST"),
     addFriend: async (name: string) => {
       const body = (await send("/api/people", "POST", { name })) as { person?: { id: string } } | null;
       return body?.person?.id ?? null;
@@ -85,7 +86,7 @@ export function useShares(initial: ShareBook) {
     },
     saveExpense: (input: unknown, id?: string) => sendVoid(id ? `/api/shared-expenses/${id}` : "/api/shared-expenses", id ? "PATCH" : "POST", input),
     deleteExpense: (id: string) => sendVoid(`/api/shared-expenses/${id}`, "DELETE"),
-    saveSettlement: (input: unknown) => sendVoid("/api/settlements", "POST", input),
+    saveSettlement: (input: unknown, id?: string) => sendVoid(id ? `/api/settlements/${id}` : "/api/settlements", id ? "PATCH" : "POST", input),
     deleteSettlement: (id: string) => sendVoid(`/api/settlements/${id}`, "DELETE"),
   };
 }

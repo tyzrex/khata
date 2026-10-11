@@ -5,7 +5,7 @@ import { ArrowLeft, ChevronRight, HandCoins, Pencil, Plus, Send, Trash2 } from "
 import Link from "next/link";
 import { ExpenseFeed } from "@/components/splits/expense-feed";
 import { accountNote, settleDebt, type BookRow, type FriendEntry } from "@/components/splits/friend-entries";
-import { feedOf, SETTLED, type Expense } from "@/components/splits/ledger-math";
+import { feedOf, SETTLED, type Expense, type Settlement } from "@/components/splits/ledger-math";
 import { EmptyNote, NetStack, PersonAvatar, SplitCard, SplitCardHead } from "@/components/splits-ui";
 import { Button } from "@/components/ui/button";
 import type { BalanceScope } from "@/db/shares";
@@ -18,6 +18,7 @@ export function FriendDetail({
   onSettle,
   onAddExpense,
   onEditExpense,
+  onEditSettlement,
   onRename,
   onInvite,
   onRemove,
@@ -26,6 +27,7 @@ export function FriendDetail({
   onSettle: (debt: Debt, groupId?: string) => void;
   onAddExpense: () => void;
   onEditExpense: (expense: Expense) => void;
+  onEditSettlement: (settlement: Settlement) => void;
   onRename: () => void;
   onInvite: () => void;
   onRemove: () => void;
@@ -127,7 +129,14 @@ export function FriendDetail({
           {feed.length === 0 ? (
             <EmptyNote>No shared expenses or payments with {first} yet.</EmptyNote>
           ) : (
-            <ExpenseFeed items={feed} selfId={entry.selfId} withId={friend.id} hideGroup={entry.own ? undefined : friend.name} onEditExpense={onEditExpense} />
+            <ExpenseFeed
+              items={feed}
+              selfId={entry.selfId}
+              withId={friend.id}
+              hideGroup={entry.own ? undefined : friend.name}
+              onEditExpense={onEditExpense}
+              onEditSettlement={onEditSettlement}
+            />
           )}
         </SplitCard>
       </div>

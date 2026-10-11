@@ -1,6 +1,6 @@
 import type { NextRequest } from "next/server";
 import { accountOf } from "@/db/agent";
-import { createSharedExpense, ensureDirectGroup, getShareBook } from "@/db/shares";
+import { createSharedExpense, describeSharedWrite, ensureDirectGroup, getShareBook } from "@/db/shares";
 import { normalizeName } from "@/lib/agent/match";
 import { describeSplits, findGroup, planExpense, whereText } from "@/lib/agent/plan";
 import { agentError, fail, ok, spendWrite, zodMessage } from "@/lib/agent/respond";
@@ -9,6 +9,7 @@ import { expenseViews } from "@/lib/agent/views";
 import { formatNpr } from "@/lib/format";
 import { readJson } from "@/lib/http";
 import { todayInKathmandu } from "@/lib/period";
+import { notifySharedWrite } from "@/lib/push-notifications";
 import { requireAgentUserId } from "@/lib/session";
 
 export async function GET(request: NextRequest) {
@@ -51,6 +52,7 @@ export async function POST(request: NextRequest) {
     const plan = planExpense(book, parsed.data, { accountName: account.name });
     const groupId = plan.directWith ? await ensureDirectGroup(userId, plan.directWith) : plan.write.groupId;
     const id = await createSharedExpense(userId, { ...plan.write, groupId });
+    const detail = await describeSharedWrite(userId, { kind: "expense", action: "added", expenseId: id });
 
     const where = plan.directWith
       ? `with ${plan.scope.members.find((member) => member.id === plan.directWith)?.name}`
@@ -63,6 +65,7 @@ export async function POST(request: NextRequest) {
       name: share.personId === plan.scope.selfId ? "You" : (plan.scope.members.find((member) => member.id === share.personId)?.name ?? "Someone"),
       amount: share.amount,
     }));
+    if (detail) notifySharedWrite(detail);
     return ok(
       { id, groupId, description: plan.write.description, amount: plan.write.amount, date: plan.write.date, paidBy: payer, splitMode: plan.write.splitMode, shares },
       `Added "${plan.write.description}" ${formatNpr(plan.write.amount)} ${where}, paid by ${payer}. ${describeSplits(plan.scope, plan.write.splitMode, plan.splits)}`,

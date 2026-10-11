@@ -32,7 +32,9 @@ import type { AccountDto, CategoryDto, TransactionDto } from "@/lib/types";
 type Debt = BalanceScope["youOwe"][number];
 
 /** Account dots on the brand card, largest balance first: white at falling strength. */
-const HOLDING_TONES = ["bg-white", "bg-white/65", "bg-white/40", "bg-white/25"] as const;
+/* Dots marking which holding is which. Brand-tinted rather than white: the hero is a
+ * normal card now, and these step from the accent down on whichever surface it sits. */
+const HOLDING_TONES = ["bg-brand", "bg-brand/60", "bg-brand/35", "bg-brand/20"] as const;
 
 const compareLabels: Record<RangeKind, string> = {
   week: "last week",
@@ -367,38 +369,41 @@ export function Overview({
       ) : null}
 
       <div className="grid grid-cols-1 gap-3 xl:grid-cols-12 2xl:gap-4">
-        <section className="@container flex flex-col rounded-3xl bg-brand p-5 text-brand-foreground sm:p-6 xl:col-span-4 2xl:col-span-3 2xl:p-7">
-          <p className="text-[13px] font-medium opacity-80">What you have</p>
-          <p className="dotmatrix mt-3 flex min-w-0 flex-wrap items-baseline gap-x-2 !text-brand-foreground">
+        <section className="@container relative flex flex-col overflow-hidden rounded-3xl bg-card p-5 text-card-foreground shadow-card sm:p-6 xl:col-span-4 2xl:col-span-3 2xl:p-7">
+          {/* The brand as light falling on the card rather than filling it. Decorative, so it is hidden from assistive tech. */}
+          <span aria-hidden className="hero-bloom hero-bloom-a" />
+          <span aria-hidden className="hero-bloom hero-bloom-b" />
+          <p className="relative text-[13px] font-medium text-muted-foreground">What you have</p>
+          <p className="dotmatrix relative mt-3 flex min-w-0 flex-wrap items-baseline gap-x-2 !text-display">
             <Fit text={balanceText} reserve={3} className="text-[length:min(30px,var(--fit))] sm:text-[length:min(34px,var(--fit))] 2xl:text-[length:min(40px,var(--fit))]" />
-            <span className="text-sm font-semibold tracking-normal opacity-75">NPR</span>
+            <span className="text-sm font-semibold tracking-normal text-muted-foreground">NPR</span>
           </p>
           {trailMove != null ? (
-            <p className="mt-2 text-xs font-medium tabular-nums opacity-80">
+            <p className={`relative mt-2 text-xs font-medium tabular-nums ${trailMove >= 0 ? "text-credit" : "text-warning"}`}>
               {trailMove >= 0 ? "+" : "−"}
               {formatNpr(Math.abs(trailMove))} this period
             </p>
           ) : null}
-          <Sparkline values={trail.map((point) => point.balance)} id="hero-trail" className="mt-3 h-8 text-white sm:h-9" />
-          <div className="mt-auto pt-4">
+          <Sparkline values={trail.map((point) => point.balance)} id="hero-trail" className="relative mt-3 h-8 text-brand-tint sm:h-9" />
+          <div className="relative mt-auto pt-4">
             {holdings.length > 0 ? (
               <>
-                <ul className="flex flex-wrap gap-x-4 gap-y-1.5 text-xs">
+                <ul className="flex flex-wrap gap-x-4 gap-y-1.5 text-xs text-muted-foreground">
                   {holdings.slice(0, 3).map((account, index) => (
                     <li key={account.account} className="flex min-w-0 items-center gap-1.5">
                       <span className={`size-1.5 shrink-0 rounded-full ${HOLDING_TONES[Math.min(index, HOLDING_TONES.length - 1)]}`} aria-hidden />
-                      <span className="truncate font-medium">{account.account}</span>
-                      <span className="tabular-nums opacity-70">{formatAmount(account.balance)}</span>
+                      <span className="truncate font-medium text-display">{account.account}</span>
+                      <span className="tabular-nums">{formatAmount(account.balance)}</span>
                     </li>
                   ))}
                 </ul>
               </>
             ) : (
-              <p className="text-xs opacity-80">
+              <p className="text-xs text-muted-foreground">
                 {accounts.length} {accounts.length === 1 ? "account" : "accounts"}
               </p>
             )}
-            {afterSplits != null && owe != null && owed != null && (owe > 0 || owed > 0) ? <p className="mt-3 border-t border-white/15 pt-3 text-xs opacity-80">{formatNpr(afterSplits)} once splits settle</p> : null}
+            {afterSplits != null && owe != null && owed != null && (owe > 0 || owed > 0) ? <p className="mt-3 border-t border-border pt-3 text-xs text-muted-foreground">{formatNpr(afterSplits)} once splits settle</p> : null}
           </div>
         </section>
 
@@ -524,7 +529,8 @@ export function Overview({
                   <Fit text={formatNpr(owe ?? 0)} className={`${tileFigure} ${owe ? "text-warning" : "text-muted-foreground"}`} />
                 </div>
                 <div className="@container min-w-0 rounded-2xl bg-accent p-3">
-                  <p className="text-[13px] font-medium text-accent-foreground/70">You are owed</p>
+                  {/* Same `label` as the tile beside it. accent-foreground/70 was 1.3:1 on the navy tile. */}
+                  <p className="label">You are owed</p>
                   <Fit text={formatNpr(owed ?? 0)} className={`${tileFigure} ${owed ? "text-credit" : "text-muted-foreground"}`} />
                 </div>
               </div>

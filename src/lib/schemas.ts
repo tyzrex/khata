@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { CATEGORY_KINDS, TX_TYPES } from "@/lib/constants";
+import { CATEGORY_KINDS, SHARED_CATEGORIES, TX_TYPES } from "@/lib/constants";
 import { SPLIT_MODES } from "@/lib/split";
 
 export class ImportShapeError extends Error {
@@ -153,6 +153,8 @@ export const shareExpenseSchema = z.object({
   paidById: z.string().min(1, "Say who paid"),
   groupId: z.string().min(1),
   splitMode: z.enum(SPLIT_MODES),
+  /** `""` is the "no category" choice and maps to null on the wire. */
+  category: z.union([z.literal(""), z.enum(SHARED_CATEGORIES)]),
   note: z.string().trim().max(500, "Note is limited to 500 characters"),
   participants: z.array(splitParticipantSchema).min(1, "Pick at least one person"),
   transactionIds: z.array(z.string()),

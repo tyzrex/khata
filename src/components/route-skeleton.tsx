@@ -1,11 +1,12 @@
 "use client";
 
+import { Suspense } from "react";
 import { cn } from "cn";
 import { usePathname } from "next/navigation";
 import { viewForPath } from "@/components/app-shell";
 
 /** One placeholder block. Pulses only when the person has not asked for reduced motion. */
-export function Bone({ className }: { className?: string }) {
+function Bone({ className }: { className?: string }) {
   return <span aria-hidden className={cn("block rounded-xl bg-secondary motion-safe:animate-pulse", className)} />;
 }
 
@@ -60,22 +61,26 @@ function DashboardSkeleton() {
       </div>
 
       <div className="grid grid-cols-1 gap-3 xl:grid-cols-12 2xl:gap-4">
-        <div className="flex flex-col gap-3 rounded-3xl bg-brand p-5 sm:p-6 xl:col-span-4 2xl:col-span-3 2xl:p-7">
-          <Bone className="h-3 w-24 opacity-60" />
-          <Bone className="h-8 w-32" />
-          <Bone className="h-2.5 w-28 opacity-60" />
-          <Bone className="h-8 w-full" />
+        {/* Ink, like the real hero — this used to be `bg-brand`, so a solid blue block
+            resolved into an ink card and the whole top row jumped. */}
+        <div className="@container flex flex-col rounded-3xl bg-card p-5 shadow-card sm:p-6 xl:col-span-4 2xl:col-span-3 2xl:p-7">
+          <Bone className="h-3 w-24" />
+          <Bone className="mt-3 h-8 w-32" />
+          <Bone className="mt-2 h-2.5 w-28" />
+          <Bone className="mt-3 h-8 w-full" />
           <div className="mt-auto pt-4">
-            <Bone className="h-3 w-40 opacity-60" />
+            <Bone className="h-3 w-40" />
           </div>
         </div>
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:col-span-8 2xl:col-span-9">
-          {Array.from({ length: 3 }, (_, index) => (
-            <Card key={index} className="flex flex-col gap-3">
+        {/* One card split into cells, not three cards with gaps: the real stats row is a
+            single surface with hairlines between the figures. */}
+        <div className="grid grid-cols-2 rounded-3xl bg-card shadow-card sm:grid-cols-3 xl:col-span-8 2xl:col-span-9">
+          {["border-r", "sm:border-r", "col-span-2 border-t sm:col-span-1 sm:border-t-0"].map((edge, index) => (
+            <div key={index} className={`flex flex-col p-4 sm:p-5 2xl:p-6 ${edge}`}>
               <Bone className="h-3 w-20" />
-              <Bone className="h-7 w-24" />
-              <Bone className="h-2.5 w-16" />
-            </Card>
+              <Bone className="mt-2 h-7 w-24" />
+              <Bone className="mt-1.5 h-2.5 w-16" />
+            </div>
           ))}
         </div>
       </div>
@@ -123,19 +128,37 @@ function DashboardSkeleton() {
   );
 }
 
+/**
+ * A strip of three figures sharing one card, the way the real summary rows do:
+ * hairline between the cells, no gaps. Splitting them into separate cards is what
+ * the skeleton used to do, and it snapped shut the moment the numbers landed.
+ *
+ * The column classes are written out rather than interpolated — Tailwind scans
+ * source text, so a `sm:grid-cols-${n}` would compile to nothing and quietly
+ * leave the strip at two columns.
+ */
+const STRIP_EDGES = ["border-r", "sm:border-r", "col-span-2 border-t sm:col-span-1 sm:border-t-0"] as const;
+
+function Strip() {
+  return (
+    <div className="grid grid-cols-2 rounded-3xl bg-card shadow-card sm:grid-cols-3">
+      {STRIP_EDGES.map((edge, index) => (
+        <div key={index} className={`flex flex-col p-4 sm:p-5 2xl:p-6 ${edge}`}>
+          <Bone className="h-3 w-16" />
+          <Bone className="mt-2 h-6 w-24" />
+          <Bone className="mt-1.5 h-2.5 w-12" />
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function LedgerSkeleton() {
   return (
     <div className="flex flex-col gap-6">
       <Header />
       <div className="flex flex-col gap-3">
-        <Card className="grid grid-cols-3 gap-4">
-          {Array.from({ length: 3 }, (_, index) => (
-            <span key={index} className="flex flex-col gap-2">
-              <Bone className="h-3 w-16" />
-              <Bone className="h-6 w-24" />
-            </span>
-          ))}
-        </Card>
+        <Strip />
         <Card>
           <Bone className="h-10 w-full" />
         </Card>
@@ -151,6 +174,9 @@ function SplitsSkeleton() {
   return (
     <div className="flex flex-col gap-6">
       <Header />
+      {/* Friends, Groups and Balances all open with the owed/owe strip. Leaving it out
+          pushed the whole list down by a card when the data arrived. */}
+      <Strip />
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(17rem,22rem)_minmax(0,1fr)] 2xl:gap-4">
         <Card>
           <Bone className="h-4 w-28" />
@@ -269,14 +295,35 @@ export function ShellSkeleton() {
   );
 }
 
-/** What the page will look like, drawn while its data streams in. Picked by path so it matches what comes next. */
+/**
+ * What the page will look like, drawn while its data streams in. Picked by path so it
+ * matches what comes next.
+ *
+ * This is rendered as a Suspense *fallback* (see `(app)/layout.tsx`), and a fallback
+ * has no boundary above it to catch a suspension. Under Cache Components,
+ * `usePathname` suspends on routes whose dynamic params are not known at build time —
+ * `/friends/[id]` and `/groups/[id]`, neither of which has `generateStaticParams` — so
+ * reading it here aborted the prerender of those routes.
+ *
+ * The fix is the one the Next.js docs prescribe for URL hooks: put the runtime read
+ * behind its own boundary and let the fallback be prerendered. The fallback is
+ * `SplitsSkeleton`, because those are the only routes that can reach it — both
+ * dynamic routes belong to the splits family, so the placeholder is already the right
+ * shape and there is nothing to correct once the pathname resolves on the client.
+ */
 export function RouteSkeleton() {
+  return (
+    <div role="status" aria-label="Loading">
+      <Suspense fallback={<SplitsSkeleton />}>
+        <RouteSkeletonBody />
+      </Suspense>
+    </div>
+  );
+}
+
+function RouteSkeletonBody() {
   const view = viewForPath(usePathname());
   const body =
     view === "overview" ? <DashboardSkeleton /> : view === "ledger" ? <LedgerSkeleton /> : view === "friends" || view === "groups" || view === "balances" ? <SplitsSkeleton /> : <PlainSkeleton />;
-  return (
-    <div role="status" aria-label="Loading">
-      {body}
-    </div>
-  );
+  return body;
 }

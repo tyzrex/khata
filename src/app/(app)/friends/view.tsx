@@ -17,6 +17,7 @@ export function FriendsPage() {
       onSettle={(debt, groupId) => khata.openSettle(debt, groupId)}
       onAddExpense={(groupId) => khata.openExpense(groupId)}
       onEditExpense={(expense) => khata.openExpense(expense.groupId, expense)}
+      onEditSettlement={khata.openSettlement}
       onGroups={() => router.push("/groups")}
       addFriend={khata.shares.addFriend}
       onRenamePerson={khata.shares.renamePerson}

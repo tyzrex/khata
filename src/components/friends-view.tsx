@@ -11,7 +11,7 @@ import { InviteDialog, type InviteActions } from "@/components/invite-dialog";
 import { PageHeader } from "@/components/page-header";
 import { FriendDetail } from "@/components/splits/friend-detail";
 import { accountNote, friendEntries, friendPosition, type FriendEntry } from "@/components/splits/friend-entries";
-import { SETTLED } from "@/components/splits/ledger-math";
+import { SETTLED, type Settlement } from "@/components/splits/ledger-math";
 import { BalanceStrip, EmptyNote, PersonAvatar, SplitCard, SplitCardHead } from "@/components/splits-ui";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -49,6 +49,7 @@ export function FriendsView({
   onSettle,
   onAddExpense,
   onEditExpense,
+  onEditSettlement,
   onGroups,
   addFriend,
   onRenamePerson,
@@ -64,6 +65,7 @@ export function FriendsView({
   onSettle: (debt: Debt, groupId?: string) => void;
   onAddExpense: (groupId: string | null) => void;
   onEditExpense: (expense: Expense) => void;
+  onEditSettlement: (settlement: Settlement) => void;
   onGroups: () => void;
   addFriend: (name: string) => Promise<string | null>;
   onRenamePerson: (id: string, name: string) => Promise<void>;
@@ -111,7 +113,11 @@ export function FriendsView({
 
   const owedTotal = entries.reduce((total, entry) => total + Math.max(entry.net, 0), 0);
   const oweTotal = entries.reduce((total, entry) => total + Math.max(-entry.net, 0), 0);
-  const onKhata = entries.filter((entry) => !entry.own || entry.friend.linkedUserId).length;
+  // The headline third cell used to be "Friends · 3 · 0 on Khata". Whether a friend
+  // has their own account is already shown next to their name in the detail pane, and
+  // as a headline it was a number nobody could act on. This one answers the only
+  // question this page raises: is there anything to settle?
+  const toSettle = entries.filter((entry) => Math.abs(entry.net) >= SETTLED).length;
   const needle = query.trim().toLowerCase();
   const visible = needle ? entries.filter((entry) => entry.friend.name.toLowerCase().includes(needle)) : entries;
 
@@ -199,7 +205,11 @@ export function FriendsView({
               owe={oweTotal}
               owedHint={plural(entries.filter((entry) => entry.net >= SETTLED).length, "from", "friend")}
               oweHint={plural(entries.filter((entry) => entry.net <= -SETTLED).length, "to", "friend")}
-              third={{ label: "Friends", value: entries.length, hint: `${onKhata} on Khata` }}
+              third={{
+                label: "To settle",
+                value: toSettle,
+                hint: toSettle === 0 ? "Everyone is square" : "with an open balance",
+              }}
             />
           </div>
 
@@ -228,6 +238,7 @@ export function FriendsView({
                   onSettle={onSettle}
                   onAddExpense={() => void expenseWith(selected)}
                   onEditExpense={onEditExpense}
+                  onEditSettlement={onEditSettlement}
                   onRename={() => startEdit(selected.friend)}
                   onInvite={() => setInvite({ person: selected.friend, email: "" })}
                   onRemove={() => setRemoving(selected.friend)}

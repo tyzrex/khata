@@ -1,14 +1,14 @@
 "use client";
 
 import { cn } from "cn";
-import { Plus } from "lucide-react";
+import { Plus, UserRound } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 import { InviteDialog, type InviteActions } from "@/components/invite-dialog";
 import { PageHeader } from "@/components/page-header";
 import { GroupDetail, groupViewOf, positionWords, type GroupView } from "@/components/splits/group-detail";
 import { GroupFormDialog } from "@/components/splits/group-form-dialog";
-import { SETTLED, type Expense } from "@/components/splits/ledger-math";
+import { SETTLED, type Expense, type Settlement } from "@/components/splits/ledger-math";
 import { AvatarStack, BalanceStrip, GroupTile, SplitCard, SplitCardHead } from "@/components/splits-ui";
 import { Button } from "@/components/ui/button";
 import type { BalanceScope, ShareBook } from "@/db/shares";
@@ -29,9 +29,12 @@ export function GroupsView({
   onSettle,
   onAddExpense,
   onEditExpense,
+  onEditSettlement,
   onCreateGroup,
   onUpdateGroup,
   onDeleteGroup,
+  onLeaveGroup,
+  onFriends,
   inviteActions,
   selectedId,
   onSelect,
@@ -43,9 +46,13 @@ export function GroupsView({
   onSettle: (debt: Debt, groupId: string) => void;
   onAddExpense: (groupId: string) => void;
   onEditExpense: (expense: Expense) => void;
+  onEditSettlement: (settlement: Settlement) => void;
   onCreateGroup: (name: string, memberIds: string[]) => Promise<void>;
   onUpdateGroup: (id: string, input: { name?: string; memberIds?: string[] }) => Promise<void>;
   onDeleteGroup: (id: string) => Promise<void>;
+  onLeaveGroup: (id: string) => Promise<void>;
+  /** Cross-link to the sibling page. Friends had one; Groups did not, so the pair was a one-way door. */
+  onFriends: () => void;
   inviteActions: InviteActions;
 }) {
   const groups: GroupView[] = [
@@ -70,10 +77,16 @@ export function GroupsView({
         title="Groups"
         description="Trips, flats and rides. Everyone in a group sees the same tab, and settling here never moves your bank ledger."
         actions={
-          <Button type="button" onClick={() => setForm({ open: true, group: null })}>
-            <Plus />
-            New group
-          </Button>
+          <>
+            <Button type="button" variant="outline" className="bg-card shadow-card" onClick={onFriends}>
+              <UserRound />
+              Friends
+            </Button>
+            <Button type="button" onClick={() => setForm({ open: true, group: null })}>
+              <Plus />
+              New group
+            </Button>
+          </>
         }
       />
 
@@ -119,8 +132,17 @@ export function GroupsView({
                 onSettle={onSettle}
                 onAddExpense={() => onAddExpense(selected.id)}
                 onEditExpense={onEditExpense}
+                onEditSettlement={onEditSettlement}
                 onInvite={ownedSelected ? () => setInviteFor(selected.id) : undefined}
                 onEdit={ownedSelected ? () => setForm({ open: true, group: ownedSelected }) : undefined}
+                onLeaveGroup={
+                  selected.entry.kind === "joined"
+                    ? async () => {
+                        await onLeaveGroup(selected.id);
+                        onSelect(null);
+                      }
+                    : undefined
+                }
               />
             </div>
           </div>
