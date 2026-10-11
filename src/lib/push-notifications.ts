@@ -3,6 +3,7 @@ import { after } from "next/server";
 import { and, eq, inArray } from "drizzle-orm";
 import { getDb } from "@/db/client";
 import type { SharedActivity } from "@/db/push-activity";
+import { recordNotifications } from "@/db/notifications";
 import { groupMembers, groupUserAccess, people } from "@/db/schema";
 import {
   DEFAULT_NOTIFICATION_PREFERENCES,
@@ -144,16 +145,23 @@ export function buildPushPayload(
   activity: SharedActivity,
   preferences: NotificationPreferences = DEFAULT_NOTIFICATION_PREFERENCES,
 ): PushPayload {
-  const detail =
-    activity.kind === "expense"
-      ? `${activity.actorName} ${activity.action} “${activity.description}”`
-      : `${activity.actorName} ${activity.action} payment: ${activity.payerName} → ${activity.receiverName}`;
+  const detail = activityDetail(activity);
   return {
     title: activity.title,
     body: preferences.showAmounts ? `${detail} · ${nprAmount(activity.amount)}` : detail,
     url: activity.url,
     tag: activity.tag,
   };
+}
+
+/**
+ * The sentence describing what happened, without the amount. Shared by the push body
+ * and the in-app feed so both read the same way.
+ */
+function activityDetail(activity: SharedActivity) {
+  return activity.kind === "expense"
+    ? `${activity.actorName} ${activity.action} “${activity.description}”`
+    : `${activity.actorName} ${activity.action} payment: ${activity.payerName} → ${activity.receiverName}`;
 }
 
 function statusCode(error: unknown) {
@@ -243,6 +251,12 @@ export async function sendTestPush(userId: string): Promise<PushDeliveryResult> 
  * from routes: the financial write already committed, so a push failure must never
  * surface as an expense or settlement error. `sendSharedActivityPush` applies each
  * person's preferences and privacy choice.
+ *
+ * The in-app feed row is written first and unconditionally. `sendSharedActivityPush`
+ * returns early when the VAPID keys are absent, so gating the insert on delivery
+ * would leave the feed permanently empty on deployments without them. Amounts are
+ * always included here: `showAmounts` governs what a lock screen shows, not what the
+ * signed-in owner sees on their own dashboard.
  */
 export function notifySharedWrite(input: {
   actorId: string;
@@ -250,12 +264,34 @@ export function notifySharedWrite(input: {
   groupId: string | null;
   personIds: string[];
   activity: SharedActivity;
+  /**
+   * Notify the actor as well. Off by default: someone who taps "save" already saw
+   * it happen, and a feed entry for their own click is noise. On for writes made
+   * with an API key, where the actor is a bot acting on their behalf and they
+   * would otherwise never find out.
+   */
+  includeActor?: boolean;
 }) {
-  const { actorId, ownerId, groupId, personIds, activity } = input;
+  const { actorId, ownerId, groupId, personIds, activity, includeActor = false } = input;
   const run = async () => {
     try {
       const recipients = await resolveSharedWriteRecipients({ actorId, ownerId, groupId, personIds });
+      if (includeActor && !recipients.includes(actorId)) recipients.push(actorId);
       if (!recipients.length) return;
+      await recordNotifications(
+        recipients.map((userId) => ({
+          userId,
+          kind: "shared_activity" as const,
+          title: activity.title,
+          detail: activityDetail(activity),
+          url: activity.url,
+          amount: activity.amount,
+          // Keyed on the action as well as the record, so a create, an edit, and a
+          // delete each land. Repeated edits of the same expense collapse into one
+          // entry on purpose: five "Asha edited this" rows help nobody.
+          eventKey: `shared:${activity.tag}:${activity.action}`,
+        })),
+      );
       await sendSharedActivityPush(recipients, activity);
     } catch (error) {
       console.error("Shared push fan-out failed", error);

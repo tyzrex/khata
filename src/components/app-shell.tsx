@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState, type ReactNode } from "react";
 import { Mark } from "@/components/mark";
+import { NotificationsBell } from "@/components/notifications-bell";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -121,6 +122,7 @@ export function AppShell({
               <p className="truncate text-[11px] text-muted-foreground">{user.email}</p>
             </div>
             <ThemeToggle className="size-9 bg-card" />
+            <NotificationsBell variant="outline" size="icon-xs" align="start" side="top" className="bg-card" />
             <Button type="button" variant="outline" size="icon-xs" className="bg-card" aria-label="Sign out" title="Sign out" onClick={onSignOut}>
               <LogOut className="size-4" />
             </Button>
@@ -140,6 +142,7 @@ export function AppShell({
             </div>
             <div className="flex items-center gap-1">
               <ThemeToggle className="bg-transparent text-muted-foreground hover:bg-accent/60 hover:text-display" />
+              <NotificationsBell variant="outline" size="icon" align="end" side="bottom" className="bg-transparent text-muted-foreground hover:bg-accent/60 hover:text-display" />
               <Button type="button" variant="outline" size="icon" className="bg-transparent text-muted-foreground hover:bg-accent/60 hover:text-display" aria-label="More sections" onClick={() => setMenuOpen(true)}>
                 <Menu />
               </Button>

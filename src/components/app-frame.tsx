@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { createContext, useContext, useState, type ReactNode } from "react";
 import { AppShell } from "@/components/app-shell";
+import { NotificationsProvider } from "@/components/notifications-provider";
 import { authClient } from "@/lib/auth-client";
 import { detachPushBeforeSignOut } from "@/lib/push-client";
 
@@ -51,10 +52,12 @@ export function AppFrame({ user, today, children }: { user: { name: string; emai
   const actions: FrameActions = { user, pending, request: setPending, clear: () => setPending(null), signOut };
 
   return (
-    <FrameContext value={actions}>
-      <AppShell user={user} today={today} onAdd={() => setPending("add")} onSplit={() => setPending("split")} onSignOut={signOut}>
-        {children}
-      </AppShell>
-    </FrameContext>
+    <NotificationsProvider>
+      <FrameContext value={actions}>
+        <AppShell user={user} today={today} onAdd={() => setPending("add")} onSplit={() => setPending("split")} onSignOut={signOut}>
+          {children}
+        </AppShell>
+      </FrameContext>
+    </NotificationsProvider>
   );
 }

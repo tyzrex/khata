@@ -2,6 +2,8 @@
 
 import { ArrowDownRight, ArrowUpRight, CircleCheck, HandCoins, Info, Plus, TriangleAlert, Wallet } from "lucide-react";
 import { useMemo, useState, type CSSProperties, type ReactNode } from "react";
+import { CardHead } from "@/components/card-head";
+import { NotificationFeedCard } from "@/components/notification-feed-card";
 import { CashFlowChart } from "@/components/cash-flow-chart";
 import { DateRangeBar } from "@/components/date-range-bar";
 import { PageHeader } from "@/components/page-header";
@@ -131,22 +133,6 @@ function Figure({ label, value, foot, badge, tone, className, chart }: { label: 
       <Fit text={value} className={`figure mt-2 text-[length:min(1.25rem,var(--fit))] leading-tight sm:text-[length:min(1.5rem,var(--fit))] 2xl:text-[length:min(28px,var(--fit))] ${tone ?? "text-display"}`} />
       <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">{foot}</div>
       {chart ? <div className="mt-4 flex min-h-8 flex-1 items-end">{chart}</div> : null}
-    </div>
-  );
-}
-
-function CardHead({ title, hint, action, onAction }: { title: string; hint?: string; action?: string; onAction?: () => void }) {
-  return (
-    <div className="flex items-start justify-between gap-3">
-      <div className="min-w-0">
-        <h2 className="text-[15px] leading-5 font-semibold tracking-[-0.015em] text-display">{title}</h2>
-        {hint ? <p className="mt-0.5 truncate text-xs text-muted-foreground">{hint}</p> : null}
-      </div>
-      {action && onAction ? (
-        <button type="button" className="shrink-0 rounded-lg px-3 py-1.5 text-[13px] font-medium text-interactive transition-colors duration-200 outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring -mr-3 -mt-1" onClick={onAction}>
-          {action}
-        </button>
-      ) : null}
     </div>
   );
 }
@@ -643,6 +629,8 @@ export function Overview({
         </section>
 
         <div className="flex flex-col gap-4 xl:col-span-5 2xl:gap-5">
+          <NotificationFeedCard />
+
           <section className="rounded-3xl bg-card shadow-card p-4 sm:p-5 2xl:p-6">
             <CardHead title="Top merchants" hint="Where the money went most" />
             {stats.topMerchants.length === 0 ? (

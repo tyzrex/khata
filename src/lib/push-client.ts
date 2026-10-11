@@ -1,5 +1,7 @@
 "use client";
 
+import { apiError, withTimeout } from "@/lib/api-client";
+
 const DEVELOPMENT_MESSAGE = "Push notifications are unavailable in development because the Khata service worker is disabled. Use a production build over HTTPS.";
 const UNSUPPORTED_MESSAGE = "This browser does not support web push notifications.";
 const OPERATION_TIMEOUT_MS = 10_000;
@@ -15,22 +17,6 @@ function assertPushEnvironment() {
   if (process.env.NODE_ENV !== "production") throw new Error(DEVELOPMENT_MESSAGE);
   if (!window.isSecureContext) throw new Error("Push notifications require a secure HTTPS connection.");
   if (!("serviceWorker" in navigator) || !("PushManager" in window) || !("Notification" in window)) throw new Error(UNSUPPORTED_MESSAGE);
-}
-
-function withTimeout<T>(promise: Promise<T>, milliseconds: number, message: string): Promise<T> {
-  return new Promise<T>((resolve, reject) => {
-    const timer = window.setTimeout(() => reject(new Error(message)), milliseconds);
-    promise.then(
-      (value) => {
-        window.clearTimeout(timer);
-        resolve(value);
-      },
-      (error: unknown) => {
-        window.clearTimeout(timer);
-        reject(error);
-      },
-    );
-  });
 }
 
 function isKhataRegistration(registration: ServiceWorkerRegistration) {
@@ -53,15 +39,6 @@ async function pushRegistration() {
     : await withTimeout(navigator.serviceWorker.ready, OPERATION_TIMEOUT_MS, "The notification service worker did not become ready. Reload and try again.");
   if (!isKhataRegistration(ready)) throw new Error("The active service worker is not Khata's /sw.js. Close other Khata tabs, reload, and try again.");
   return ready;
-}
-
-async function apiError(response: Response, fallback: string) {
-  try {
-    const value = (await response.json()) as { error?: unknown };
-    return typeof value.error === "string" && value.error ? value.error : fallback;
-  } catch {
-    return fallback;
-  }
 }
 
 function serializeSubscription(subscription: PushSubscription): SerializedPushSubscription {

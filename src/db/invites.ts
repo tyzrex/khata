@@ -1,6 +1,7 @@
 import { and, eq, isNull } from "drizzle-orm";
 import { getDb } from "@/db/client";
 import { groupInvites, groupMembers, groupUserAccess, groups, people, user } from "@/db/schema";
+import { recordNotifications } from "@/db/notifications";
 import { NotFoundError } from "@/db/shares";
 import { ShareInputError } from "@/lib/split";
 
@@ -111,7 +112,7 @@ export async function acceptInvite(userId: string, token: string): Promise<{ gro
     .where(and(eq(groupUserAccess.groupId, group.id), eq(groupUserAccess.userId, userId)))
     .limit(1);
   const direct = group.kind === "direct";
-  const [creator] = direct ? await db.select({ name: user.name }).from(user).where(eq(user.id, ownerId)).limit(1) : [];
+  const [creator] = await db.select({ name: user.name }).from(user).where(eq(user.id, ownerId)).limit(1);
   const label = direct ? (creator?.name ?? "your friend") : group.name;
   if (existing) return { groupId: group.id, groupName: label, direct };
 
@@ -169,6 +170,34 @@ export async function acceptInvite(userId: string, token: string): Promise<{ gro
       if (!marked) throw new ShareInputError("This invite has already been used.");
     }
   });
+
+  // The membership is already committed. A feed row is a courtesy, so a failure here
+  // must not turn a successful join into an error — swallow it and let the join stand.
+  // `dedupeKey` is scoped per user, so both rows can share one event key.
+  try {
+    const who = account.name || account.email;
+    const where = direct ? "/balances" : `/groups/${group.id}`;
+    await recordNotifications([
+      {
+        userId: ownerId,
+        kind: "invite",
+        title: direct ? `${who} joined your book` : `${who} joined ${label}`,
+        detail: direct ? "You can now share a direct book with them." : `They can now see and add to ${label}.`,
+        url: where,
+        eventKey: `invite:joined:${group.id}:${userId}`,
+      },
+      {
+        userId,
+        kind: "invite",
+        title: `You joined ${label}`,
+        detail: `${creator?.name ?? "Someone"} invited you. Anything you share with them shows up for you both.`,
+        url: where,
+        eventKey: `invite:joined:${group.id}:${userId}`,
+      },
+    ]);
+  } catch (error) {
+    console.error("Invite notification failed", error);
+  }
 
   return { groupId: group.id, groupName: label, direct };
 }

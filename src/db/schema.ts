@@ -12,6 +12,7 @@ import {
   text,
   timestamp,
   unique,
+  uniqueIndex,
 } from "drizzle-orm/pg-core";
 import { user } from "@/db/auth-schema";
 
@@ -318,6 +319,38 @@ export const notificationPreferences = pgTable("notification_preferences", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+/**
+ * A durable record of something that happened to an account, for the in-app feed.
+ *
+ * Written for every recipient of a shared write regardless of whether Web Push is
+ * configured: `sendSharedActivityPush` returns early when the VAPID keys are
+ * missing, so gating these inserts on delivery would leave the feed empty on every
+ * deployment that has not set them. `dedupeKey` is unique so a retried or replayed
+ * fan-out cannot duplicate a row.
+ */
+export const notifications = pgTable(
+  "notifications",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    kind: text("kind").notNull(),
+    title: text("title").notNull(),
+    detail: text("detail").notNull(),
+    url: text("url"),
+    amount: numeric("amount", { precision: 14, scale: 2, mode: "number" }),
+    /** `<userId>:<eventKey>`. The unique index is what makes every insert idempotent. */
+    dedupeKey: text("dedupe_key").notNull(),
+    readAt: timestamp("read_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("notifications_dedupe_key_uidx").on(table.dedupeKey),
+    index("notifications_user_created_idx").on(table.userId, table.createdAt),
+  ],
+);
 
 export const apiKeys = pgTable(
   "api_keys",

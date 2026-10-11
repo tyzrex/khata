@@ -85,6 +85,13 @@
       "when": 1791695020690,
       "tag": "0011_shared_expense_category",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1791697499306,
+      "tag": "0012_notifications",
+      "breakpoints": true
     }
   ]
 }

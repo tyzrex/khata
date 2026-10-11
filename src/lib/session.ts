@@ -38,12 +38,22 @@ export async function readAccountFlags(userId: string) {
  * unknown or revoked is refused outright rather than falling back.
  */
 export async function requireAgentUserId(request: Request) {
+  return (await requireAgentIdentity(request)).userId;
+}
+
+/**
+ * The same check, but it also says *how* the caller proved who they are. The agent
+ * routes need that: a bot writes as you, so if notifications went to everyone except
+ * the actor you would never hear about the expense your own bot just added. So a
+ * write made with an API key notifies you too.
+ */
+export async function requireAgentIdentity(request: Request): Promise<{ userId: string; viaApiKey: boolean }> {
   await beginRequest();
   const key = readApiKey(request.headers);
   if (key) {
     const userId = isApiKey(key) ? await userIdForApiKey(key) : null;
     if (!userId) throw new UnauthorizedError();
-    return userId;
+    return { userId, viaApiKey: true };
   }
-  return requireUserId(request);
+  return { userId: await requireUserId(request), viaApiKey: false };
 }
