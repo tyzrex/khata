@@ -84,8 +84,8 @@ export function isAllowedPushEndpoint(value: string) {
 }
 
 /**
- * Who should hear about a shared write. The owner always knows (they wrote it),
- * so resolve everyone else with a linked Khata account: the other members of a
+ * Who should hear about a shared write: the book's owner (unless they made the write),
+ * plus everyone else with a linked Khata account: the other members of a
  * group write via `group_user_access`, or the other person in a direct book via
  * their linked `people` row. Unknown or unlinked people resolve to nobody.
  */
@@ -102,14 +102,17 @@ export async function resolveSharedWriteRecipients(input: {
   if (groupId) {
     const [members, access] = await Promise.all([groupMemberUserIds(groupId, ownerId), groupAccessUserIds(groupId, ownerId)]);
     for (const userId of [...members, ...access]) {
-      if (userId !== actorId && linked.has(userId)) recipients.add(userId);
+      if (linked.has(userId)) recipients.add(userId);
     }
-    return [...recipients];
+  } else {
+    for (const userId of linked) recipients.add(userId);
   }
 
-  for (const userId of linked.values()) {
-    if (userId !== actorId) recipients.add(userId);
-  }
+  // The book's owner is never one of their own linked contacts, so the lookups above can
+  // not find them. When a collaborator writes into the owner's book, the owner is exactly
+  // who needs to hear about it.
+  recipients.add(ownerId);
+  recipients.delete(actorId);
   return [...recipients];
 }
 
