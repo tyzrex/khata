@@ -29,3 +29,10 @@ export function getPool() {
 export function getDb() {
   return drizzle(getPool(), { schema });
 }
+
+/**
+ * The handle a `db.transaction` callback is given. Several places need to pass it
+ * to a helper rather than call the callback directly, and naming it beats writing
+ * the `Parameters<Parameters<…>>` unwrap at every one of those call sites.
+ */
+export type Tx = Parameters<Parameters<ReturnType<typeof getDb>["transaction"]>[0]>[0];

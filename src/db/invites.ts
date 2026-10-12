@@ -1,11 +1,29 @@
 import { and, eq, isNull } from "drizzle-orm";
-import { getDb } from "@/db/client";
+import { getDb, type Tx } from "@/db/client";
 import { groupInvites, groupMembers, groupUserAccess, groups, people, user } from "@/db/schema";
 import { recordNotifications } from "@/db/notifications";
 import { NotFoundError } from "@/server/errors";
 import { ShareInputError } from "@/lib/split";
 
 const INVITE_DAYS = 7;
+
+/**
+ * The one person a two-person book is with, if they have no account yet.
+ *
+ * Only used for a direct book, where the answer cannot be ambiguous: there is
+ * exactly one other person in it. Two unlinked candidates means the shape is not
+ * what we think it is, and guessing would attach an account to the wrong human —
+ * so it answers with nothing and the caller falls back to adding a new person.
+ */
+async function soleUnlinkedMember(tx: Tx, ownerId: string, groupId: string): Promise<string | null> {
+  const rows = await tx
+    .select({ id: people.id })
+    .from(groupMembers)
+    .innerJoin(people, and(eq(people.id, groupMembers.personId), eq(people.userId, ownerId)))
+    .where(and(eq(groupMembers.groupId, groupId), isNull(people.linkedUserId), eq(people.isSelf, false)))
+    .limit(2);
+  return rows.length === 1 ? rows[0]!.id : null;
+}
 
 export type InviteInfo = {
   groupName: string;
@@ -129,13 +147,27 @@ export async function acceptInvite(userId: string, token: string): Promise<{ gro
       .from(people)
       .where(and(eq(people.userId, ownerId), eq(people.linkedUserId, userId)))
       .limit(1);
-    let personId = linked?.id;
+    let personId: string | null | undefined = linked?.id;
 
-    if (!personId && invite.personId) {
+    if (!personId) {
+      // Who in the owner's book this invite is actually for. An invite made by
+      // picking a person carries that id. One made by typing an email does not —
+      // a person has no address on them — and guessing wrong here used to create
+      // a *second* row for somebody already in the book, which then sat there
+      // unlinked while every expense kept pointing at the original. The result was
+      // a friend who was connected but never heard anything: no feed row, no push,
+      // no live update, because the write they would have come from belonged to
+      // the row nobody was linked to.
+      personId = invite.personId ?? (direct ? await soleUnlinkedMember(tx, ownerId, group.id) : null);
+    }
+
+    if (personId) {
+      // Claim it. The `isNull` guard means a row somebody else already claimed
+      // races to a harmless no-op rather than being taken off its owner.
       const [claimed] = await tx
         .update(people)
         .set({ linkedUserId: userId, updatedAt: new Date() })
-        .where(and(eq(people.id, invite.personId), eq(people.userId, ownerId), isNull(people.linkedUserId), eq(people.isSelf, false)))
+        .where(and(eq(people.id, personId), eq(people.userId, ownerId), isNull(people.linkedUserId), eq(people.isSelf, false)))
         .returning({ id: people.id });
       personId = claimed?.id;
     }

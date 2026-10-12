@@ -37,6 +37,16 @@ bun run db:migrate
 
 That runs the SQL in `drizzle/`. Generate a new migration after a schema change with `bun run db:generate`, then migrate again.
 
+To start over from nothing with two connected accounts — everything in every table
+is deleted first, so only point this at a database you are testing against:
+
+```bash
+bun run db:reset-demo -- http://localhost:3847
+```
+
+It signs both accounts in through the real API rather than writing rows, so what
+you get is exactly what a sign-up produces.
+
 Optional sample data, once `DATABASE_URL` is set:
 
 ```bash

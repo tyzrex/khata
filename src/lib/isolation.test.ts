@@ -325,6 +325,26 @@ test("the direct-group API route requires a session", () => {
   assert.match(text, /ensureDirectGroup\(userId, params\.id\)/);
 });
 
+test("an email invite claims the person already in the book instead of forking a second row", () => {
+  // An invite created by typing an email carries no personId, because a person has
+  // no address on them. Nothing used to resolve who it was for, so accepting one
+  // inserted a *new* person row: the owner was left with two rows for one human,
+  // the original unlinked and the new one linked. Every expense still pointed at
+  // the original, and notification fan-out resolves recipients by looking up
+  // `people.linkedUserId` — so the friend was connected and heard nothing at all.
+  // No feed row, no push, no live update.
+  const text = src("src/db/invites.ts");
+  assert.match(text, /soleUnlinkedMember/, "an email invite must still resolve to the person in the book");
+  assert.match(text, /invite\.personId \?\? \(direct \? await soleUnlinkedMember/, "only a two-person book can be resolved without being told who");
+
+  // And the helper has to refuse to guess: two candidates means attaching an
+  // account to the wrong human, which is worse than adding a new person.
+  const helper = text.slice(text.indexOf("async function soleUnlinkedMember"), text.indexOf("async function soleUnlinkedMember") + 700);
+  assert.match(helper, /\.limit\(2\)/, "must read at most two candidates so ambiguity is detectable");
+  assert.match(helper, /rows\.length === 1 \? rows\[0\]!\.id : null/, "one candidate or nothing — never a guess");
+  assert.match(helper, /isNull\(people\.linkedUserId\)/, "never re-claim a row somebody already linked");
+});
+
 test("accepting an invite only opens the inviting owner's direct groups", () => {
   const text = src("src/db/invites.ts");
   const start = text.indexOf("Joining any group makes you a friend");
