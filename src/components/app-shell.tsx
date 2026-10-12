@@ -20,7 +20,7 @@ export const views = [
   { id: "sync", href: "/sync", label: "Import and export", short: "Sync", icon: RefreshCw, mobile: false, group: "Money" },
   { id: "friends", href: "/friends", label: "Friends", short: "Friends", icon: Users, mobile: true, group: "Splits" },
   { id: "groups", href: "/groups", label: "Groups", short: "Groups", icon: UsersRound, mobile: true, group: "Splits" },
-  { id: "balances", href: "/balances", label: "Balances", short: "Balances", icon: Scale, mobile: true, group: "Splits" },
+  { id: "balances", href: "/balances", label: "Balances", short: "Balances", icon: Scale, mobile: false, group: "Splits" },
   { id: "activity", href: "/activity", label: "Activity", short: "Activity", icon: Activity, mobile: false, group: "Splits" },
   { id: "settings", href: "/settings", label: "Settings", short: "Settings", icon: Settings, mobile: false, group: "Account" },
 ] as const satisfies readonly { id: string; href: string; label: string; short: string; icon: LucideIcon; mobile: boolean; group: string }[];
@@ -56,6 +56,7 @@ export function AppShell({
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [signOutOpen, setSignOutOpen] = useState(false);
+  const [actionsOpen, setActionsOpen] = useState(false);
   const view = viewForPath(usePathname());
   const groups = ["Money", "Splits", "Account"] as const;
   const dates = useDateFormat();
@@ -179,6 +180,42 @@ export function AppShell({
         <ul className="gutter-safe grid grid-cols-5 [--gutter:0.5rem]">
           {views
             .filter((item) => item.mobile)
+            .slice(0, 2)
+            .map((item) => {
+              const active = view === item.id;
+              const Icon = item.icon;
+              return (
+                <li key={item.id}>
+                  <Link
+                    href={item.href}
+                    aria-current={active ? "page" : undefined}
+                    className={
+                      active
+                        ? "flex h-[4.25rem] w-full flex-col items-center justify-center gap-1.5 text-[13px] font-semibold text-accent-foreground outline-none"
+                        : "group flex h-[4.25rem] w-full flex-col items-center justify-center gap-1.5 text-[13px] font-medium text-muted-foreground outline-none"
+                    }
+                  >
+                    <span className={active ? "flex h-8 w-14 items-center justify-center rounded-xl bg-accent" : "flex h-8 w-14 items-center justify-center rounded-xl transition-colors group-hover:bg-secondary group-focus-visible:bg-secondary"}>
+                      <Icon className="size-5" strokeWidth={active ? 2.25 : 1.75} />
+                    </span>
+                    {item.short}
+                  </Link>
+                </li>
+              );
+            })}
+          <li className="flex items-center justify-center">
+            <button
+              type="button"
+              aria-label="Quick actions"
+              onClick={() => setActionsOpen(true)}
+              className="flex size-14 items-center justify-center rounded-full bg-brand text-brand-foreground shadow-lift outline-none transition-transform duration-200 outline-none active:scale-95 focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              <Plus className="size-6" strokeWidth={2.25} />
+            </button>
+          </li>
+          {views
+            .filter((item) => item.mobile)
+            .slice(2, 4)
             .map((item) => {
               const active = view === item.id;
               const Icon = item.icon;
@@ -265,6 +302,40 @@ export function AppShell({
       </Dialog>
 
       <SignOutDialog open={signOutOpen} onOpenChange={setSignOutOpen} onSignOut={signOut} />
+
+      <Dialog open={actionsOpen} onOpenChange={setActionsOpen}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Quick actions</DialogTitle>
+          </DialogHeader>
+
+          <div className="grid gap-2">
+            <Button
+              type="button"
+              className="h-12 justify-start gap-3 px-4"
+              onClick={() => {
+                setActionsOpen(false);
+                onAdd();
+              }}
+            >
+              <ArrowLeftRight className="size-5" />
+              Add entry
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              className="h-12 justify-start gap-3 px-4"
+              onClick={() => {
+                setActionsOpen(false);
+                onSplit();
+              }}
+            >
+              <HandCoins className="size-5" />
+              Split expense
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

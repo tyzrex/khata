@@ -1,6 +1,6 @@
 "use client";
 
-import { Bell, CheckCheck } from "lucide-react";
+import { Bell } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { NotificationRow } from "@/components/notification-item";
@@ -39,6 +39,13 @@ export function NotificationsBell({
   const [open, setOpen] = useState(false);
   const now = useNow();
 
+  function handleOpenChange(next: boolean) {
+    setOpen(next);
+    // Seen means read: opening the panel clears the badge, so nobody has to
+    // hunt for a "mark all read" button after glancing at the feed.
+    if (next) markAllRead();
+  }
+
   function handleOpen(id: string, url: string | null) {
     markRead(id);
     setOpen(false);
@@ -46,7 +53,7 @@ export function NotificationsBell({
   }
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover open={open} onOpenChange={handleOpenChange}>
       <PopoverTrigger
         render={
           <Button
@@ -67,18 +74,8 @@ export function NotificationsBell({
         }
       />
       <PopoverContent align={align} side={side} className="w-[min(22rem,calc(100vw-2rem))] p-2">
-        <div className="flex items-center justify-between gap-2 px-2 pt-1 pb-2">
+        <div className="px-2 pt-1 pb-2">
           <p className="text-[15px] font-semibold text-display">Notifications</p>
-          {unread > 0 ? (
-            <button
-              type="button"
-              onClick={markAllRead}
-              className="flex items-center gap-1.5 rounded-lg px-2 py-1 text-[13px] font-medium text-interactive transition-colors duration-200 outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring"
-            >
-              <CheckCheck className="size-3.5" aria-hidden />
-              Mark all read
-            </button>
-          ) : null}
         </div>
         {loading && items.length === 0 ? (
           <p className="px-2 py-6 text-center text-sm text-muted-foreground">Loading…</p>

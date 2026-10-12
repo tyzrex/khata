@@ -8,11 +8,11 @@ import { formatNpr } from "@/lib/format";
 import { relativeTime } from "@/lib/relative-time";
 import { cn } from "cn";
 
-/** How each kind is drawn, and the label the row is grouped under. */
+/** How each kind is drawn, and the label the row is grouped under. Badges stay neutral black-on-grey in both themes; the amount keeps the direction colour. */
 const looks: Record<NotificationKind, { icon: LucideIcon; badge: string; label: string }> = {
-  shared_activity: { icon: Receipt, badge: "bg-accent text-accent-foreground", label: "Shared activity" },
+  shared_activity: { icon: Receipt, badge: "bg-secondary text-foreground", label: "Shared activity" },
   invite: { icon: UsersRound, badge: "bg-secondary text-foreground", label: "Group" },
-  balance_due: { icon: HandCoins, badge: "bg-credit/12 text-credit", label: "Balance" },
+  balance_due: { icon: HandCoins, badge: "bg-secondary text-foreground", label: "Balance" },
 };
 
 export function notificationLook(kind: NotificationKind) {
