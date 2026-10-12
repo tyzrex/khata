@@ -1,4 +1,4 @@
-import { trustedOrigins } from "@/lib/request-guard";
+import { trustedOrigins } from "@/server/request-guard";
 
 /**
  * The origin to put in links we hand out (invite URLs, emails). BETTER_AUTH_URL wins.

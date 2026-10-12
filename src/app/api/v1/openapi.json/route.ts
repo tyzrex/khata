@@ -1,6 +1,6 @@
 import type { NextRequest } from "next/server";
-import { openApiSpec } from "@/lib/agent/openapi";
-import { appOrigin } from "@/lib/app-origin";
+import { openApiSpec } from "@/server/agent/openapi";
+import { appOrigin } from "@/server/app-origin";
 
 /** Public: tool importers fetch this without a key. It describes the API, not anyone's data. */
 export async function GET(request: NextRequest) {

@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { CATEGORY_KINDS, SHARED_CATEGORIES, TX_TYPES } from "@/lib/constants";
 import { SPLIT_MODES } from "@/lib/split";
+import { plainIssue } from "@/server/validation";
 
 export class ImportShapeError extends Error {
   constructor(message: string) {
@@ -318,7 +319,7 @@ export type ImportTransaction = z.infer<typeof importTransactionSchema>;
 export type ManualTransaction = z.infer<typeof manualTransactionSchema>;
 
 export function issueMessage(error: z.ZodError) {
-  return error.issues[0]?.message ?? "Invalid value";
+  return plainIssue(error);
 }
 
 export function parseImportPayload(payload: unknown) {

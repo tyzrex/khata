@@ -1,7 +1,7 @@
 import type { ShareBook } from "@/db/shares";
 import { formatNpr } from "@/lib/format";
 import type { TransactionDto } from "@/lib/types";
-import { netOf } from "@/lib/agent/plan";
+import { netOf } from "@/server/agent/plan";
 
 /** Read-side shapes for the agent API: flat, named, and with a sentence a bot can repeat. */
 
@@ -84,7 +84,8 @@ export function expenseViews(book: ShareBook): ExpenseView[] {
   return [...own, ...joined].sort((a, b) => b.date.localeCompare(a.date) || b.id.localeCompare(a.id));
 }
 
-function expenseView(expense: ShareBook["expenses"][number], selfId: string): ExpenseView {
+/** Exported so a single expense fetched by id is shaped identically to a listed one. */
+export function expenseView(expense: ShareBook["expenses"][number], selfId: string): ExpenseView {
   const label = (id: string, name: string) => (id === selfId ? "You" : name);
   const paidBy = label(expense.paidById, expense.paidByName);
   const yourShare = expense.splits.find((split) => split.personId === selfId)?.amount ?? 0;

@@ -1,40 +1,23 @@
-import type { NextRequest } from "next/server";
-import { deleteSharedExpense, describeSharedWrite, getShareBook } from "@/db/shares";
-import { agentError, fail, ok, spendWrite } from "@/lib/agent/respond";
-import { expenseViews } from "@/lib/agent/views";
-import { notifySharedWrite } from "@/lib/push-notifications";
-import { requireAgentIdentity, requireAgentUserId } from "@/lib/session";
+import { ok } from "@/server/agent-http";
+import { defineAgentRoute } from "@/server/route";
+import { deleteExpense, readExpense } from "@/server/services/agent/expenses";
+import { limits } from "@/server/request-guard";
 
-type Context = { params: Promise<{ id: string }> };
+type Context = { id: string };
 
-const MISSING = "No shared expense with that id. List them with GET /api/v1/expenses.";
+const agentWrite = { limiter: limits.agentWrites, key: ({ userId }: { userId: string }) => userId, message: (retryAfter: number) => `Too many writes. Try again in ${retryAfter} seconds.` };
 
-export async function GET(request: NextRequest, context: Context) {
-  try {
-    const userId = await requireAgentUserId(request);
-    const { id } = await context.params;
-    const expense = expenseViews(await getShareBook(userId)).find((entry) => entry.id === id);
-    if (!expense) return fail(MISSING, 404);
-    return ok({ expense }, `${expense.summary}.`);
-  } catch (error) {
-    return agentError(error);
-  }
-}
-
-export async function DELETE(request: NextRequest, context: Context) {
-  try {
-    const { userId, viaApiKey } = await requireAgentIdentity(request);
-    // A bot writes as you, so the write has to reach your own feed too.
-    const limited = spendWrite(userId);
-    if (limited) return limited;
-    const { id } = await context.params;
-    const expense = expenseViews(await getShareBook(userId)).find((entry) => entry.id === id);
-    if (!expense) return fail(MISSING, 404);
-    await deleteSharedExpense(userId, id);
-    const detail = await describeSharedWrite(userId, { kind: "expense", action: "deleted", expenseId: id });
-    if (detail) notifySharedWrite({ ...detail, includeActor: viaApiKey });
-    return ok({ id }, `Deleted "${expense.description}" (${expense.date}). Balances are updated.`);
-  } catch (error) {
-    return agentError(error);
-  }
-}
+export const { GET, DELETE } = defineAgentRoute<Context>()({
+  GET: { auth: "agent", handle: async ({ userId, params }) => {
+    const view = await readExpense(userId, params.id);
+    return ok(view.data, view.message);
+  } },
+  DELETE: {
+    auth: "agent",
+    limit: agentWrite,
+    handle: async ({ userId, params, viaApiKey }) => {
+      const view = await deleteExpense(userId, params.id, viaApiKey);
+      return ok(view.data, view.message);
+    },
+  },
+});

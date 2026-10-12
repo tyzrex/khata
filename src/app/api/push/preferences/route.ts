@@ -1,8 +1,6 @@
-import type { NextRequest } from "next/server";
 import { z } from "zod";
-import { updateNotificationPreferences } from "@/db/push-notifications";
-import { badRequest, jsonError, readJson } from "@/lib/http";
-import { requireUserId } from "@/lib/session";
+import { defineRoute } from "@/server/route";
+import { savePreferences } from "@/server/services/push-subscriptions";
 
 const preferencesSchema = z
   .object({
@@ -15,13 +13,6 @@ const preferencesSchema = z
   });
 
 /** Per-account notification toggles, including whether bodies may carry amounts. */
-export async function PATCH(request: NextRequest) {
-  try {
-    const userId = await requireUserId(request);
-    const parsed = preferencesSchema.safeParse(await readJson(request));
-    if (!parsed.success) return badRequest(parsed.error.issues[0]?.message ?? "Those preferences are invalid.");
-    return Response.json({ preferences: await updateNotificationPreferences(userId, parsed.data) });
-  } catch (error) {
-    return jsonError(error);
-  }
-}
+export const { PATCH } = defineRoute()({
+  PATCH: { snapshot: false, body: preferencesSchema, handle: async ({ userId, body }) => Response.json({ preferences: await savePreferences(userId, body) }) },
+});

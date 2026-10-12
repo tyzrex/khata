@@ -10,7 +10,7 @@
     "build": "next build && serwist build serwist.config.mjs",
     "start": "next start -p 3847 -H 0.0.0.0",
     "lint": "eslint",
-    "test": "bun test src/lib/period.test.ts src/lib/schemas.test.ts src/lib/split.test.ts src/lib/isolation.test.ts src/lib/dashboard.test.ts src/lib/nepali-date.test.ts src/lib/format.test.ts src/lib/group-filters.test.ts src/lib/agent-resolve.test.ts src/lib/url-state.test.ts src/lib/reset-schemas.test.ts src/lib/balance-summary.test.ts src/lib/relative-time.test.ts src/db/shares-permissions.test.ts",
+    "test": "bun test src",
     "test:db": "bun test src/db/shares-permissions.test.ts",
     "db:generate": "bunx drizzle-kit generate",
     "db:migrate": "bunx drizzle-kit migrate",

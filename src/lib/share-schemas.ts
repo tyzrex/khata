@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { SHARED_CATEGORIES } from "@/lib/constants";
-import { dateSchema, issueMessage, MAX_AMOUNT, moneySchema } from "@/lib/schemas";
+import { dateSchema, MAX_AMOUNT, moneySchema } from "@/lib/schemas";
 import { SPLIT_MODES } from "@/lib/split";
 
 const money = moneySchema;
@@ -54,6 +54,3 @@ export const settlementWriteSchema = z.object({
   version: z.number().int().positive().optional(),
 });
 
-export function shareIssue(error: z.ZodError) {
-  return issueMessage(error);
-}

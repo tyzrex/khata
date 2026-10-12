@@ -1,36 +1,21 @@
-import type { NextRequest } from "next/server";
-import { accountOf } from "@/db/agent";
-import { createSettlement, describeSharedWrite, ensureDirectGroup, getShareBook } from "@/db/shares";
-import { personName, planSettlement, whereText } from "@/lib/agent/plan";
-import { agentError, fail, ok, spendWrite, zodMessage } from "@/lib/agent/respond";
-import { settlementInput } from "@/lib/agent/schemas";
-import { formatNpr } from "@/lib/format";
-import { readJson } from "@/lib/http";
+import { ok } from "@/server/agent-http";
+import { defineAgentRoute } from "@/server/route";
+import { recordPayment } from "@/server/services/agent/settlements";
+import { settlementInput } from "@/server/agent/schemas";
+import { limits } from "@/server/request-guard";
 import { todayInKathmandu } from "@/lib/period";
-import { notifySharedWrite } from "@/lib/push-notifications";
-import { requireAgentIdentity } from "@/lib/session";
+
+const agentWrite = { limiter: limits.agentWrites, key: ({ userId }: { userId: string }) => userId, message: (retryAfter: number) => `Too many writes. Try again in ${retryAfter} seconds.` };
 
 /** Records a payment that settles some or all of a balance. It does not touch the bank ledger. */
-export async function POST(request: NextRequest) {
-  try {
-    const { userId, viaApiKey } = await requireAgentIdentity(request);
-    // A bot writes as you, so the write has to reach your own feed too.
-    const limited = spendWrite(userId);
-    if (limited) return limited;
-    const parsed = settlementInput(todayInKathmandu()).safeParse(await readJson(request));
-    if (!parsed.success) return fail(zodMessage(parsed.error));
-    const [book, account] = await Promise.all([getShareBook(userId), accountOf(userId)]);
-    const plan = planSettlement(book, parsed.data, { accountName: account.name });
-    const groupId = plan.directWith ? await ensureDirectGroup(userId, plan.directWith) : plan.write.groupId;
-    const id = await createSettlement(userId, { ...plan.write, groupId });
-    const detail = await describeSharedWrite(userId, { kind: "settlement", action: "recorded", settlementId: id });
-    const from = personName(plan.scope, plan.write.fromPersonId);
-    const to = personName(plan.scope, plan.write.toPersonId);
-    const where = plan.directWith || plan.scope.kind !== "group" ? "" : ` in ${whereText(plan.scope)}`;
-    const sentence = `${from[0]!.toUpperCase()}${from.slice(1)} paid ${to} ${formatNpr(plan.write.amount)}${where}`;
-    if (detail) notifySharedWrite({ ...detail, includeActor: viaApiKey });
-    return ok({ id, groupId, from, to, amount: plan.write.amount, date: plan.write.date }, `Recorded: ${sentence}.`, 201);
-  } catch (error) {
-    return agentError(error);
-  }
-}
+export const { POST } = defineAgentRoute()({
+  POST: {
+    auth: "agent",
+    body: () => settlementInput(todayInKathmandu()),
+    limit: agentWrite,
+    handle: async ({ userId, body, viaApiKey }) => {
+      const view = await recordPayment(userId, body, viaApiKey);
+      return ok(view.data, view.message, view.status);
+    },
+  },
+});

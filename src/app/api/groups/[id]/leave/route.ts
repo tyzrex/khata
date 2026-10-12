@@ -1,17 +1,14 @@
-import type { NextRequest } from "next/server";
 import { leaveGroup } from "@/db/shares";
-import { shareError } from "@/lib/http";
-import { requireUserId } from "@/lib/session";
+import { noContent } from "@/server/http";
+import { defineRoute } from "@/server/route";
 
-type Context = { params: Promise<{ id: string }> };
+type Context = { id: string };
 
-export async function POST(request: NextRequest, context: Context) {
-  try {
-    const userId = await requireUserId(request);
-    const { id } = await context.params;
-    await leaveGroup(userId, id);
-    return new Response(null, { status: 204 });
-  } catch (error) {
-    return shareError(error);
-  }
-}
+export const { POST } = defineRoute<Context>()({
+  POST: {
+    handle: async ({ userId, params }) => {
+      await leaveGroup(userId, params.id);
+      return noContent();
+    },
+  },
+});

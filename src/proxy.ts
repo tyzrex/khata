@@ -1,6 +1,6 @@
 import { getSessionCookie } from "better-auth/cookies";
 import { NextResponse, type NextRequest } from "next/server";
-import { isAllowedWrite, trustedOrigins } from "@/lib/request-guard";
+import { isAllowedWrite, trustedOrigins } from "@/server/request-guard";
 import { safeNext } from "@/lib/return-path";
 
 // `/reset-password` is public on purpose: a reset link has to work for someone who

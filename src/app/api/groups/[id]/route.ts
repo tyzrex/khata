@@ -1,31 +1,22 @@
-import type { NextRequest } from "next/server";
 import { deleteGroup, updateGroup } from "@/db/shares";
-import { badRequest, shareError, readJson } from "@/lib/http";
-import { groupPatchSchema, shareIssue } from "@/lib/share-schemas";
-import { requireUserId } from "@/lib/session";
+import { noContent } from "@/server/http";
+import { defineRoute } from "@/server/route";
+import { groupPatchSchema } from "@/lib/share-schemas";
 
-type Context = { params: Promise<{ id: string }> };
+type Context = { id: string };
 
-export async function PATCH(request: NextRequest, context: Context) {
-  try {
-    const userId = await requireUserId(request);
-    const { id } = await context.params;
-    const parsed = groupPatchSchema.safeParse(await readJson(request));
-    if (!parsed.success) return badRequest(shareIssue(parsed.error));
-    await updateGroup(userId, id, parsed.data);
-    return Response.json({ ok: true });
-  } catch (error) {
-    return shareError(error);
-  }
-}
-
-export async function DELETE(request: NextRequest, context: Context) {
-  try {
-    const userId = await requireUserId(request);
-    const { id } = await context.params;
-    await deleteGroup(userId, id);
-    return new Response(null, { status: 204 });
-  } catch (error) {
-    return shareError(error);
-  }
-}
+export const { PATCH, DELETE } = defineRoute<Context>()({
+  PATCH: {
+    body: groupPatchSchema,
+    handle: async ({ userId, params, body }) => {
+      await updateGroup(userId, params.id, body);
+      return Response.json({ ok: true });
+    },
+  },
+  DELETE: {
+    handle: async ({ userId, params }) => {
+      await deleteGroup(userId, params.id);
+      return noContent();
+    },
+  },
+});

@@ -2,7 +2,7 @@ import { and, eq, isNull } from "drizzle-orm";
 import { getDb } from "@/db/client";
 import { groupInvites, groupMembers, groupUserAccess, groups, people, user } from "@/db/schema";
 import { recordNotifications } from "@/db/notifications";
-import { NotFoundError } from "@/db/shares";
+import { NotFoundError } from "@/server/errors";
 import { ShareInputError } from "@/lib/split";
 
 const INVITE_DAYS = 7;
@@ -92,7 +92,7 @@ export async function getInviteByToken(token: string): Promise<InviteInfo | null
   };
 }
 
-export async function acceptInvite(userId: string, token: string): Promise<{ groupId: string; groupName: string; direct: boolean }> {
+export async function acceptInvite(userId: string, token: string): Promise<{ groupId: string; groupName: string; direct: boolean; ownerId: string }> {
   const db = getDb();
   const [invite] = await db.select().from(groupInvites).where(eq(groupInvites.token, token)).limit(1);
   if (!invite) throw new NotFoundError("This invite link is not valid.");
@@ -114,7 +114,7 @@ export async function acceptInvite(userId: string, token: string): Promise<{ gro
   const direct = group.kind === "direct";
   const [creator] = await db.select({ name: user.name }).from(user).where(eq(user.id, ownerId)).limit(1);
   const label = direct ? (creator?.name ?? "your friend") : group.name;
-  if (existing) return { groupId: group.id, groupName: label, direct };
+  if (existing) return { groupId: group.id, groupName: label, direct, ownerId };
 
   if (invite.inviteeEmail) {
     if (invite.acceptedAt) throw new ShareInputError("This invite has already been used.");
@@ -199,5 +199,5 @@ export async function acceptInvite(userId: string, token: string): Promise<{ gro
     console.error("Invite notification failed", error);
   }
 
-  return { groupId: group.id, groupName: label, direct };
+  return { groupId: group.id, groupName: label, direct, ownerId };
 }

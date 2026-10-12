@@ -5,6 +5,7 @@ import { getDb } from "@/db/client";
 import type { SharedActivity } from "@/db/push-activity";
 import { recordNotifications } from "@/db/notifications";
 import { groupMembers, groupUserAccess, people } from "@/db/schema";
+import { expireSnapshots } from "@/server/cache-tags";
 import {
   DEFAULT_NOTIFICATION_PREFERENCES,
   listPushDeliveryTargets,
@@ -285,6 +286,10 @@ export function notifySharedWrite(input: {
       const recipients = await resolveSharedWriteRecipients({ actorId, ownerId, groupId, personIds });
       if (includeActor && !recipients.includes(actorId)) recipients.push(actorId);
       if (!recipients.length) return;
+      // Everyone standing in this book just had their balances move, so every one
+      // of their cached snapshots is now wrong — not just the account that made
+      // the call and had its own snapshot expired by `defineRoute`.
+      expireSnapshots(recipients);
       await recordNotifications(
         recipients.map((userId) => ({
           userId,

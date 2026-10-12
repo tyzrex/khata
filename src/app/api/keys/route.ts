@@ -1,31 +1,15 @@
-import type { NextRequest } from "next/server";
 import { createApiKey, listApiKeys } from "@/db/api-keys";
-import { keyInput } from "@/lib/agent/schemas";
-import { badRequest, readJson, shareError, tooManyRequests } from "@/lib/http";
-import { limits } from "@/lib/request-guard";
-import { issueMessage } from "@/lib/schemas";
-import { requireUserId } from "@/lib/session";
+import { defineRoute } from "@/server/route";
+import { keyInput } from "@/server/agent/schemas";
+import { limits } from "@/server/request-guard";
 
 /** Key management needs a signed-in session: an API key cannot mint or list other keys. */
-export async function GET(request: NextRequest) {
-  try {
-    const userId = await requireUserId(request);
-    return Response.json({ keys: await listApiKeys(userId) });
-  } catch (error) {
-    return shareError(error);
-  }
-}
-
-export async function POST(request: NextRequest) {
-  try {
-    const userId = await requireUserId(request);
-    const limit = limits.apiKeys.take(userId);
-    if (!limit.ok) return tooManyRequests(limit.retryAfter);
-    const parsed = keyInput.safeParse(await readJson(request));
-    if (!parsed.success) return badRequest(issueMessage(parsed.error));
-    const { key, token } = await createApiKey(userId, parsed.data.name);
-    return Response.json({ key, token }, { status: 201 });
-  } catch (error) {
-    return shareError(error);
-  }
-}
+export const { GET, POST } = defineRoute()({
+  GET: { handle: async ({ userId }) => Response.json({ keys: await listApiKeys(userId) }) },
+  POST: {
+    snapshot: false,
+    body: keyInput,
+    limit: { limiter: limits.apiKeys, key: ({ userId }) => userId, message: (retryAfter) => `Too many keys created. Try again in ${retryAfter} seconds.` },
+    handle: async ({ userId, body }) => Response.json(await createApiKey(userId, body.name), { status: 201 }),
+  },
+});

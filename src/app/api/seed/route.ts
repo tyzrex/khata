@@ -1,20 +1,10 @@
-import type { NextRequest } from "next/server";
-import { importTransactions } from "@/db/ledger";
-import { seedSampleBook } from "@/db/shares";
-import { shareError, tooManyRequests } from "@/lib/http";
-import { limits } from "@/lib/request-guard";
-import { readSampleWeek } from "@/lib/sample-week";
-import { requireUserId } from "@/lib/session";
+import { defineRoute } from "@/server/route";
+import { seedSampleData } from "@/server/services/ledger";
+import { limits } from "@/server/request-guard";
 
-export async function POST(request: NextRequest) {
-  try {
-    const userId = await requireUserId(request);
-    const limit = limits.bulkWrites.take(userId);
-    if (!limit.ok) return tooManyRequests(limit.retryAfter);
-    const result = await importTransactions(userId, readSampleWeek());
-    await seedSampleBook(userId);
-    return Response.json({ ...result, shares: "seeded" });
-  } catch (error) {
-    return shareError(error);
-  }
-}
+export const { POST } = defineRoute()({
+  POST: {
+    limit: { limiter: limits.bulkWrites, key: ({ userId }) => userId, message: (retryAfter) => `Too many sample books. Try again in ${retryAfter} seconds.` },
+    handle: async ({ userId }) => Response.json(await seedSampleData(userId)),
+  },
+});

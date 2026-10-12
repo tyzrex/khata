@@ -26,7 +26,7 @@ Open [http://127.0.0.1:3847](http://127.0.0.1:3847).
 1. Create a project in the [Neon console](https://console.neon.tech). The database is Lakebase Postgres.
 2. Open **Connect** and copy both strings:
    - **Pooled** (hostname contains `-pooler`) → `DATABASE_URL`. The app uses this.
-   - **Direct** (no `-pooler`) → `DATABASE_URL_UNPOOLED`. Drizzle migrations use this. A pooled connection can fail mid-migration with prepared-statement errors.
+   - **Direct** (no `-pooler`) → `DATABASE_URL_UNPOOLED`. Drizzle migrations use this. A pooled connection can fail mid-migration with prepared-statement errors. The live notification stream listens on it too: `LISTEN` needs a session that stays yours, and a pooler that multiplexes sessions will accept the subscription and then never deliver anything to it.
 3. Put them in `.env.local` for your machine, and in the Vercel project for production. Do not commit either file. `.env.example` only has placeholders.
 
 Apply the schema:
@@ -128,6 +128,12 @@ Two things follow from push being per browser and the endpoint being unique per 
 - A subscription row is removed automatically when the push service reports it gone (404/410), and after repeated permanent failures. The Settings card offers "Register this browser" if the browser holds a subscription the account no longer owns.
 
 Push only works against a production build over HTTPS. `bun run dev` disables the service worker, and the client refuses to subscribe there; use `bun run build && bun run start`, or a preview deployment. Delivery is fire-and-forget: a push that fails never turns a committed expense or settlement into an error.
+
+### The in-app feed
+
+The bell is live, not polled. `GET /api/notifications/stream` holds a server-sent event open and says only "your feed moved" — no notification text ever crosses it — and the browser refetches `GET /api/notifications` exactly as the poll always did. A shared write also refreshes the share book and the ledger, because it moves balances as well as adding a row.
+
+Events are announced with Postgres `LISTEN`/`NOTIFY` rather than an in-process emitter, because on serverless the write and the stream watching for it are usually two different instances that share no memory. That makes `DATABASE_URL_UNPOOLED` a requirement, not just a convenience — see [Neon](#neon). If the stream cannot connect, or the platform stops the function mid-connection, the browser reconnects with backoff and the one-minute poll carries on underneath; neither path depends on the other.
 
 ## Daily JSON import
 
@@ -268,6 +274,7 @@ Revoking a key in Settings takes effect on the bot's next call. Keys cannot list
 - `GET /api/summary` — this week and this month in `Asia/Kathmandu`
 - `POST /api/seed` — bank week plus the sample share book
 - `GET /api/shares` — people, groups, balances, expenses, settlements
+- `GET /api/notifications` — the in-app feed, and `GET /api/notifications/stream` — the live version of it
 - `POST /api/people`, `POST /api/groups`, `POST /api/shared-expenses`, `POST /api/settlements`
 
 Default categories: Food, Transport, Parking, Entertainment, Shopping, Bills, Health, Transfer, Income, Other. They are editable. A category that still has entries cannot be deleted; rename it instead.

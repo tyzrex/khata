@@ -1,23 +1,12 @@
-import type { NextRequest } from "next/server";
-import { importTransactions } from "@/db/ledger";
-import { badRequest, jsonError, readJson, tooManyRequests } from "@/lib/http";
-import { limits } from "@/lib/request-guard";
-import { ImportShapeError } from "@/lib/schemas";
-import { requireUserId } from "@/lib/session";
+import { defineRoute } from "@/server/route";
+import { importLedger } from "@/server/services/ledger";
+import { limits } from "@/server/request-guard";
 
-export async function POST(request: NextRequest) {
-  try {
-    const userId = await requireUserId(request);
-    const limit = limits.bulkWrites.take(userId);
-    if (!limit.ok) return tooManyRequests(limit.retryAfter);
-    const body = await readJson(request);
-    const result = await importTransactions(userId, body);
-    if (result.created === 0 && result.updated === 0 && result.invalid.length > 0) {
-      return Response.json({ error: "No rows could be imported.", ...result }, { status: 400 });
-    }
-    return Response.json(result);
-  } catch (error) {
-    if (error instanceof ImportShapeError) return badRequest(error.message);
-    return jsonError(error);
-  }
-}
+export const { POST } = defineRoute()({
+  POST: {
+    // Validated per row by the importer, so a partly readable file still saves.
+    rawBody: true,
+    limit: { limiter: limits.bulkWrites, key: ({ userId }) => userId, message: (retryAfter) => `Too many imports. Try again in ${retryAfter} seconds.` },
+    handle: async ({ userId, body }) => Response.json(await importLedger(userId, body)),
+  },
+});

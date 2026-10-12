@@ -68,6 +68,9 @@ export function clientIp(headers: Headers) {
 
 export type RateLimitResult = { ok: true } | { ok: false; retryAfter: number };
 
+/** What `limits` entries are. A route declares one; `defineRoute` calls it. */
+export type RateLimiter = { take(key: string, now?: number): RateLimitResult };
+
 /**
  * Fixed-window counter kept in memory. Best effort: each server instance counts on
  * its own, which is enough to blunt scripted abuse of email and import endpoints

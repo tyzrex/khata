@@ -7,6 +7,15 @@ import { account, session } from "@/db/schema";
  * Google. It decides which account controls are meaningful: changing a password
  * needs a credential account, and confirming a deletion by password needs one too.
  */
+/**
+ * What the account settings screen needs beyond the session: whether this person
+ * ever set a password, which decides whether "change password" and a
+ * password-confirmed deletion are offered at all.
+ */
+export async function accountFlags(userId: string) {
+  return { hasPassword: await hasPasswordCredential(userId) };
+}
+
 export async function hasPasswordCredential(userId: string) {
   const rows = await getDb()
     .select({ password: account.password })

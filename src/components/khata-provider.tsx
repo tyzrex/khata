@@ -1,16 +1,19 @@
 "use client";
 
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
 import { createContext, use, useContext, useEffect, useState, type ReactNode } from "react";
 import { useFrame } from "@/components/app-frame";
+import { accountsKey, categoriesKey, summaryKey, transactionsKey } from "@/components/ledger-query";
 import { SettleDialog, type SettleDraft } from "@/components/settle-dialog";
+import { sharesKey } from "@/components/shares-query";
 import { ShareExpenseDialog } from "@/components/share-expense-dialog";
 import { TransactionDialog } from "@/components/transaction-dialog";
 import { useLedger } from "@/components/use-ledger";
 import { useShares } from "@/components/use-shares";
 import { Button } from "@/components/ui/button";
 import type { BalanceScope, ShareBook } from "@/db/shares";
-import type { InitialData, KhataSnapshot } from "@/lib/initial-data";
+import type { InitialData, KhataSnapshot } from "@/server/initial-data";
 import type { TransactionDto } from "@/lib/types";
 
 type Debt = Pick<BalanceScope["youOwe"][number], "fromId" | "toId" | "amount">;
@@ -125,10 +128,37 @@ function Unavailable({ message }: { message: string }) {
   );
 }
 
+/**
+ * Hand a newly rendered server snapshot to React Query.
+ *
+ * `initialData` seeds a query only while it has no data at all, so it covers the
+ * first paint and nothing after. That left every later server render — a
+ * `router.refresh()` after accepting an invite, after a profile change, the retry
+ * on the error screen above — re-fetching a snapshot the layout had already read
+ * from the database and then quietly throwing it away. The screen kept showing
+ * whatever it had last asked for, which is the shape of bug that reads as
+ * "caching is not working".
+ *
+ * A new snapshot object only arrives when the server actually rendered the layout
+ * again, so this cannot fire between a write and its own optimistic update: the
+ * dependency stays put for as long as the current render is on screen.
+ */
+function useSnapshotSync(snapshot: KhataSnapshot) {
+  const queryClient = useQueryClient();
+  useEffect(() => {
+    queryClient.setQueryData(summaryKey, snapshot.summary);
+    queryClient.setQueryData(accountsKey, snapshot.accounts);
+    queryClient.setQueryData(categoriesKey, snapshot.categories);
+    queryClient.setQueryData(transactionsKey, snapshot.transactions);
+    queryClient.setQueryData(sharesKey, snapshot.book);
+  }, [queryClient, snapshot]);
+}
+
 function KhataReady({ snapshot, children }: { snapshot: KhataSnapshot; children: ReactNode }) {
   const { dialogs, ...khata } = useKhataState(snapshot);
   const { composer, setComposer, expense, setExpense, settle, setSettle } = dialogs;
   const frame = useFrame();
+  useSnapshotSync(snapshot);
   useLaunchActions();
   // The shell's Add and Split buttons (and the installed app's shortcuts) ask through the frame.
   const composerOpen = composer.open || frame.pending === "add";

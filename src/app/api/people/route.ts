@@ -1,17 +1,7 @@
-import type { NextRequest } from "next/server";
 import { createPerson } from "@/db/shares";
-import { badRequest, shareError, readJson } from "@/lib/http";
-import { personWriteSchema, shareIssue } from "@/lib/share-schemas";
-import { requireUserId } from "@/lib/session";
+import { defineRoute } from "@/server/route";
+import { personWriteSchema } from "@/lib/share-schemas";
 
-export async function POST(request: NextRequest) {
-  try {
-    const userId = await requireUserId(request);
-    const parsed = personWriteSchema.safeParse(await readJson(request));
-    if (!parsed.success) return badRequest(shareIssue(parsed.error));
-    const person = await createPerson(userId, parsed.data.name);
-    return Response.json({ person }, { status: 201 });
-  } catch (error) {
-    return shareError(error);
-  }
-}
+export const { POST } = defineRoute()({
+  POST: { body: personWriteSchema, handle: async ({ userId, body }) => Response.json({ person: await createPerson(userId, body.name) }, { status: 201 }) },
+});

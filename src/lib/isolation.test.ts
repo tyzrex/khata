@@ -16,11 +16,11 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import test from "node:test";
-import { buildResetPasswordEmail } from "./account-email";
-import { appOrigin } from "./app-origin";
-import { assertAuthSecret } from "./auth";
-import { buildInviteEmail, inviteSender, oneLine } from "./invite-email";
-import { clientIp, createRateLimiter, isAllowedWrite, isInviteToken, trustedOrigins } from "./request-guard";
+import { buildResetPasswordEmail } from "../server/account-email";
+import { appOrigin } from "../server/app-origin";
+import { assertAuthSecret } from "../server/auth";
+import { buildInviteEmail, inviteSender, oneLine } from "../server/invite-email";
+import { clientIp, createRateLimiter, isAllowedWrite, isInviteToken, trustedOrigins } from "../server/request-guard";
 
 // ---------------------------------------------------------------------------
 // Helper: read a source file and return its text.
@@ -29,11 +29,26 @@ function src(relPath: string): string {
   return readFileSync(path.join(process.cwd(), relPath), "utf8");
 }
 
+/** Every module of the share-book repository. */
+function shareModules(): string[] {
+  return [
+    "read",
+    "people",
+    "groups",
+    "permissions",
+    "expenses",
+    "settlements",
+    "activity",
+    "names",
+    "seed",
+  ].map((name) => `src/db/shares/${name}.ts`);
+}
+
 // ---------------------------------------------------------------------------
 // 1. claimUnownedLedger must not exist in the session module.
 // ---------------------------------------------------------------------------
 test("session.ts does not import or call claimUnownedLedger", () => {
-  const sessionSrc = src("src/lib/session.ts");
+  const sessionSrc = src("src/server/session.ts");
   assert.ok(
     !sessionSrc.includes("claimUnownedLedger"),
     "session.ts must not reference claimUnownedLedger (row-adoption removed)",
@@ -66,6 +81,13 @@ test("ledger.ts does not contain the owned() null-user helper", () => {
   );
 });
 
+test("no share-book module reaches for a NULL owner", () => {
+  for (const file of shareModules()) {
+    const text = src(file);
+    assert.ok(!text.includes("isNull"), `${file} must scope every query to a real userId, not a null owner`);
+  }
+});
+
 // ---------------------------------------------------------------------------
 // 4. importTransactions and ensureCategories must take `string`, not
 //    `string | null`, ensuring unauthenticated callers cannot import rows.
@@ -85,8 +107,8 @@ test("ledger.ts signatures require non-null userId for import and ensureCategori
 // ---------------------------------------------------------------------------
 // 5. seedSampleBook must require a non-null userId.
 // ---------------------------------------------------------------------------
-test("shares.ts seedSampleBook requires non-null userId", () => {
-  const sharesSrc = src("src/db/shares.ts");
+test("seed.ts seedSampleBook requires non-null userId", () => {
+  const sharesSrc = src("src/db/shares/seed.ts");
   const nullablePattern = /function\s+seedSampleBook\s*\([^)]*userId\s*:\s*string\s*\|\s*null/;
   assert.ok(
     !nullablePattern.test(sharesSrc),
@@ -143,8 +165,8 @@ test("migration 0004 removes orphans and adds NOT NULL constraints", () => {
 //    The multi-user shares.ts uses loadJoinedGroup which only returns
 //    expenses scoped to a specific groupId, never the owner's full ledger.
 // ---------------------------------------------------------------------------
-test("shares.ts loadJoinedGroup scopes expenses to a single group, not the owner's full ledger", () => {
-  const sharesSrc = src("src/db/shares.ts");
+test("loadJoinedGroup scopes expenses to a single group, not the owner's full ledger", () => {
+  const sharesSrc = src("src/db/shares/read.ts");
 
   // The crucial WHERE clause inside loadJoinedGroup must AND on groupId.
   // Verify the pattern exists: sharedExpenses filtered by both ownerId AND groupId.
@@ -158,8 +180,8 @@ test("shares.ts loadJoinedGroup scopes expenses to a single group, not the owner
   // The function must not do an unconstrained query on transactions by ownerId alone.
   // (Bank rows are only loaded by their IDs linked to that group's expenses/settlements.)
   const loadJoinedGroupSection = sharesSrc.slice(
-    sharesSrc.indexOf("async function loadJoinedGroup"),
-    sharesSrc.indexOf("export async function ensureSelf"),
+    sharesSrc.indexOf("export async function loadJoinedGroup"),
+    sharesSrc.indexOf("export async function getShareBook"),
   );
   assert.ok(
     !loadJoinedGroupSection.includes("eq(transactions.userId, ownerId)"),
@@ -170,16 +192,16 @@ test("shares.ts loadJoinedGroup scopes expenses to a single group, not the owner
 // ---------------------------------------------------------------------------
 // 9. groupUserAccess ACL: member access requires explicit grant row.
 // ---------------------------------------------------------------------------
-test("shares.ts memberAccess checks groupUserAccess table, not just group ownership", () => {
-  const sharesSrc = src("src/db/shares.ts");
-  assert.ok(
-    sharesSrc.includes("groupUserAccess"),
-    "shares.ts must reference the groupUserAccess ACL table",
-  );
-  assert.ok(
-    sharesSrc.includes("memberAccess"),
-    "shares.ts must have a memberAccess guard function",
-  );
+test("memberAccess checks the groupUserAccess ACL table, not just group ownership", () => {
+  const permissionsSrc = src("src/db/shares/permissions.ts");
+  assert.ok(permissionsSrc.includes("groupUserAccess"), "permissions.ts must reference the groupUserAccess ACL table");
+  assert.ok(permissionsSrc.includes("memberAccess"), "permissions.ts must have a memberAccess guard function");
+  // Nothing else in the repository may grant access on ownership alone.
+  for (const file of shareModules()) {
+    if (file.endsWith("permissions.ts")) continue;
+    const text = src(file);
+    assert.ok(!/from "@\/db\/shares\/permissions"[^;]*\bmemberAccess\b/.test(text), `${file} must not widen access past permissions.ts`);
+  }
 });
 
 // ---------------------------------------------------------------------------
@@ -187,8 +209,8 @@ test("shares.ts memberAccess checks groupUserAccess table, not just group owners
 //     updateGroup rewrites group_members; it must also delete the matching
 //     group_user_access rows, or a removed friend keeps seeing the group.
 // ---------------------------------------------------------------------------
-test("shares.ts updateGroup revokes group access for removed members", () => {
-  const sharesSrc = src("src/db/shares.ts");
+test("updateGroup revokes group access for removed members", () => {
+  const sharesSrc = src("src/db/shares/groups.ts");
   const section = sharesSrc.slice(
     sharesSrc.indexOf("export async function updateGroup"),
     sharesSrc.indexOf("export async function deleteGroup"),
@@ -204,26 +226,23 @@ test("shares.ts updateGroup revokes group access for removed members", () => {
 // ---------------------------------------------------------------------------
 // 11. Deleting a group must not orphan its expenses and settlements.
 // ---------------------------------------------------------------------------
-test("shares.ts deleteGroup removes the group's expenses and settlements", () => {
-  const sharesSrc = src("src/db/shares.ts");
-  const section = sharesSrc.slice(
-    sharesSrc.indexOf("export async function deleteGroup"),
-    sharesSrc.indexOf("async function assertExpenseLinks"),
-  );
+test("deleteGroup removes the group's expenses and settlements", () => {
+  const sharesSrc = src("src/db/shares/groups.ts");
+  const section = sharesSrc.slice(sharesSrc.indexOf("export async function deleteGroup"));
   assert.ok(section.includes("tx.delete(sharedExpenses)"), "deleteGroup must delete the group's shared expenses");
   assert.ok(section.includes("tx.delete(settlements)"), "deleteGroup must delete the group's settlements");
 });
 
 test("shared writes require creator or owner access and reject stale versions", () => {
-  const sharesSrc = src("src/db/shares.ts");
-  const permission = sharesSrc.slice(sharesSrc.indexOf("async function mutationScope"), sharesSrc.indexOf("async function expenseRevision"));
-  assert.match(permission, /row\.createdByUserId !== actorId/, "members must only mutate entries they created");
-  assert.match(sharesSrc, /input\.version !== existing\.version/, "updates must compare the version the editor opened");
-  assert.match(sharesSrc, /insert\(sharedExpenseRevisions\)/, "expense updates and deletes must preserve an audit revision");
+  const permissionsSrc = src("src/db/shares/permissions.ts");
+  const expensesSrc = src("src/db/shares/expenses.ts");
+  assert.match(permissionsSrc, /row\.createdByUserId !== actorId/, "members must only mutate entries they created");
+  assert.match(expensesSrc, /input\.version !== existing\.version/, "updates must compare the version the editor opened");
+  assert.match(expensesSrc, /insert\(sharedExpenseRevisions\)/, "expense updates and deletes must preserve an audit revision");
 });
 
 test("leaving a group is member-only and blocked by open balances", () => {
-  const sharesSrc = src("src/db/shares.ts");
+  const sharesSrc = src("src/db/shares/groups.ts");
   const section = sharesSrc.slice(sharesSrc.indexOf("export async function leaveGroup"), sharesSrc.indexOf("export async function deleteGroup"));
   assert.match(section, /eq\(groupUserAccess\.role, "member"\)/, "an owner row must never be removed by leaveGroup");
   assert.match(section, /group\.balances\.youOwe\.length \|\| group\.balances\.youAreOwed\.length/, "members must settle before losing access");
@@ -240,11 +259,11 @@ test("migration 0009 backfills authorship and preserves expense revisions", () =
 // ---------------------------------------------------------------------------
 // 12. ensureCategories must not write on every read path.
 // ---------------------------------------------------------------------------
-test("ledger.ts ensureCategories checks for existing rows before inserting", () => {
-  const ledgerSrc = src("src/db/ledger.ts");
+test("categories.ts ensureCategories checks for existing rows before inserting", () => {
+  const ledgerSrc = src("src/db/categories.ts");
   const section = ledgerSrc.slice(
     ledgerSrc.indexOf("export async function ensureCategories"),
-    ledgerSrc.indexOf("async function ensureNamedCategory"),
+    ledgerSrc.indexOf("export async function ensureNamedCategory"),
   );
   assert.ok(section.includes("if (existing) return"), "ensureCategories must return early once the book has any category, so a read never writes");
   // Seeding on any *missing* default would bring a name back the moment someone
@@ -265,7 +284,7 @@ test("accounts seeding does not resurrect a renamed default", () => {
 // 13. Auth must not trust an arbitrary *.vercel.app origin.
 // ---------------------------------------------------------------------------
 test("trusted origins come from Vercel's own hosts, never a vercel.app wildcard", () => {
-  const authSrc = src("src/lib/auth.ts");
+  const authSrc = src("src/server/auth.ts");
   assert.ok(authSrc.includes("trustedOrigins()"), "auth.ts must build trustedOrigins from the shared helper");
   const origins = trustedOrigins({ VERCEL_URL: "khata-abc123.vercel.app", BETTER_AUTH_URL: "https://khata.example/", TRUSTED_ORIGINS: " https://extra.example , " });
   assert.ok(origins.includes("https://khata-abc123.vercel.app"));
@@ -290,7 +309,7 @@ test("ledger.ts transactionValues uses the validated currency", () => {
 // 15. Direct (friend) groups stay inside the owner's book.
 // ---------------------------------------------------------------------------
 test("ensureDirectGroup only reads the caller's own people and groups", () => {
-  const text = src("src/db/shares.ts");
+  const text = src("src/db/shares/groups.ts");
   const start = text.indexOf("export async function ensureDirectGroup");
   const body = text.slice(start, text.indexOf("export async function updateGroup"));
   assert.match(body, /eq\(people\.userId, userId\)/, "person lookup must be scoped to the caller");
@@ -300,8 +319,10 @@ test("ensureDirectGroup only reads the caller's own people and groups", () => {
 
 test("the direct-group API route requires a session", () => {
   const text = src("src/app/api/people/[id]/direct/route.ts");
-  assert.match(text, /requireUserId\(request\)/);
-  assert.match(text, /ensureDirectGroup\(userId, id\)/);
+  // `defineRoute` defaults to session auth, so an explicit `auth: "public"` or
+  // `auth: "agent"` here would be the bug this guards against.
+  assert.doesNotMatch(text, /auth:\s*"(public|agent)"/);
+  assert.match(text, /ensureDirectGroup\(userId, params\.id\)/);
 });
 
 test("accepting an invite only opens the inviting owner's direct groups", () => {
@@ -361,18 +382,17 @@ test("invite tokens must have the generated shape before any lookup", () => {
   assert.equal(isInviteToken("../../etc/passwd"), false);
 });
 
-test("public invite routes check the token shape and rate limit by IP", () => {
-  for (const file of ["src/app/api/invite/[token]/route.ts", "src/app/api/invite/[token]/accept/route.ts"]) {
-    const text = src(file);
-    assert.match(text, /isInviteToken\(token\)/, `${file} must reject malformed tokens`);
-    assert.match(text, /limits\.inviteLookups\.take\(clientIp/, `${file} must be rate limited`);
-  }
+test("public invite lookups check the token shape and rate limit by IP", () => {
+  const text = src("src/server/services/invites.ts");
+  assert.match(text, /isInviteToken\(token\)/, "both invite entry points must reject malformed tokens");
+  assert.equal((text.match(/limits\.inviteLookups/g) ?? []).length, 2, "both reading and accepting must be rate limited");
+  assert.match(text, /ipOf\(request\.headers\)/, "the limit must be keyed on the caller's IP, not on an account");
 });
 
 test("invite emails are limited per sender and per recipient", () => {
-  const text = src("src/app/api/groups/[id]/invite/route.ts");
-  assert.match(text, /limits\.inviteEmails\.take\(userId\)/);
-  assert.match(text, /limits\.inviteRecipient\.take\(email\)/);
+  const text = src("src/server/services/invites.ts");
+  assert.match(text, /spend\(limits\.inviteEmails, userId/);
+  assert.match(text, /spend\(limits\.inviteRecipient, input\.email/);
 });
 
 test("client IP is the first forwarded hop", () => {
@@ -420,14 +440,14 @@ test("the password reset mail carries the link that lands back on our own page",
 test("auth wires the reset-password flow", () => {
   // This used to be missing entirely: a forgotten password locked you out unless you
   // had Google. Send the link, bound its lifetime, and cap how often it can be asked for.
-  const auth = src("src/lib/auth.ts");
+  const auth = src("src/server/auth.ts");
   assert.match(auth, /sendResetPassword:/);
   assert.match(auth, /resetPasswordTokenExpiresIn:/);
   assert.match(auth, /"\/request-password-reset":\s*\{ window: \d+, max: \d+ \}/);
 });
 
 test("a friend's direct book cannot be renamed or re-membered", () => {
-  const text = src("src/db/shares.ts");
+  const text = src("src/db/shares/groups.ts");
   const body = text.slice(text.indexOf("export async function updateGroup"), text.indexOf("export async function deleteGroup"));
   assert.match(body, /group\.kind === "direct"/);
 });
@@ -445,7 +465,7 @@ test("the cached auth instance is keyed without randomness", () => {
   // A random id in the cache key invalidates at runtime but breaks prerendering:
   // Next reads it as an unstable value and `/groups/[id]` fails instant-validation
   // with "encountered the unstable value `Math.random()`".
-  const auth = src("src/lib/auth.ts");
+  const auth = src("src/server/auth.ts");
   const key = auth.slice(auth.indexOf("function authConfigKey"), auth.indexOf("export function getAuth"));
   assert.ok(key.length > 0, "authConfigKey must still exist");
   assert.doesNotMatch(key, /Math\.random|crypto\.randomUUID|randomUUID|Date\.now|new Date/);
@@ -472,4 +492,20 @@ test("next.config sends the security headers", () => {
   }
   assert.match(text, /frame-ancestors 'none'/);
   assert.match(text, /object-src 'none'/);
+});
+
+test("the public pages read the session without redirecting, so they cannot loop", () => {
+  // `readPageSession` sends a signed-out visitor to /login, and caches the answer
+  // for five minutes once there is one. Asking that question from /login or
+  // /reset-password — which have to work for somebody who cannot sign in — turns
+  // the front door into a redirect loop and makes a reset link useless. Those two
+  // routes use the peeking read, which is uncached and answers "no".
+  for (const page of ["src/app/login/page.tsx", "src/app/reset-password/page.tsx"]) {
+    const text = src(page);
+    assert.match(text, /peekPageSession\(\)/, `${page} must be able to cope with having no session`);
+    assert.doesNotMatch(text, /readPageSession\(\)/, `${page} must not redirect a visitor away from itself`);
+  }
+  const session = src("src/server/session.ts");
+  assert.match(session, /if \(!session\?\.user\) redirect\("\/login"\)/, "the cached read redirects rather than returning null");
+  assert.match(session, /"use cache: private"/, "the redirect is what keeps a signed-out miss out of the cache");
 });

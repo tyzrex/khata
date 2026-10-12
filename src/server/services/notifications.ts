@@ -10,7 +10,8 @@ import {
   maybePruneNotifications,
   type NotificationDto,
 } from "@/db/notifications";
-import { syncBalanceDueNotifications } from "@/lib/balance-due";
+import { syncBalanceDueNotifications } from "@/server/services/balance-due";
+import { publishFeedEvent } from "@/server/notification-stream";
 
 /**
  * The notification feed, as the API layer needs it.
@@ -57,5 +58,8 @@ export async function getFeed(userId: string, options: { limit?: number; before?
 export async function markFeedRead(userId: string, input: MarkReadInput): Promise<{ unread: number }> {
   if (input.all) await markAllNotificationsRead(userId);
   else await markNotificationsRead(userId, input.ids ?? []);
+  // Another tab of the same account is showing its own copy of this badge. The
+  // optimistic update only reached the one that clicked.
+  void publishFeedEvent({ userId, kind: "read" });
   return { unread: await countUnreadNotifications(userId) };
 }

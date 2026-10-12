@@ -1,4 +1,4 @@
-import { ENDPOINTS } from "@/lib/agent/openapi";
+import { ENDPOINTS } from "@/server/agent/openapi";
 
 /** A short guide for a language model, served as /api/v1/llms.txt. */
 export function llmsText(origin: string) {

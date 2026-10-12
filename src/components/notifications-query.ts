@@ -18,6 +18,18 @@ export type FeedResponse = {
 
 export type MarkReadInput = { ids?: string[]; all?: boolean };
 
+/**
+ * How often to re-read while the server-sent stream is connected.
+ *
+ * The poll is not the primary mechanism any more — it is the guarantee that
+ * something still arrives if the stream does not. Events are announced over
+ * Postgres `LISTEN`/`NOTIFY`, so a write and a stream can land on different
+ * serverless instances, and a connection can be cut when an instance recycles.
+ * Five minutes is long enough to be free and short enough that a missed event
+ * corrects itself while the tab is still open.
+ */
+export const LIVE_POLL_MS = 5 * 60_000;
+
 export const notificationsQuery = queryOptions({
   queryKey: notificationsKey,
   queryFn: () => requestJson<FeedResponse>("/api/notifications"),

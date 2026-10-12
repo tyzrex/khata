@@ -1,22 +1,12 @@
-import { and, asc, desc, eq, gte, ilike, lte, or } from "drizzle-orm";
+import { and, desc, eq, gte, ilike, lte, or } from "drizzle-orm";
 import { getDb } from "@/db/client";
 import { ensureAccounts, ensureNamedAccount } from "@/db/accounts";
 import { accounts, categories, transactions, type TransactionRow } from "@/db/schema";
+import { ensureCategories, ensureNamedCategory } from "@/db/categories";
 import { DEFAULT_CATEGORIES, type TxType } from "@/lib/constants";
 import { summarize, type LedgerAmount } from "@/lib/period";
 import { parseImportPayload, type ImportTransaction, type ManualTransaction } from "@/lib/schemas";
-import type { CategoryDto, ImportResult, SummaryResponse, TransactionDto } from "@/lib/types";
-
-function pgCode(error: unknown): string | undefined {
-  if (!error || typeof error !== "object") return undefined;
-  if ("code" in error && typeof error.code === "string") return error.code;
-  if ("cause" in error) return pgCode(error.cause);
-  return undefined;
-}
-
-export function isUniqueViolation(error: unknown) {
-  return pgCode(error) === "23505";
-}
+import type { ImportResult, SummaryResponse, TransactionDto } from "@/lib/types";
 
 export function toTransaction(row: TransactionRow): TransactionDto {
   return {
@@ -36,129 +26,6 @@ export function toTransaction(row: TransactionRow): TransactionDto {
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
   };
-}
-
-function toCategory(row: typeof categories.$inferSelect): CategoryDto {
-  return {
-    id: row.id,
-    name: row.name,
-    kind: row.kind as CategoryDto["kind"],
-    color: row.color,
-    sortOrder: row.sortOrder,
-  };
-}
-
-/**
- * Give a brand-new book its starting categories. Runs on the read path, so it has
- * to tell "never seeded" from "seeded and then renamed": seeding on any *missing*
- * default would resurrect a name the person deliberately changed. An empty table
- * is the only unambiguous signal, so every write path calls this before
- * ensureNamedCategory — otherwise a first entry naming a custom category would
- * leave the book with one category and never gain the defaults.
- */
-export async function ensureCategories(userId: string) {
-  const db = getDb();
-  const [existing] = await db.select({ id: categories.id }).from(categories).where(eq(categories.userId, userId)).limit(1);
-  if (existing) return;
-  await db
-    .insert(categories)
-    .values(
-      DEFAULT_CATEGORIES.map((category) => ({
-        id: crypto.randomUUID(),
-        userId,
-        name: category.name,
-        kind: category.kind,
-        color: category.color,
-        sortOrder: category.sortOrder,
-      })),
-    )
-    .onConflictDoNothing({ target: [categories.userId, categories.name] });
-}
-
-async function ensureNamedCategory(userId: string, name: string, kind: string) {
-  const db = getDb();
-  const match = DEFAULT_CATEGORIES.find((category) => category.name === name);
-  await db
-    .insert(categories)
-    .values({
-      id: crypto.randomUUID(),
-      userId,
-      name,
-      kind: match?.kind ?? kind,
-      color: match?.color ?? "#7c828a",
-      sortOrder: match?.sortOrder ?? 200,
-    })
-    .onConflictDoNothing({ target: [categories.userId, categories.name] });
-}
-
-export async function listCategories(userId: string) {
-  await ensureCategories(userId);
-  const rows = await getDb()
-    .select()
-    .from(categories)
-    .where(eq(categories.userId, userId))
-    .orderBy(asc(categories.sortOrder), asc(categories.name));
-  return rows.map(toCategory);
-}
-
-export async function createCategory(userId: string, input: { name: string; kind: CategoryDto["kind"]; color: string }) {
-  await ensureCategories(userId);
-  const [row] = await getDb()
-    .insert(categories)
-    .values({
-      id: crypto.randomUUID(),
-      userId,
-      name: input.name,
-      kind: input.kind,
-      color: input.color,
-      sortOrder: 200,
-    })
-    .returning();
-  return toCategory(row);
-}
-
-export async function updateCategory(userId: string, id: string, input: { name: string; kind: CategoryDto["kind"]; color: string }) {
-  const db = getDb();
-  const [current] = await db
-    .select()
-    .from(categories)
-    .where(and(eq(categories.id, id), eq(categories.userId, userId)))
-    .limit(1);
-  if (!current) return null;
-  const now = new Date();
-  const [row] = await db.transaction(async (tx) => {
-    const updated = await tx
-      .update(categories)
-      .set({ name: input.name, kind: input.kind, color: input.color, updatedAt: now })
-      .where(and(eq(categories.id, id), eq(categories.userId, userId)))
-      .returning();
-    if (current.name !== input.name) {
-      await tx
-        .update(transactions)
-        .set({ categoryName: input.name, updatedAt: now })
-        .where(and(eq(transactions.categoryName, current.name), eq(transactions.userId, userId)));
-    }
-    return updated;
-  });
-  return row ? toCategory(row) : null;
-}
-
-export async function deleteCategory(userId: string, id: string) {
-  const db = getDb();
-  const [current] = await db
-    .select()
-    .from(categories)
-    .where(and(eq(categories.id, id), eq(categories.userId, userId)))
-    .limit(1);
-  if (!current) return { status: "missing" as const };
-  const [used] = await db
-    .select({ id: transactions.id })
-    .from(transactions)
-    .where(and(eq(transactions.categoryName, current.name), eq(transactions.userId, userId)))
-    .limit(1);
-  if (used) return { status: "used" as const, name: current.name };
-  await db.delete(categories).where(and(eq(categories.id, id), eq(categories.userId, userId)));
-  return { status: "deleted" as const };
 }
 
 export type TransactionFilters = {

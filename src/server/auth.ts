@@ -7,8 +7,8 @@ import { Pool } from "pg";
 import { getDb } from "@/db/client";
 import { purgeUserData, purgeUserVerification } from "@/db/purge-user";
 import * as schema from "@/db/schema";
-import { sendDeleteAccountVerification, sendResetPasswordEmail, sendVerificationEmail } from "@/lib/account-email";
-import { trustedOrigins } from "@/lib/request-guard";
+import { sendDeleteAccountVerification, sendResetPasswordEmail, sendVerificationEmail } from "@/server/account-email";
+import { trustedOrigins } from "@/server/request-guard";
 
 function authDatabase() {
   if (process.env.DATABASE_URL) return getDb();

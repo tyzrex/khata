@@ -2,7 +2,7 @@ import { z } from "zod";
 import { SHARED_CATEGORIES, TX_TYPES } from "@/lib/constants";
 import { dateSchema, moneySchema } from "@/lib/schemas";
 import { SPLIT_MODES } from "@/lib/split";
-import { parseAmount, resolveDate } from "@/lib/agent/match";
+import { parseAmount, resolveDate } from "@/server/agent/match";
 
 /**
  * Request shapes for the /api/v1 agent API. They are forgiving about how values

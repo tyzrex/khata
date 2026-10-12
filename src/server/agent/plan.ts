@@ -2,7 +2,7 @@ import type { BalanceScope, ShareBook } from "@/db/shares";
 import type { SharedCategory } from "@/lib/constants";
 import { formatNpr } from "@/lib/format";
 import { buildSplits, ShareInputError, type BuiltSplit, type SplitMode, type SplitParticipant } from "@/lib/split";
-import { AgentInputError, isSelfWord, matchNamed, matchPerson, type Named } from "@/lib/agent/match";
+import { AgentInputError, isSelfWord, matchNamed, matchPerson, type Named } from "@/server/agent/match";
 
 /**
  * Turns an agent's name-based request into the id-based input the share book
@@ -303,9 +303,20 @@ export function planSettlement(book: ShareBook, request: SettlementRequest, opts
   };
 }
 
+/** Mid-sentence: "Split equally: you NPR 60." Lowercase reads correctly there. */
 function nameIn(scope: BookScope, id: string) {
   if (id === scope.selfId) return "you";
   return scope.members.find((member) => member.id === id)?.name ?? "someone";
+}
+
+/**
+ * As a value in a response body, where it sits next to `"You"` in every other
+ * endpoint's data — an expense reports `paidBy: "You"`, so a settlement has to
+ * report `to: "You"` too, not the prose form.
+ */
+function displayNameIn(scope: BookScope, id: string) {
+  if (id === scope.selfId) return "You";
+  return scope.members.find((member) => member.id === id)?.name ?? "Someone";
 }
 
 /** "Split equally: you NPR 400, Sameer NPR 400." */
@@ -319,7 +330,7 @@ export function whereText(scope: BookScope) {
 }
 
 export function personName(scope: BookScope, id: string) {
-  return nameIn(scope, id);
+  return displayNameIn(scope, id);
 }
 
 /** Positive: they owe you. Negative: you owe them. */

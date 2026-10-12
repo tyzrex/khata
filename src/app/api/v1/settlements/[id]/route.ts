@@ -1,24 +1,17 @@
-import type { NextRequest } from "next/server";
-import { deleteSettlement, describeSharedWrite } from "@/db/shares";
-import { agentError, ok, spendWrite } from "@/lib/agent/respond";
-import { notifySharedWrite } from "@/lib/push-notifications";
-import { requireAgentIdentity } from "@/lib/session";
+import { ok } from "@/server/agent-http";
+import { defineAgentRoute } from "@/server/route";
+import { deletePayment } from "@/server/services/agent/settlements";
+import { limits } from "@/server/request-guard";
 
-type Context = { params: Promise<{ id: string }> };
+type Context = { id: string };
 
-export async function DELETE(request: NextRequest, context: Context) {
-  try {
-    const { userId, viaApiKey } = await requireAgentIdentity(request);
-    // A bot writes as you, so the write has to reach your own feed too.
-    const limited = spendWrite(userId);
-    if (limited) return limited;
-    const { id } = await context.params;
-    // Settlements keep no audit trail, so snapshot the push detail before the row goes.
-    const detail = await describeSharedWrite(userId, { kind: "settlement", action: "deleted", settlementId: id });
-    await deleteSettlement(userId, id);
-    if (detail) notifySharedWrite({ ...detail, includeActor: viaApiKey, activity: { ...detail.activity, action: "deleted" } });
-    return ok({ id }, "Payment removed. Balances are updated.");
-  } catch (error) {
-    return agentError(error);
-  }
-}
+export const { DELETE } = defineAgentRoute<Context>()({
+  DELETE: {
+    auth: "agent",
+    limit: { limiter: limits.agentWrites, key: ({ userId }) => userId, message: (retryAfter) => `Too many writes. Try again in ${retryAfter} seconds.` },
+    handle: async ({ userId, params, viaApiKey }) => {
+      const view = await deletePayment(userId, params.id, viaApiKey);
+      return ok(view.data, view.message);
+    },
+  },
+});

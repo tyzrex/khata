@@ -1,5 +1,5 @@
-import type { TransactionInput } from "@/lib/agent/schemas";
-import { resolveAccount, resolveCategory, AgentInputError } from "@/lib/agent/match";
+import type { TransactionInput } from "@/server/agent/schemas";
+import { resolveAccount, resolveCategory, AgentInputError } from "@/server/agent/match";
 import { issueMessage, manualTransactionSchema, type ManualTransaction } from "@/lib/schemas";
 
 /**

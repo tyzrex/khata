@@ -2,9 +2,9 @@ import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import { LoginForm } from "@/components/login-form";
 import { Mark } from "@/components/mark";
-import { googleAuthEnabled } from "@/lib/auth";
+import { googleAuthEnabled } from "@/server/auth";
 import { safeNext } from "@/lib/return-path";
-import { readPageSession } from "@/lib/session";
+import { peekPageSession } from "@/server/session";
 
 type Props = { searchParams: Promise<{ next?: string | string[] }> };
 
@@ -17,7 +17,7 @@ export default function LoginPage({ searchParams }: Props) {
 }
 
 async function LoginGate({ searchParams }: Props) {
-  const session = await readPageSession();
+  const session = await peekPageSession();
   if (session) {
     const { next } = await searchParams;
     redirect(safeNext(Array.isArray(next) ? next[0] : next));

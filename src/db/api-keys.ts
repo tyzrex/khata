@@ -1,7 +1,7 @@
 import { and, asc, eq, isNull, lt, or } from "drizzle-orm";
 import { getDb } from "@/db/client";
 import { apiKeys } from "@/db/schema";
-import { generateApiKey, hashApiKey } from "@/lib/agent/keys";
+import { generateApiKey, hashApiKey } from "@/server/agent/keys";
 import { ShareInputError } from "@/lib/split";
 
 /** Active keys one account may hold at once. */

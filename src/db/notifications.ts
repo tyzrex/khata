@@ -1,6 +1,7 @@
 import { and, desc, eq, inArray, isNotNull, lt, or, sql } from "drizzle-orm";
 import { getDb } from "@/db/client";
 import { notifications } from "@/db/schema";
+import { publishFeedEvent } from "@/server/notification-stream";
 
 /**
  * What produced a feed entry. Stored as free text so adding a kind does not need a
@@ -74,7 +75,25 @@ export async function recordNotifications(inputs: NotificationInput[]): Promise<
     )
     .onConflictDoNothing({ target: notifications.dedupeKey })
     .returning({ id: notifications.id });
+  announce(inputs, rows.length > 0);
   return rows.map((row) => row.id);
+}
+
+/**
+ * Tell anything watching a feed that it just moved.
+ *
+ * Called from the one function that means "a feed entry now exists", so no write
+ * path has to remember to announce itself. Fire-and-forget and unawaited: the row
+ * is already committed, and a stream that misses the event still gets the entry
+ * from its next poll.
+ *
+ * The conflict check matters — a retried fan-out inserts nothing, and announcing
+ * that would have every open tab refetch to find an identical feed.
+ */
+function announce(inputs: NotificationInput[], inserted: boolean) {
+  if (!inserted) return;
+  const shared = inputs.some((input) => input.kind === "shared_activity");
+  for (const userId of new Set(inputs.map((input) => input.userId))) void publishFeedEvent({ userId, kind: "created", activity: shared });
 }
 
 /**

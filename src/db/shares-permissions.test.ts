@@ -23,9 +23,8 @@ const TEST_URL = process.env.KHATA_TEST_DATABASE_URL;
 if (TEST_URL) process.env.DATABASE_URL = TEST_URL;
 
 const { getDb } = await import("@/db/client");
+const { ConflictError, NotFoundError } = await import("@/server/errors");
 const {
-  ConflictError,
-  NotFoundError,
   createGroup,
   createPerson,
   createSharedExpense,

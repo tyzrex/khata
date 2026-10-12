@@ -1,5 +1,5 @@
 import { createPerson, type ShareBook } from "@/db/shares";
-import { findNamed, isSelfWord, matchPerson, normalizeName } from "@/lib/agent/match";
+import { findNamed, isSelfWord, matchPerson, normalizeName } from "@/server/agent/match";
 
 /**
  * Resolve names in your own book, creating friends for names nobody has when

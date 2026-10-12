@@ -1,27 +1,8 @@
-import type { NextRequest } from "next/server";
-import { createCategory, isUniqueViolation, listCategories } from "@/db/ledger";
-import { badRequest, jsonError, readJson } from "@/lib/http";
-import { categorySchema, issueMessage } from "@/lib/schemas";
-import { requireUserId } from "@/lib/session";
+import { createCategory, listCategories } from "@/db/categories";
+import { defineRoute } from "@/server/route";
+import { categorySchema } from "@/lib/schemas";
 
-export async function GET(request: NextRequest) {
-  try {
-    const userId = await requireUserId(request);
-    return Response.json({ categories: await listCategories(userId) });
-  } catch (error) {
-    return jsonError(error);
-  }
-}
-
-export async function POST(request: NextRequest) {
-  try {
-    const userId = await requireUserId(request);
-    const parsed = categorySchema.safeParse(await readJson(request));
-    if (!parsed.success) return badRequest(issueMessage(parsed.error));
-    const category = await createCategory(userId, parsed.data);
-    return Response.json({ category }, { status: 201 });
-  } catch (error) {
-    if (isUniqueViolation(error)) return Response.json({ error: "A category with that name already exists." }, { status: 409 });
-    return jsonError(error);
-  }
-}
+export const { GET, POST } = defineRoute()({
+  GET: { handle: async ({ userId }) => Response.json({ categories: await listCategories(userId) }) },
+  POST: { body: categorySchema, handle: async ({ userId, body }) => Response.json({ category: await createCategory(userId, body) }, { status: 201 }) },
+});

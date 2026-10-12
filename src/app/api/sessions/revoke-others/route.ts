@@ -1,15 +1,13 @@
-import type { NextRequest } from "next/server";
-import { getAuth } from "@/lib/auth";
-import { jsonError } from "@/lib/http";
-import { requireUserId } from "@/lib/session";
+import { defineRoute } from "@/server/route";
+import { revokeOtherSessions } from "@/server/services/sessions";
 
 /** Sign every other device out. The session making this request survives. */
-export async function POST(request: NextRequest) {
-  try {
-    await requireUserId(request);
-    await getAuth().api.revokeOtherSessions({ headers: request.headers });
-    return Response.json({ status: true });
-  } catch (error) {
-    return jsonError(error);
-  }
-}
+export const { POST } = defineRoute()({
+  POST: {
+    snapshot: false,
+    handle: async ({ request }) => {
+      await revokeOtherSessions(request);
+      return Response.json({ status: true });
+    },
+  },
+});

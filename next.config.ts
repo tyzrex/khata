@@ -56,6 +56,22 @@ const nextConfig: NextConfig = {
   serverExternalPackages: ["pg"],
   cacheComponents: true,
   partialPrefetching: true,
+  /**
+   * Named cache lives, so the numbers behind them are written down once instead
+   * of being re-derived at every `cacheLife` call site. See `cacheLife.md` for
+   * what each of the three timings does.
+   *
+   * `stale` is how long the client router may reuse a payload before it has to
+   * ask the server — it must stay at 30s or more for a prefetched link to still
+   * be usable when it is clicked. `revalidate` is how often the server refreshes
+   * an entry in the background, and it is deliberately short: on a serverless
+   * deployment `use cache` lives in one instance's memory, so the tag a write
+   * expires cannot reach the entries another instance is holding. This is the
+   * backstop for that. `expire` is the hard ceiling.
+   */
+  cacheLife: {
+    ledger: { stale: 300, revalidate: 60, expire: 600 },
+  },
   poweredByHeader: false,
   turbopack: {
     rules: {

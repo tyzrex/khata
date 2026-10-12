@@ -2,7 +2,7 @@ import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import { Mark } from "@/components/mark";
 import { ResetPasswordForm } from "@/components/reset-password-form";
-import { readPageSession } from "@/lib/session";
+import { peekPageSession } from "@/server/session";
 
 type Props = { searchParams: Promise<{ token?: string | string[]; error?: string | string[] }> };
 
@@ -21,7 +21,7 @@ export default function ResetPasswordPage({ searchParams }: Props) {
 async function Gate({ searchParams }: Props) {
   // Someone who is already signed in has no reason to be here, and landing on a
   // stale link should not quietly change the password of the open session.
-  const session = await readPageSession();
+  const session = await peekPageSession();
   if (session) redirect("/");
 
   const params = await searchParams;

@@ -1,4 +1,4 @@
-import { ENDPOINTS } from "@/lib/agent/openapi";
+import { ENDPOINTS } from "@/server/agent/openapi";
 
 /** Public index: what this API is and where the full description lives. No data, so it can be prerendered. */
 export async function GET() {
