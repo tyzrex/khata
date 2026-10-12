@@ -24,13 +24,13 @@ import { cn } from "cn";
 export function NotificationsBell({
   className,
   variant = "outline",
-  size = "icon-xs",
+  size = "icon-sm",
   align = "end",
   side = "top",
 }: {
   className?: string;
   variant?: "ghost" | "outline";
-  size?: "icon" | "icon-xs";
+  size?: "icon" | "icon-sm";
   align?: "start" | "center" | "end";
   side?: "top" | "bottom";
 }) {
@@ -59,7 +59,7 @@ export function NotificationsBell({
           >
             <Bell />
             {unread > 0 ? (
-              <span className="absolute -top-0.5 -right-0.5 flex min-w-[18px] items-center justify-center rounded-full bg-brand px-1 text-[10px] leading-[18px] font-bold text-brand-foreground ring-2 ring-card">
+              <span className="absolute -top-0.5 -right-0.5 flex min-w-[18px] items-center justify-center rounded-full bg-brand px-1 text-[11px] leading-[18px] font-bold text-brand-foreground ring-2 ring-card">
                 {unread > 99 ? "99+" : unread}
               </span>
             ) : null}
@@ -68,12 +68,12 @@ export function NotificationsBell({
       />
       <PopoverContent align={align} side={side} className="w-[min(22rem,calc(100vw-2rem))] p-2">
         <div className="flex items-center justify-between gap-2 px-2 pt-1 pb-2">
-          <p className="text-sm font-semibold text-display">Notifications</p>
+          <p className="text-[15px] font-semibold text-display">Notifications</p>
           {unread > 0 ? (
             <button
               type="button"
               onClick={markAllRead}
-              className="flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs font-medium text-interactive transition-colors duration-200 outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring"
+              className="flex items-center gap-1.5 rounded-lg px-2 py-1 text-[13px] font-medium text-interactive transition-colors duration-200 outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring"
             >
               <CheckCheck className="size-3.5" aria-hidden />
               Mark all read

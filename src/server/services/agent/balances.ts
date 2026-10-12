@@ -1,10 +1,11 @@
+import { roundMoney } from "@/lib/money";
 import { getShareBook } from "@/db/shares";
 import { balanceLines, friendBalances, netOf } from "@/server/agent/plan";
 import { groupViews } from "@/server/agent/views";
 import { formatNpr } from "@/lib/format";
 
 /** Money only ever moves in paisa, so every total here is rounded back to 2dp. */
-const paisa = (amount: number) => Math.round(amount * 100) / 100;
+const paisa = roundMoney;
 
 /** Below half a paisa a balance is not worth reporting. */
 const settled = (amount: number) => Math.abs(amount) < 0.005;

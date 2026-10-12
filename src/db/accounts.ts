@@ -105,23 +105,43 @@ export async function renameAccount(userId: string, id: string, name: string) {
  * categories use. Move or delete the entries first.
  */
 export async function deleteAccount(userId: string, id: string) {
-  const db = getDb();
-  const [current] = await db.select().from(accounts).where(and(eq(accounts.id, id), eq(accounts.userId, userId))).limit(1);
-  if (!current) throw new NotFoundError("That account is gone.");
-  const [used] = await db
-    .select({ id: transactions.id })
-    .from(transactions)
-    .where(and(eq(transactions.account, current.name), eq(transactions.userId, userId)))
-    .limit(1);
-  if (used) throw new ConflictError(`${current.name} is still used by entries. Rename it, or move those entries first.`);
-  await db.delete(accounts).where(and(eq(accounts.id, id), eq(accounts.userId, userId)));
+  await getDb().transaction(async (tx) => {
+    // FOR UPDATE: a write that is about to use this account holds it FOR SHARE (see
+    // `holdNamedAccount`), so the check below either waits for that write and sees its
+    // entry, or finishes first and makes the write recreate the account. Without the
+    // lock, an entry could land between the check and the delete and point at nothing.
+    const [current] = await tx.select().from(accounts).where(and(eq(accounts.id, id), eq(accounts.userId, userId))).limit(1).for("update");
+    if (!current) throw new NotFoundError("That account is gone.");
+    const [used] = await tx
+      .select({ id: transactions.id })
+      .from(transactions)
+      .where(and(eq(transactions.account, current.name), eq(transactions.userId, userId)))
+      .limit(1);
+    if (used) throw new ConflictError(`${current.name} is still used by entries. Rename it, or move those entries first.`);
+    await tx.delete(accounts).where(and(eq(accounts.id, id), eq(accounts.userId, userId)));
+  });
 }
 
-/** Rewrites `transactions.account` when a write names an account that does not exist yet. */
-export async function ensureNamedAccount(userId: string, name: string) {
-  const db = getDb();
-  await db
+type Executor = Pick<ReturnType<typeof getDb>, "insert" | "select">;
+
+/** Adds an account a write referenced but the book does not have yet. */
+export async function ensureNamedAccount(userId: string, name: string, executor: Executor = getDb()) {
+  await executor
     .insert(accounts)
     .values({ id: crypto.randomUUID(), userId, name, sortOrder: 200 })
     .onConflictDoNothing({ target: [accounts.userId, accounts.name] });
+}
+
+/**
+ * Make sure the account exists and stay its reader until the surrounding transaction
+ * ends, so `deleteAccount` cannot remove it from under the entry being written.
+ * If a delete wins the race, the row is gone when the lock is granted: recreate it.
+ */
+export async function holdNamedAccount(userId: string, name: string, tx: Executor) {
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    await ensureNamedAccount(userId, name, tx);
+    const [row] = await tx.select({ id: accounts.id }).from(accounts).where(and(eq(accounts.userId, userId), eq(accounts.name, name))).limit(1).for("share");
+    if (row) return;
+  }
+  throw new ConflictError("That account was just changed elsewhere. Try again.");
 }

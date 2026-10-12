@@ -257,22 +257,22 @@ export function ShellSkeleton() {
 
       <div className="min-w-0">
         <header className="sticky top-0 z-30 border-b border-border bg-card/90 backdrop-blur-md lg:hidden">
-          <div className="gutter-safe flex items-center justify-between gap-3 pt-5 pb-3">
+          <div className="gutter-safe flex items-center justify-between gap-2 pt-4 pb-3 [--gutter:1rem] sm:[--gutter:1.25rem] md:[--gutter:2rem]">
             <div className="flex min-w-0 items-center gap-3">
-              <Bone className="size-9 shrink-0 rounded-full" />
+              <Bone className="size-10 shrink-0 rounded-full" />
               <span className="flex min-w-0 flex-col gap-1.5">
                 <Bone className="h-3.5 w-16" />
                 <Bone className="h-2.5 w-24" />
               </span>
             </div>
-            <div className="flex items-center gap-1">
+            <div className="flex items-center gap-1.5">
               <Bone className="size-10 rounded-xl" />
               <Bone className="size-10 rounded-xl" />
               <Bone className="size-10 rounded-xl" />
             </div>
           </div>
         </header>
-        <main className="gutter-safe w-full pt-4 pb-28 lg:pt-7 lg:pr-7 lg:pb-14 lg:pl-4 2xl:pt-8 2xl:pr-9 2xl:pl-6">
+        <main className="gutter-safe w-full pt-4 pb-28 [--gutter:1rem] sm:[--gutter:1.25rem] md:pt-6 md:[--gutter:2rem] lg:pt-7 lg:pr-7 lg:pb-14 lg:pl-4 2xl:pt-8 2xl:pr-9 2xl:pl-6">
           <RouteSkeleton />
         </main>
       </div>
@@ -284,7 +284,7 @@ export function ShellSkeleton() {
       >
         <ul className="gutter-safe grid grid-cols-5">
           {Array.from({ length: 5 }, (_, index) => (
-            <li key={index} className="flex h-16 flex-col items-center justify-center gap-1">
+            <li key={index} className="flex h-[4.25rem] flex-col items-center justify-center gap-1.5">
               <Bone className="size-5 rounded-lg" />
               <Bone className="h-2.5 w-8" />
             </li>

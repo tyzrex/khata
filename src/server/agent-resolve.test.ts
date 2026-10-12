@@ -2,9 +2,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import type { BalanceScope, ShareBook } from "@/db/shares";
 import { generateApiKey, hashApiKey, isApiKey, readApiKey } from "./agent/keys";
-import { AgentInputError, matchNamed, matchPerson, parseAmount, resolveAccount, resolveCategory, resolveDate, suggest } from "./agent/match";
+import { AgentInputError, AmbiguousNameError, matchNamed, matchPerson, parseAmount, resolveAccount, resolveCategory, resolveDate, suggest } from "./agent/match";
 import { balanceLines, friendBalances, planExpense, planSettlement } from "./agent/plan";
-import { expenseInput, transactionInput } from "./agent/schemas";
+import { expenseInput, settlementInput, transactionInput } from "./agent/schemas";
 
 const TODAY = "2026-10-08";
 const empty: BalanceScope = { youOwe: [], youAreOwed: [], others: [], simplified: [] };
@@ -249,4 +249,55 @@ test("API keys are prefixed, hashed and read from either header", () => {
   assert.equal(readApiKey(new Headers({ "x-api-key": token })), token);
   assert.equal(readApiKey(new Headers({ authorization: "Bearer some-session-token" })), null);
   assert.equal(readApiKey(new Headers()), null);
+});
+
+test("an ambiguous name in your own book is never answered from a joined book", () => {
+  // Two Sams in your book, one Sam in a book you joined. Falling through would write the
+  // expense into the other person's ledger.
+  const sam1 = { id: "s1", name: "Sam Rai", isSelf: false, linkedUserId: null };
+  const sam2 = { id: "s2", name: "Sam KC", isSelf: false, linkedUserId: null };
+  const ownerSelf = { id: "o-mine", name: "You", isSelf: true, linkedUserId: "u1" };
+  const joinedSam = { id: "o-sam", name: "Sam", isSelf: false, linkedUserId: null };
+  const joined: ShareBook["joinedGroups"][number] = {
+    id: "jg",
+    name: "Office lunch",
+    kind: "group",
+    ownerName: "Bibek",
+    members: [ownerSelf, joinedSam],
+    people: [ownerSelf, joinedSam],
+    self: ownerSelf,
+    balances: empty,
+    expenses: [],
+    settlements: [],
+  };
+  const ambiguous = book({ people: [self, sam1, sam2], groups: [], joinedGroups: [joined] });
+  assert.throws(
+    () => planExpense(ambiguous, { description: "Lunch", amount: 100, date: TODAY, note: "", splitWith: ["Sam", "Rajan"] }),
+    (error: unknown) => error instanceof AmbiguousNameError,
+  );
+  // The same name resolves in the joined book when your own book has nobody by that name.
+  const none = book({ people: [self], groups: [], joinedGroups: [joined] });
+  assert.equal(planExpense(none, { description: "Lunch", amount: 100, date: TODAY, note: "", splitWith: ["Sam"] }).write.groupId, "jg");
+});
+
+test("friends are added by exact name; a first-name hit asks instead of swallowing the new person", async () => {
+  const { peopleFor } = await import("./agent/people");
+  const anitaRai = { id: "p-ar", name: "Anita Rai", isSelf: false, linkedUserId: null };
+  const b = book({ people: [self, anitaRai] });
+  await assert.rejects(
+    () => peopleFor("u1", b, ["Anita"], { createMissing: true, exactOnly: true }),
+    (error: unknown) => error instanceof AgentInputError && /Anita Rai/.test(error.message) && error.candidates.includes("Anita Rai"),
+  );
+  // The full name, and a retry of it, are the same friend.
+  const again = await peopleFor("u1", b, ["anita rai"], { createMissing: true, exactOnly: true });
+  assert.deepEqual(again.ids, ["p-ar"]);
+  assert.equal(again.created.length, 0);
+  // Groups may still refer to a friend by first name.
+  const viaGroup = await peopleFor("u1", b, ["Anita"], { createMissing: true });
+  assert.deepEqual(viaGroup.ids, ["p-ar"]);
+});
+
+test("expense and settlement inputs accept an externalId retry key", () => {
+  assert.equal(expenseInput(TODAY).parse({ description: "Dinner", amount: 800, externalId: " abc-1 " }).externalId, "abc-1");
+  assert.equal(settlementInput(TODAY).parse({ amount: 100, externalId: "pay-1" }).externalId, "pay-1");
 });

@@ -1,3 +1,4 @@
+import { roundMoney } from "@/lib/money";
 import type { TxType } from "@/lib/constants";
 import { KATHMANDU } from "@/lib/constants";
 import type { DaySpend, PeriodSummary } from "@/lib/types";
@@ -11,9 +12,7 @@ export type LedgerAmount = {
 
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
 
-export function roundMoney(value: number) {
-  return Math.round((value + Number.EPSILON) * 100) / 100;
-}
+export { roundMoney };
 
 export function todayInKathmandu(now = new Date()) {
   return new Intl.DateTimeFormat("en-CA", {

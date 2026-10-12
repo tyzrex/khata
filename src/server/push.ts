@@ -4,7 +4,7 @@ import { and, eq, inArray } from "drizzle-orm";
 import { getDb } from "@/db/client";
 import type { SharedActivity } from "@/db/push-activity";
 import { recordNotifications } from "@/db/notifications";
-import { groupMembers, groupUserAccess, people } from "@/db/schema";
+import { groupUserAccess, people } from "@/db/schema";
 import { expireSnapshots } from "@/server/cache-tags";
 import {
   DEFAULT_NOTIFICATION_PREFERENCES,
@@ -83,37 +83,75 @@ export function isAllowedPushEndpoint(value: string) {
   return PROVIDER_SUFFIXES.some((suffix) => hostname === suffix || hostname.endsWith(`.${suffix}`));
 }
 
+/** A shared write's reach: who is told about it, and whose cached screens it changes. */
+export type SharedWriteAudience = { notify: string[]; expire: string[] };
+
 /**
- * Who should hear about a shared write: the book's owner (unless they made the write),
- * plus everyone else with a linked Khata account: the other members of a
- * group write via `group_user_access`, or the other person in a direct book via
- * their linked `people` row. Unknown or unlinked people resolve to nobody.
+ * Pure core of audience resolution, so the rules can be tested without a database.
+ *
+ * Notified: the book's owner (they are never one of their own linked contacts, so no lookup
+ * finds them), plus the linked people on the expense. In a group, a participant is only told
+ * if they still hold access to it: a person who left, or a linked friend who was put in the
+ * member list but never invited, would otherwise be sent an amount for a book they cannot
+ * open. `accessHolders` is null for a write outside any group, where there is no access list.
+ * The actor is never told about their own click.
+ *
+ * Expired: everyone who can see the book as well, participant or not, because a member who
+ * is not on this expense still sees it in the group and their cached view is now stale.
  */
+export function composeAudience(input: {
+  actorId: string;
+  ownerId: string;
+  participants: ReadonlySet<string>;
+  accessHolders: ReadonlySet<string> | null;
+}): SharedWriteAudience {
+  const { actorId, ownerId, participants, accessHolders } = input;
+  const notify = new Set<string>();
+  for (const userId of participants) {
+    if (!accessHolders || accessHolders.has(userId)) notify.add(userId);
+  }
+  notify.add(ownerId);
+  notify.delete(actorId);
+  const expire = new Set<string>([ownerId, ...participants, ...(accessHolders ?? []), ...notify]);
+  return { notify: [...notify], expire: [...expire] };
+}
+
+/**
+ * Who should hear about a shared write. Linked accounts are resolved from the owner's
+ * `people` rows (the other person in a direct book, or the members of a group); groups
+ * are then narrowed to `group_user_access`. `previous` is what an edit replaced: people
+ * dropped from the split, or the group an expense was moved out of, still have a changed
+ * balance and have to be told.
+ */
+export async function resolveSharedWriteAudience(input: {
+  actorId: string;
+  ownerId: string;
+  groupId: string | null;
+  personIds: string[];
+  previous?: { groupId: string | null; personIds: string[] };
+}): Promise<SharedWriteAudience> {
+  const { actorId, ownerId, groupId, personIds, previous } = input;
+  const groupIds = [...new Set([groupId, previous?.groupId].filter((value): value is string => Boolean(value)))];
+  const [participants, access] = await Promise.all([
+    linkedAccounts(ownerId, [...personIds, ...(previous?.personIds ?? [])]),
+    Promise.all(groupIds.map((id) => groupAccessUserIds(id, ownerId))),
+  ]);
+  return composeAudience({
+    actorId,
+    ownerId,
+    participants,
+    accessHolders: groupIds.length ? new Set(access.flat()) : null,
+  });
+}
+
+/** Who gets a feed row and a push. Kept for callers that only need that half. */
 export async function resolveSharedWriteRecipients(input: {
   actorId: string;
   ownerId: string;
   groupId: string | null;
   personIds: string[];
 }): Promise<string[]> {
-  const { actorId, ownerId, groupId, personIds } = input;
-  const linked = await linkedAccounts(ownerId, personIds);
-  const recipients = new Set<string>();
-
-  if (groupId) {
-    const [members, access] = await Promise.all([groupMemberUserIds(groupId, ownerId), groupAccessUserIds(groupId, ownerId)]);
-    for (const userId of [...members, ...access]) {
-      if (linked.has(userId)) recipients.add(userId);
-    }
-  } else {
-    for (const userId of linked) recipients.add(userId);
-  }
-
-  // The book's owner is never one of their own linked contacts, so the lookups above can
-  // not find them. When a collaborator writes into the owner's book, the owner is exactly
-  // who needs to hear about it.
-  recipients.add(ownerId);
-  recipients.delete(actorId);
-  return [...recipients];
+  return (await resolveSharedWriteAudience(input)).notify;
 }
 
 /** linkedUserId for each person row the owner holds, keyed by user id. */
@@ -127,17 +165,7 @@ async function linkedAccounts(ownerId: string, personIds: string[]): Promise<Set
   return new Set(rows.map((row) => row.linkedUserId).filter((value): value is string => Boolean(value)));
 }
 
-/** Linked accounts reachable through group membership rows. */
-async function groupMemberUserIds(groupId: string, ownerId: string): Promise<string[]> {
-  const rows = await getDb()
-    .select({ linkedUserId: people.linkedUserId })
-    .from(groupMembers)
-    .innerJoin(people, and(eq(people.id, groupMembers.personId), eq(people.userId, ownerId)))
-    .where(eq(groupMembers.groupId, groupId));
-  return rows.map((row) => row.linkedUserId).filter((value): value is string => Boolean(value));
-}
-
-/** Linked accounts with direct access to the group (invite-accepted members). */
+/** Accounts holding access to the group: the owner and every member who accepted an invite. */
 async function groupAccessUserIds(groupId: string, ownerId: string): Promise<string[]> {
   const rows = await getDb()
     .select({ userId: groupUserAccess.userId })
@@ -275,6 +303,8 @@ export function notifySharedWrite(input: {
   groupId: string | null;
   personIds: string[];
   activity: SharedActivity;
+  /** What an edit replaced (see `resolveSharedWriteAudience`). Absent for creates and deletes. */
+  previous?: { groupId: string | null; personIds: string[] };
   /**
    * Notify the actor as well. Off by default: someone who taps "save" already saw
    * it happen, and a feed entry for their own click is noise. On for writes made
@@ -283,16 +313,18 @@ export function notifySharedWrite(input: {
    */
   includeActor?: boolean;
 }) {
-  const { actorId, ownerId, groupId, personIds, activity, includeActor = false } = input;
+  const { actorId, ownerId, groupId, personIds, activity, previous, includeActor = false } = input;
   const run = async () => {
     try {
-      const recipients = await resolveSharedWriteRecipients({ actorId, ownerId, groupId, personIds });
+      const audience = await resolveSharedWriteAudience({ actorId, ownerId, groupId, personIds, previous });
+      const recipients = audience.notify;
       if (includeActor && !recipients.includes(actorId)) recipients.push(actorId);
-      if (!recipients.length) return;
       // Everyone standing in this book just had their balances move, so every one
       // of their cached snapshots is now wrong — not just the account that made
-      // the call and had its own snapshot expired by `defineRoute`.
-      expireSnapshots(recipients);
+      // the call and had its own snapshot expired by `defineRoute`, and not just the
+      // people named on the expense: a member who is not on it still sees it listed.
+      expireSnapshots([...audience.expire, ...recipients]);
+      if (!recipients.length) return;
       await recordNotifications(
         recipients.map((userId) => ({
           userId,

@@ -58,7 +58,7 @@ export function CashFlowChart({
     <div>
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         {canPace ? (
-          <div className="flex h-8 items-center rounded-lg bg-secondary p-0.5" role="group" aria-label="Chart view">
+          <div className="flex h-11 items-center rounded-xl bg-secondary p-0.5" role="group" aria-label="Chart view">
             {(["daily", "pace"] as const).map((item) => (
               <button
                 key={item}
@@ -67,8 +67,8 @@ export function CashFlowChart({
                 onClick={() => setMode(item)}
                 className={
                   view === item
-                    ? "h-full rounded-md bg-card px-3 text-xs font-semibold text-display shadow-card outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                    : "h-full rounded-md px-3 text-xs font-medium text-muted-foreground transition-colors outline-none hover:text-display focus-visible:ring-2 focus-visible:ring-ring"
+                    ? "h-full rounded-md bg-card px-3 text-sm font-semibold text-display shadow-card outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    : "h-full rounded-md px-3 text-sm font-medium text-muted-foreground transition-colors outline-none hover:text-display focus-visible:ring-2 focus-visible:ring-ring"
                 }
               >
                 {item === "daily" ? "Daily" : "Pace"}
@@ -88,8 +88,8 @@ export function CashFlowChart({
               onClick={() => setShowIn((value) => !value)}
               className={
                 showIn
-                  ? "flex h-8 items-center gap-2 rounded-lg bg-secondary px-3 text-xs font-medium text-display outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  : "flex h-8 items-center gap-2 rounded-lg px-3 text-xs font-medium text-muted-foreground ring-1 ring-border transition-colors outline-none ring-inset hover:bg-secondary hover:text-display focus-visible:ring-2 focus-visible:ring-ring"
+                  ? "flex h-10 items-center gap-2 rounded-xl bg-secondary px-3 text-sm font-medium text-display outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  : "flex h-10 items-center gap-2 rounded-xl px-3 text-sm font-medium text-muted-foreground ring-1 ring-border transition-colors outline-none ring-inset hover:bg-secondary hover:text-display focus-visible:ring-2 focus-visible:ring-ring"
               }
             >
               <span className={showIn ? "size-2 rounded-[3px] bg-chart-soft" : "size-2 rounded-[3px] bg-chart-soft opacity-50"} aria-hidden /> Money in
@@ -117,7 +117,7 @@ const DASHED_KEY = <span className="w-3 border-t-2 border-dashed border-muted-fo
 
 function Key({ swatch, children }: { swatch: ReactNode; children: ReactNode }) {
   return (
-    <span className="flex h-8 items-center gap-2 rounded-lg bg-secondary px-3 text-xs font-medium text-display">
+    <span className="flex h-10 items-center gap-2 rounded-xl bg-secondary px-3 text-sm font-medium text-display">
       {swatch} {children}
     </span>
   );
@@ -148,7 +148,7 @@ function Frame({
     <div className="flex gap-3">
       <div className="relative w-9 shrink-0" style={{ height }} aria-hidden>
         {ticks.map((tick) => (
-          <span key={tick} className="absolute right-0 -translate-y-1/2 text-[11px] leading-none font-medium text-disabled tabular-nums" style={{ top: top(tick) }}>
+          <span key={tick} className="absolute right-0 -translate-y-1/2 text-[12px] leading-none font-medium text-disabled tabular-nums" style={{ top: top(tick) }}>
             {compact.format(tick)}
           </span>
         ))}
@@ -160,7 +160,7 @@ function Frame({
           ))}
           {children}
         </div>
-        <div className="mt-2.5 grid text-center text-[11px] font-medium text-disabled tabular-nums" style={{ gridTemplateColumns: `repeat(${count}, minmax(0, 1fr))` }} aria-hidden>
+        <div className="mt-2.5 grid text-center text-[12px] font-medium text-disabled tabular-nums" style={{ gridTemplateColumns: `repeat(${count}, minmax(0, 1fr))` }} aria-hidden>
           {buckets.map((bucket, index) => (
             <span key={bucket.key} className={index === active ? "font-semibold text-display" : undefined}>
               {index % labelEvery === 0 || index === active ? bucket.label : ""}
@@ -194,7 +194,7 @@ function Tip({ center, anchor, children }: { center: number; anchor: number; chi
   return (
     <div
       ref={ref}
-      className="pointer-events-none absolute z-10 rounded-xl bg-display px-3 py-2 text-xs whitespace-nowrap text-background shadow-[0_8px_24px_-8px_rgba(0,0,0,0.35)]"
+      className="pointer-events-none absolute z-10 rounded-xl bg-display px-3 py-2 text-[13px] whitespace-nowrap text-background shadow-[0_8px_24px_-8px_rgba(0,0,0,0.35)]"
       style={{ left: `${center}%`, top: `clamp(0px, calc(${100 - anchor}% - 24px), calc(100% - 72px))` }}
     >
       {children}
@@ -255,7 +255,7 @@ function DailyColumns({ buckets, today, average, showIn, height }: { buckets: Bu
 
       {average != null && average > 0 ? (
         <div className="pointer-events-none absolute inset-x-0 border-t border-dashed border-display/40" style={{ top: `${100 - pct(average)}%` }} aria-hidden>
-          <span className="absolute right-0 -translate-y-full rounded-md bg-card/90 px-1.5 pb-0.5 text-[10px] font-semibold tracking-[0.04em] text-muted-foreground uppercase">
+          <span className="absolute right-0 -translate-y-full rounded-md bg-card/90 px-1.5 pb-0.5 text-[11px] font-semibold tracking-[0.04em] text-muted-foreground uppercase">
             Avg {compact.format(Math.round(average))}
           </span>
         </div>

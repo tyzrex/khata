@@ -138,9 +138,9 @@ export function CategoriesView({
               <div className="flex items-baseline justify-between gap-3">
                 <div>
                   <h2 className="text-[15px] leading-5 font-semibold tracking-[-0.015em] text-display">{KIND_LABEL[section.kind]}</h2>
-                  <p className="mt-0.5 text-xs text-muted-foreground">{KIND_HINT[section.kind]}</p>
+                  <p className="mt-0.5 text-[13px] text-muted-foreground">{KIND_HINT[section.kind]}</p>
                 </div>
-                <span className="rounded-md bg-secondary px-1.5 py-0.5 text-[11px] font-semibold text-muted-foreground tabular-nums">{section.items.length}</span>
+                <span className="rounded-md bg-secondary px-1.5 py-0.5 text-[12px] font-semibold text-muted-foreground tabular-nums">{section.items.length}</span>
               </div>
               <ul className="mt-3 divide-y divide-border">
                 {section.items.map((category) => (
@@ -148,7 +148,7 @@ export function CategoriesView({
                     <span className="flex size-9 shrink-0 items-center justify-center rounded-xl" style={{ background: `color-mix(in srgb, ${category.color} 16%, transparent)` }} aria-hidden>
                       <span className="size-3 rounded-full" style={{ background: category.color }} />
                     </span>
-                    <span className="min-w-0 flex-1 truncate text-sm font-semibold text-display">{category.name}</span>
+                    <span className="min-w-0 flex-1 truncate text-[15px] font-semibold text-display">{category.name}</span>
                     {confirming === category.id ? (
                       <span className="flex shrink-0 items-center gap-1.5">
                         <Button type="button" variant="outline" size="xs" onClick={() => setConfirming(null)}>
@@ -160,13 +160,13 @@ export function CategoriesView({
                       </span>
                     ) : (
                       <span className="flex shrink-0 items-center gap-1">
-                        <Button type="button" variant="outline" size="icon-xs" aria-label={`Edit ${category.name}`} title="Edit" onClick={() => start(category)}>
+                        <Button type="button" variant="outline" size="icon-sm" aria-label={`Edit ${category.name}`} title="Edit" onClick={() => start(category)}>
                           <Pencil className="size-3.5" />
                         </Button>
                         <Button
                           type="button"
                           variant="outline"
-                          size="icon-xs"
+                          size="icon-sm"
                           className="hover:bg-destructive/10 hover:text-destructive"
                           aria-label={`Delete ${category.name}`}
                           title="Delete"
@@ -197,8 +197,8 @@ export function CategoriesView({
                   <span className="size-3 rounded-full" style={{ background: color }} />
                 </span>
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate text-sm font-semibold text-display">{name.trim() || "Category name"}</span>
-                  <span className="block text-xs text-muted-foreground">{KIND_LABEL[kind]}</span>
+                  <span className="block truncate text-[15px] font-semibold text-display">{name.trim() || "Category name"}</span>
+                  <span className="block text-[13px] text-muted-foreground">{KIND_LABEL[kind]}</span>
                 </span>
               </div>
               <FormField

@@ -262,7 +262,7 @@ export function TransactionDialog({
                       />
                     </FormControl>
                   </label>
-                  {preview === null ? null : <p className="mt-1.5 text-xs leading-5 text-muted-foreground">= {formatNpr(preview)} at {formatRate(rate)} per {currency.trim().toUpperCase()}</p>}
+                  {preview === null ? null : <p className="mt-1.5 text-[13px] leading-5 text-muted-foreground">= {formatNpr(preview)} at {formatRate(rate)} per {currency.trim().toUpperCase()}</p>}
                   <FormMessage />
                 </FormItem>
               )}

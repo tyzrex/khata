@@ -168,7 +168,7 @@ export function GroupFeedFilterBar({
           aria-label="Filter by date range"
           className="h-10"
         />
-        <p className="text-xs text-muted-foreground">
+        <p className="text-[13px] text-muted-foreground">
           {active ? (
             <>
               Showing <span className="figure text-foreground">{shown}</span> of {counts} · {describeGroupFeedFilters(filters).join(" · ")}

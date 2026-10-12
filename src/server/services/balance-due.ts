@@ -9,7 +9,8 @@ import { describeOpenBalances } from "@/lib/balance-summary";
  * checking a few times an hour is enough for it to appear promptly after a change.
  */
 const MIN_INTERVAL_MS = 5 * 60_000;
-let lastCheckedAt = 0;
+/** Per account: one person polling their feed must not stop everyone else's reconcile. */
+const lastCheckedAt = new Map<string, number>();
 
 /**
  * Reconcile the standing balance reminder against the share book as it stands.
@@ -22,8 +23,9 @@ let lastCheckedAt = 0;
  */
 export async function syncBalanceDueNotifications(userId: string): Promise<string | null> {
   const now = Date.now();
-  if (now - lastCheckedAt < MIN_INTERVAL_MS) return null;
-  lastCheckedAt = now;
+  const last = lastCheckedAt.get(userId) ?? 0;
+  if (now - last < MIN_INTERVAL_MS) return null;
+  lastCheckedAt.set(userId, now);
 
   const book = await getShareBook(userId);
   const open = describeOpenBalances({ overall: book.overall, groups: book.joinedGroups.map((group) => group.balances) });

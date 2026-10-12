@@ -64,7 +64,7 @@ export function ActivityView({
         <ol className="flex max-w-4xl flex-col gap-5">
           {days.map((day) => (
             <li key={day.date}>
-              <h2 className="deva mb-2 flex items-baseline justify-between px-1 text-xs font-semibold text-muted-foreground">
+              <h2 className="deva mb-2 flex items-baseline justify-between px-1 text-[13px] font-semibold text-muted-foreground">
                 <span>{dates.entry(day.date)}</span>
                 <span className="font-medium text-disabled">
                   {day.items.length} {day.items.length === 1 ? "entry" : "entries"}
@@ -92,19 +92,19 @@ function ExpenseRow({ expense, selfId, onOpen }: { expense: Expense; selfId: str
   const payer = expense.paidById === selfId ? "You" : expense.paidByName;
   return (
     <li>
-      <button type="button" className="flex w-full items-center gap-3 rounded-2xl px-2.5 py-2.5 text-left transition-colors duration-200 outline-none hover:bg-secondary focus-visible:bg-secondary" onClick={onOpen}>
+      <button type="button" className="flex w-full items-center gap-3 rounded-2xl px-2.5 py-3 text-left transition-colors duration-200 outline-none hover:bg-secondary focus-visible:bg-secondary" onClick={onOpen}>
         <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-accent text-accent-foreground" aria-hidden>
           <Receipt className="size-4" />
         </span>
         <span className="min-w-0 flex-1">
-          <span className="block truncate text-sm font-semibold text-display">{expense.description}</span>
-          <span className="mt-0.5 block truncate text-xs text-muted-foreground">
+          <span className="block truncate text-[15px] font-semibold text-display">{expense.description}</span>
+          <span className="mt-0.5 block truncate text-[13px] text-muted-foreground">
             {payer} paid {formatNpr(expense.amount)}
             {expense.groupName ? ` · ${expense.groupName}` : ""} · {modeLabel[expense.splitMode]}
           </span>
         </span>
         <span className="flex shrink-0 flex-col items-end">
-          <span className="text-[11px] font-medium text-muted-foreground">{side.label}</span>
+          <span className="text-[12px] font-medium text-muted-foreground">{side.label}</span>
           {side.tone === "none" ? (
             <span className="figure text-sm text-muted-foreground">{side.amount ? formatNpr(side.amount) : "—"}</span>
           ) : (
@@ -124,21 +124,21 @@ function SettlementRow({ settlement, selfId, onOpen }: { settlement: Settlement;
     <li>
       <button
         type="button"
-        className="flex w-full items-start gap-3 rounded-2xl px-2.5 py-2.5 text-left transition-colors duration-200 outline-none hover:bg-secondary focus-visible:ring-2 focus-visible:ring-ring"
+        className="flex w-full items-start gap-3 rounded-2xl px-2.5 py-3 text-left transition-colors duration-200 outline-none hover:bg-secondary focus-visible:ring-2 focus-visible:ring-ring"
         onClick={onOpen}
       >
         <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-credit/12 text-credit" aria-hidden>
           <ArrowRightLeft className="size-4" />
         </span>
         <span className="min-w-0 flex-1">
-          <span className="block truncate text-sm font-semibold text-display">
+          <span className="block truncate text-[15px] font-semibold text-display">
             {from} paid {to}
           </span>
-          <span className="mt-0.5 block truncate text-xs text-muted-foreground">
+          <span className="mt-0.5 block truncate text-[13px] text-muted-foreground">
             Settlement{settlement.groupName ? ` · ${settlement.groupName}` : ""}
           </span>
           {bank ? (
-            <span className="mt-1 flex items-center gap-1.5 text-xs text-disabled">
+            <span className="mt-1 flex items-center gap-1.5 text-[13px] text-disabled">
               <Landmark className="size-3 shrink-0" aria-hidden />
               <span className="truncate">
                 {bank.merchant} {formatNpr(bank.amount)}
@@ -146,9 +146,9 @@ function SettlementRow({ settlement, selfId, onOpen }: { settlement: Settlement;
               </span>
             </span>
           ) : null}
-          {settlement.note ? <span className="mt-1 block text-xs leading-5 text-muted-foreground">{settlement.note}</span> : null}
+          {settlement.note ? <span className="mt-1 block text-[13px] leading-5 text-muted-foreground">{settlement.note}</span> : null}
         </span>
-        <span className="figure shrink-0 text-sm text-credit">{formatNpr(settlement.amount)}</span>
+        <span className="figure shrink-0 text-[15px] text-credit">{formatNpr(settlement.amount)}</span>
       </button>
     </li>
   );

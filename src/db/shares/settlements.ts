@@ -43,8 +43,8 @@ async function validateSettlementWrite(
   if (input.fromPersonId === input.toPersonId) throw new ShareInputError("A settlement needs two different people.");
   await requirePeople(scope.ownerId, [input.fromPersonId, input.toPersonId]);
   const transactionId = input.transactionId ?? null;
+  if (input.groupId) await requireGroupMembers(input.groupId, [input.fromPersonId, input.toPersonId]);
   if (!scope.isOwner) {
-    await requireGroupMembers(input.groupId!, [input.fromPersonId, input.toPersonId]);
     if (transactionId) throw new ShareInputError("Bank lines can only be linked by the person who owns that ledger.");
   }
   if (transactionId) {

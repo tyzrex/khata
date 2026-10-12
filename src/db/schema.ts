@@ -373,5 +373,25 @@ export const apiKeys = pgTable(
   (table) => [index("api_keys_user_idx").on(table.userId)],
 );
 
+/**
+ * A write that must not happen twice. A bot retrying after a timeout, or a double-click,
+ * sends the same key; the first request claims it and stores its answer, and every later
+ * one gets that answer back instead of adding a second expense.
+ */
+export const idempotencyKeys = pgTable(
+  "idempotency_keys",
+  {
+    userId: ownerId(),
+    /** Scope and caller's key together, so an expense and a payment may reuse the same string. */
+    key: text("key").notNull(),
+    /** Hash of the request body, so reusing a key for a different request is an error rather than a stale answer. */
+    fingerprint: text("fingerprint").notNull(),
+    /** The finished response. Null while the first request is still running. */
+    response: jsonb("response"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [primaryKey({ columns: [table.userId, table.key] }), index("idempotency_keys_created_idx").on(table.createdAt)],
+);
+
 export type CategoryRow = typeof categories.$inferSelect;
 export type TransactionRow = typeof transactions.$inferSelect;

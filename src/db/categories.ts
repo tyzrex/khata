@@ -59,9 +59,11 @@ export async function ensureCategories(userId: string) {
 }
 
 /** Adds a category the write referenced but the book does not have yet. */
-export async function ensureNamedCategory(userId: string, name: string, kind: string) {
+type Executor = Pick<ReturnType<typeof getDb>, "insert" | "select">;
+
+export async function ensureNamedCategory(userId: string, name: string, kind: string, executor: Executor = getDb()) {
   const match = defaultFor(name);
-  await getDb()
+  await executor
     .insert(categories)
     .values({
       id: crypto.randomUUID(),
@@ -126,10 +128,25 @@ export async function updateCategory(userId: string, id: string, input: { name: 
 
 /** Removing one only works while nothing points at it. Move or delete the entries first. */
 export async function deleteCategory(userId: string, id: string) {
-  const db = getDb();
-  const [current] = await db.select().from(categories).where(and(eq(categories.id, id), eq(categories.userId, userId))).limit(1);
-  if (!current) throw new NotFoundError("That category is gone.");
-  const [used] = await db.select({ id: transactions.id }).from(transactions).where(and(eq(transactions.categoryName, current.name), eq(transactions.userId, userId))).limit(1);
-  if (used) throw new ConflictError(`${current.name} is still used by entries. Rename it, or move those entries first.`);
-  await db.delete(categories).where(and(eq(categories.id, id), eq(categories.userId, userId)));
+  await getDb().transaction(async (tx) => {
+    // See `deleteAccount`: FOR UPDATE here pairs with the FOR SHARE `holdNamedCategory` takes.
+    const [current] = await tx.select().from(categories).where(and(eq(categories.id, id), eq(categories.userId, userId))).limit(1).for("update");
+    if (!current) throw new NotFoundError("That category is gone.");
+    const [used] = await tx.select({ id: transactions.id }).from(transactions).where(and(eq(transactions.categoryName, current.name), eq(transactions.userId, userId))).limit(1);
+    if (used) throw new ConflictError(`${current.name} is still used by entries. Rename it, or move those entries first.`);
+    await tx.delete(categories).where(and(eq(categories.id, id), eq(categories.userId, userId)));
+  });
+}
+
+/**
+ * Make sure the category exists and stay its reader until the surrounding transaction
+ * ends, so `deleteCategory` cannot remove it from under the entry being written.
+ */
+export async function holdNamedCategory(userId: string, name: string, kind: string, tx: Executor) {
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    await ensureNamedCategory(userId, name, kind, tx);
+    const [row] = await tx.select({ id: categories.id }).from(categories).where(and(eq(categories.userId, userId), eq(categories.name, name))).limit(1).for("share");
+    if (row) return;
+  }
+  throw new ConflictError("That category was just changed elsewhere. Try again.");
 }

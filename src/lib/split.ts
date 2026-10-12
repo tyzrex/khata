@@ -1,3 +1,5 @@
+import { toPaisa } from "@/lib/money";
+
 export const SPLIT_MODES = ["equal", "exact", "shares", "percent"] as const;
 export type SplitMode = (typeof SPLIT_MODES)[number];
 
@@ -10,9 +12,7 @@ export class ShareInputError extends Error {
 
 const PAISA = 100;
 
-export function toPaisa(amount: number) {
-  return Math.round(amount * PAISA);
-}
+export { toPaisa };
 
 export function fromPaisa(paisa: number) {
   return paisa / PAISA;

@@ -14,7 +14,7 @@ function trimOrigin(value: string) {
  * this Vercel deployment's own hosts, and TRUSTED_ORIGINS. Shared with Better Auth.
  */
 export function trustedOrigins(env: Record<string, string | undefined> = process.env) {
-  const origins = ["http://localhost:3847", "http://127.0.0.1:3847"];
+  const origins = ["http://localhost:3847", "http://127.0.0.1:3847", "http://100.124.156.27:3847"];
   const base = env.BETTER_AUTH_URL ? trimOrigin(env.BETTER_AUTH_URL) : "";
   if (base) origins.push(base);
   // Vercel sets these to the deployment's own hosts. Using them keeps Preview

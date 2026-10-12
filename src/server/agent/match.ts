@@ -18,6 +18,14 @@ export class AgentInputError extends Error {
   }
 }
 
+/** Two or more people fit the name equally well. Never a reason to try somewhere else: guessing moves money between the wrong people. */
+export class AmbiguousNameError extends AgentInputError {
+  constructor(message: string, candidates: string[] = []) {
+    super(message, candidates);
+    this.name = "AmbiguousNameError";
+  }
+}
+
 /** Words that mean the signed-in person. */
 const SELF_WORDS = new Set(["me", "i", "you", "myself", "self", "yourself", "my self", "mine"]);
 
@@ -90,13 +98,13 @@ export function findNamed<T extends Named>(query: string, items: T[], noun: stri
   const exact = items.filter((item) => normalizeName(item.name) === wanted);
   if (exact.length === 1) return exact[0]!;
   if (exact.length > 1) {
-    throw new AgentInputError(`"${typed}" matches more than one ${noun}${where}. Use the id instead.`, exact.map((item) => `${item.name} (${item.id})`));
+    throw new AmbiguousNameError(`"${typed}" matches more than one ${noun}${where}. Use the id instead.`, exact.map((item) => `${item.name} (${item.id})`));
   }
   if (!wanted.includes(" ")) {
     const first = items.filter((item) => normalizeName(item.name).split(" ")[0] === wanted);
     if (first.length === 1) return first[0]!;
     if (first.length > 1) {
-      throw new AgentInputError(`"${typed}" matches more than one ${noun}${where}: ${listOf(first.map((item) => item.name))}. Use the full name.`, first.map((item) => item.name));
+      throw new AmbiguousNameError(`"${typed}" matches more than one ${noun}${where}: ${listOf(first.map((item) => item.name))}. Use the full name.`, first.map((item) => item.name));
     }
   }
   return null;

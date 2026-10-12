@@ -157,7 +157,7 @@ export function InviteDialog({
                 </Button>
               </div>
             </div>
-            <p className="text-xs text-muted-foreground">{email.trim() ? `Only ${email.trim()} can accept it. The link lasts 7 days.` : "Anyone with this link can join for the next 7 days."}</p>
+            <p className="text-[13px] text-muted-foreground">{email.trim() ? `Only ${email.trim()} can accept it. The link lasts 7 days.` : "Anyone with this link can join for the next 7 days."}</p>
             <div className={canShare ? "grid grid-cols-2 gap-2" : "grid gap-2"}>
               {canShare ? (
                 <Button type="button" variant="outline" onClick={share}>

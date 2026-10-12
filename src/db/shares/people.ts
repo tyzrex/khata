@@ -3,6 +3,7 @@ import { getDb } from "@/db/client";
 import { groupMembers, groups, groupUserAccess, people } from "@/db/schema";
 import { NotFoundError, pgCode } from "@/server/errors";
 import { ShareInputError } from "@/lib/split";
+import { expireAffected } from "@/db/shares/affected";
 
 /** People in one account's book, including the row that stands for "you". */
 
@@ -80,4 +81,6 @@ export async function deletePerson(userId: string, id: string) {
     }
     throw error;
   }
+  // The friend lost access to every book of yours, and the direct one is gone.
+  expireAffected([row.linkedUserId]);
 }

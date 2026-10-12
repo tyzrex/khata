@@ -153,7 +153,7 @@ export function UpdatePrompt() {
       </span>
       <p className="min-w-0 flex-1 text-sm leading-5 text-foreground">
         <span className="block font-semibold text-display">Update ready</span>
-        <span className="text-xs text-muted-foreground">Reload to get the latest Khata.</span>
+        <span className="text-[13px] text-muted-foreground">Reload to get the latest Khata.</span>
       </p>
       <Button type="button" size="sm" onClick={reload}>
         Reload

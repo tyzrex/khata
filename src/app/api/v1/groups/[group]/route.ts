@@ -8,10 +8,10 @@ type Context = { group: string };
 
 const agentWrite = { limiter: limits.agentWrites, key: ({ userId }: { userId: string }) => userId, message: (retryAfter: number) => `Too many writes. Try again in ${retryAfter} seconds.` };
 
-/** `group` is an id or a group name (URL-encoded). */
+/** `group` is an id or a group name (Next has already decoded it from the URL). */
 export const { GET, PATCH } = defineAgentRoute<Context>()({
   GET: { auth: "agent", handle: async ({ userId, params }) => {
-    const view = await readGroup(userId, decodeURIComponent(params.group));
+    const view = await readGroup(userId, params.group);
     return ok(view.data, view.message);
   } },
   /** Rename a group you own, or add and remove members by name. */
@@ -20,7 +20,7 @@ export const { GET, PATCH } = defineAgentRoute<Context>()({
     body: groupPatch,
     limit: agentWrite,
     handle: async ({ userId, params, body }) => {
-      const view = await editGroup(userId, decodeURIComponent(params.group), body);
+      const view = await editGroup(userId, params.group, body);
       return ok(view.data, view.message, view.status);
     },
   },

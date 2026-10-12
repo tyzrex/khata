@@ -25,6 +25,15 @@ async function soleUnlinkedMember(tx: Tx, ownerId: string, groupId: string): Pro
   return rows.length === 1 ? rows[0]!.id : null;
 }
 
+/**
+ * An invite made for one specific email address or one specific person row can be redeemed
+ * once. Only a general group link is meant to be passed around, and a second redeemer of a
+ * person-bound link used to fall through and be added as a brand-new person.
+ */
+function isSingleUse(invite: { inviteeEmail: string | null; personId: string | null }) {
+  return Boolean(invite.inviteeEmail || invite.personId);
+}
+
 export type InviteInfo = {
   groupName: string;
   /** A friend invite: the group is the hidden two-person book. */
@@ -106,7 +115,7 @@ export async function getInviteByToken(token: string): Promise<InviteInfo | null
     creatorName: row.creatorName,
     inviteeEmail: row.invite.inviteeEmail,
     expired: row.invite.expiresAt < new Date(),
-    used: Boolean(row.invite.inviteeEmail && row.invite.acceptedAt),
+    used: Boolean(isSingleUse(row.invite) && row.invite.acceptedAt),
   };
 }
 
@@ -134,8 +143,8 @@ export async function acceptInvite(userId: string, token: string): Promise<{ gro
   const label = direct ? (creator?.name ?? "your friend") : group.name;
   if (existing) return { groupId: group.id, groupName: label, direct, ownerId };
 
+  if (isSingleUse(invite) && invite.acceptedAt) throw new ShareInputError("This invite has already been used.");
   if (invite.inviteeEmail) {
-    if (invite.acceptedAt) throw new ShareInputError("This invite has already been used.");
     if (account.email.trim().toLowerCase() !== invite.inviteeEmail) {
       throw new ShareInputError(`This invite was sent to ${invite.inviteeEmail}. Sign in with that address to join.`);
     }
@@ -148,6 +157,22 @@ export async function acceptInvite(userId: string, token: string): Promise<{ gro
       .where(and(eq(people.userId, ownerId), eq(people.linkedUserId, userId)))
       .limit(1);
     let personId: string | null | undefined = linked?.id;
+
+    // Already connected to somebody in this book, but the invite names a different row. Going
+    // on would join the group as the existing person and leave the named row unlinked, with
+    // every expense on it never reaching this account. Say so instead.
+    if (linked && invite.personId && invite.personId !== linked.id) {
+      const [named] = await tx
+        .select({ linkedUserId: people.linkedUserId })
+        .from(people)
+        .where(and(eq(people.id, invite.personId), eq(people.userId, ownerId)))
+        .limit(1);
+      if (named && !named.linkedUserId) {
+        throw new ShareInputError(
+          "You are already connected to someone else in this book, but this invite was made for a different entry. Ask them to send a general group link, or to merge the two entries.",
+        );
+      }
+    }
 
     if (!personId) {
       // Who in the owner's book this invite is actually for. An invite made by
@@ -193,7 +218,7 @@ export async function acceptInvite(userId: string, token: string): Promise<{ gro
       await tx.insert(groupUserAccess).values({ groupId: row.id, userId, ownerUserId: ownerId, role: "member" }).onConflictDoNothing();
     }
 
-    if (invite.inviteeEmail) {
+    if (isSingleUse(invite)) {
       const [marked] = await tx
         .update(groupInvites)
         .set({ acceptedAt: new Date(), acceptedByUserId: userId })

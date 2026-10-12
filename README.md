@@ -26,7 +26,7 @@ Open [http://127.0.0.1:3847](http://127.0.0.1:3847).
 1. Create a project in the [Neon console](https://console.neon.tech). The database is Lakebase Postgres.
 2. Open **Connect** and copy both strings:
    - **Pooled** (hostname contains `-pooler`) → `DATABASE_URL`. The app uses this.
-   - **Direct** (no `-pooler`) → `DATABASE_URL_UNPOOLED`. Drizzle migrations use this. A pooled connection can fail mid-migration with prepared-statement errors. The live notification stream listens on it too: `LISTEN` needs a session that stays yours, and a pooler that multiplexes sessions will accept the subscription and then never deliver anything to it.
+   - **Direct** (no `-pooler`) → `DATABASE_URL_UNPOOLED`. Drizzle migrations use this. A pooled connection can fail mid-migration with prepared-statement errors.
 3. Put them in `.env.local` for your machine, and in the Vercel project for production. Do not commit either file. `.env.example` only has placeholders.
 
 Apply the schema:
@@ -141,9 +141,7 @@ Push only works against a production build over HTTPS. `bun run dev` disables th
 
 ### The in-app feed
 
-The bell is live, not polled. `GET /api/notifications/stream` holds a server-sent event open and says only "your feed moved" — no notification text ever crosses it — and the browser refetches `GET /api/notifications` exactly as the poll always did. A shared write also refreshes the share book and the ledger, because it moves balances as well as adding a row.
-
-Events are announced with Postgres `LISTEN`/`NOTIFY` rather than an in-process emitter, because on serverless the write and the stream watching for it are usually two different instances that share no memory. That makes `DATABASE_URL_UNPOOLED` a requirement, not just a convenience — see [Neon](#neon). If the stream cannot connect, or the platform stops the function mid-connection, the browser reconnects with backoff and the one-minute poll carries on underneath; neither path depends on the other.
+The bell polls `GET /api/notifications` once a minute (plus on window focus). When the poll returns ids this tab has not seen before, the share book and ledger go along with it — a shared write moves balances as well as adding a feed row, so an open tab would otherwise sit on numbers that stopped being true.
 
 ## Daily JSON import
 
@@ -187,6 +185,8 @@ curl -X POST "$APP_URL/api/import" \
 The response is `{ "created": 0, "updated": 6, "invalid": [] }` after a second run of the sample week.
 
 `GET /api/export` downloads the same shape as `{ "transactions": [ ... ] }`. The Sync screen also has a one-click download.
+
+**Export is ledger-only.** It carries your bank and cash lines (the `transactions` list) and nothing else. Friends, groups, shared expenses and payments, categories (their colours and order) and accounts are not included, and importing a file recreates categories and accounts from the entries that name them, with default colours. Do not treat an export as a full backup.
 
 Credits on the dashboard are income plus transfers. Spend is expenses only. That is why the sample week shows 820 spent and 3,600 credited, and a net of 2,780.
 
@@ -263,6 +263,8 @@ The signed-in layout reads the session, paints the navigation, and reads the led
 2. Send it as `Authorization: Bearer khata_...` or `X-API-Key: khata_...`.
 3. Point the bot at `/api/v1/openapi.json` (OpenAPI 3.1) or `/api/v1/llms.txt` (a short guide for a language model). Both, and the `/api/v1` index, are public.
 
+Retries are safe on the writes that move money: send an `Idempotency-Key` header (or an `externalId` in the body) with `POST /expenses` and `POST /settlements`. The first request runs; sending the same key again returns the first answer with status 200 and does not add a second entry. Reusing a key for a different request is a 409. `POST /transactions` takes `externalId` the same way.
+
 Every response is `{ ok: true, message, data }` or `{ ok: false, error, candidates? }`. `message` is a sentence the bot can read back. When a name matches more than one friend, the call fails with `candidates` so the bot asks instead of guessing. `POST /transactions` accepts an `externalId` so retries do not double-add. Writes are limited to 300 per user per hour.
 
 | Endpoint | What it does |
@@ -284,7 +286,7 @@ Revoking a key in Settings takes effect on the bot's next call. Keys cannot list
 - `GET /api/summary` — this week and this month in `Asia/Kathmandu`
 - `POST /api/seed` — bank week plus the sample share book
 - `GET /api/shares` — people, groups, balances, expenses, settlements
-- `GET /api/notifications` — the in-app feed, and `GET /api/notifications/stream` — the live version of it
+- `GET /api/notifications` — the in-app feed
 - `POST /api/people`, `POST /api/groups`, `POST /api/shared-expenses`, `POST /api/settlements`
 
 Default categories: Food, Transport, Parking, Entertainment, Shopping, Bills, Health, Transfer, Income, Other. They are editable. A category that still has entries cannot be deleted; rename it instead.

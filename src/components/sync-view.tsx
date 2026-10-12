@@ -33,7 +33,7 @@ function Card({ title, hint, icon, children, className }: { title: string; hint:
         </span>
         <div className="min-w-0">
           <h2 className="text-[15px] leading-5 font-semibold tracking-[-0.015em] text-display">{title}</h2>
-          <p className="mt-0.5 text-xs text-muted-foreground">{hint}</p>
+          <p className="mt-0.5 text-[13px] text-muted-foreground">{hint}</p>
         </div>
       </div>
       <div className="mt-4 flex flex-1 flex-col">{children}</div>
@@ -43,8 +43,8 @@ function Card({ title, hint, icon, children, className }: { title: string; hint:
 
 function Step({ n, children }: { n: number; children: ReactNode }) {
   return (
-    <p className="flex items-center gap-2 text-xs font-semibold text-display">
-      <span className="flex size-5 items-center justify-center rounded-md bg-secondary text-[11px] text-muted-foreground tabular-nums" aria-hidden>
+    <p className="flex items-center gap-2 text-[13px] font-semibold text-display">
+      <span className="flex size-5 items-center justify-center rounded-md bg-secondary text-[12px] text-muted-foreground tabular-nums" aria-hidden>
         {n}
       </span>
       {children}
@@ -146,7 +146,7 @@ export function SyncView({
             {result.invalid?.length ? `, ${result.invalid.length} skipped` : ""}.
           </p>
           {result.invalid?.length ? (
-            <ul className="mt-2 max-h-40 space-y-1 overflow-y-auto pl-6.5 text-xs text-muted-foreground">
+            <ul className="mt-2 max-h-40 space-y-1 overflow-y-auto pl-6.5 text-[13px] text-muted-foreground">
               {result.invalid.map((item) => (
                 <li key={`${item.index}-${item.message}`}>
                   Row {item.index + 1}: {item.message}
@@ -184,13 +184,13 @@ export function SyncView({
               }}
             />
             <FileJson className="size-6 text-muted-foreground" aria-hidden />
-            <span className="text-sm font-semibold text-display">{pending ? "Importing…" : "Choose a JSON file"}</span>
-            <span className="text-xs text-muted-foreground">or drag it here · up to 5 MB</span>
+            <span className="text-[15px] font-semibold text-display">{pending ? "Importing…" : "Choose a JSON file"}</span>
+            <span className="text-[13px] text-muted-foreground">or drag it here · up to 5 MB</span>
           </label>
 
           <div className="mt-5">
             <Step n={2}>Or paste JSON</Step>
-            <Textarea value={paste} onChange={(event) => setPaste(event.target.value)} rows={5} className="figure mt-2 text-xs" placeholder='Paste { "transactions": [ ... ] } or a bare array' aria-label="JSON to import" />
+            <Textarea value={paste} onChange={(event) => setPaste(event.target.value)} rows={5} className="figure mt-2 text-[13px]" placeholder='Paste { "transactions": [ ... ] } or a bare array' aria-label="JSON to import" />
             <Button
               type="button"
               variant="secondary"
@@ -224,7 +224,7 @@ export function SyncView({
             </Button>
           </Card>
 
-          <section className="rounded-3xl bg-accent p-4 text-xs leading-5 text-accent-foreground/85 sm:p-5 2xl:p-6">
+          <section className="rounded-3xl bg-accent p-4 text-[13px] leading-5 text-accent-foreground/85 sm:p-5 2xl:p-6">
             <h2 className="text-[13px] font-semibold text-accent-foreground">Automate it</h2>
             <p className="mt-1.5">
               A daily routine can POST bank lines to <code className="figure rounded-md bg-card/60 px-1 text-foreground">/api/import</code>. Rows that share an{" "}
@@ -240,13 +240,13 @@ export function SyncView({
       </div>
 
       <details className="group rounded-3xl bg-card p-4 shadow-card sm:p-5 2xl:p-6">
-        <summary className="flex list-none items-center justify-between text-[15px] [&::-webkit-details-marker]:hidden font-semibold tracking-[-0.015em] text-display outline-none focus-visible:underline">
+        <summary className="flex min-h-11 list-none items-center justify-between text-[15px] [&::-webkit-details-marker]:hidden font-semibold tracking-[-0.015em] text-display outline-none focus-visible:underline">
           Import schema
-          <span className="text-xs font-medium text-muted-foreground group-open:hidden">Show</span>
-          <span className="hidden text-xs font-medium text-muted-foreground group-open:inline">Hide</span>
+          <span className="text-[13px] font-medium text-muted-foreground group-open:hidden">Show</span>
+          <span className="hidden text-[13px] font-medium text-muted-foreground group-open:inline">Hide</span>
         </summary>
-        <pre className="figure mt-4 overflow-x-auto rounded-xl bg-secondary p-4 text-xs leading-5">{schema}</pre>
-        <p className="mt-2 text-xs leading-5 text-muted-foreground">
+        <pre className="figure mt-4 overflow-x-auto rounded-xl bg-secondary p-4 text-[13px] leading-5">{schema}</pre>
+        <p className="mt-2 text-[13px] leading-5 text-muted-foreground">
           Accounts: {accounts.join(", ") || "none yet"}. Types: expense, income, transfer. Currency is NPR. An account the file names that you do not have yet is added for you. The body may be a bare array or an object with a transactions field.
         </p>
       </details>

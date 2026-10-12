@@ -1,3 +1,4 @@
+import { roundMoney } from "@/lib/money";
 import { z } from "zod";
 import { CATEGORY_KINDS, SHARED_CATEGORIES, TX_TYPES } from "@/lib/constants";
 import { SPLIT_MODES } from "@/lib/split";
@@ -34,7 +35,7 @@ export const moneySchema = z
   .finite()
   .positive("Amount must be greater than zero")
   .max(MAX_AMOUNT, "Amount is too large")
-  .transform((value) => Math.round(value * 100) / 100)
+  .transform((value) => roundMoney(value))
   .refine((value) => value > 0, "Amount must be at least 0.01");
 
 const amountSchema = z.preprocess((value) => {
@@ -88,7 +89,7 @@ function checkCurrency(value: CurrencyInput, ctx: z.RefinementCtx) {
   if (value.foreignAmount === undefined) ctx.addIssue({ code: "custom", path: ["foreignAmount"], message: `Enter the amount in ${value.currency}` });
   if (value.fxRate === undefined) ctx.addIssue({ code: "custom", path: ["fxRate"], message: `Enter the NPR rate for ${value.currency}` });
   if (value.foreignAmount === undefined || value.fxRate === undefined) return;
-  const converted = Math.round(value.foreignAmount * value.fxRate * 100) / 100;
+  const converted = roundMoney(value.foreignAmount * value.fxRate);
   if (converted > MAX_AMOUNT) ctx.addIssue({ code: "custom", path: ["foreignAmount"], message: "That is too large once converted to NPR" });
   else if (converted < 0.01) ctx.addIssue({ code: "custom", path: ["foreignAmount"], message: "That rounds to less than a paisa" });
 }
@@ -101,7 +102,7 @@ function checkCurrency(value: CurrencyInput, ctx: z.RefinementCtx) {
 function convertedAmount(value: CurrencyInput) {
   if (value.currency === "NPR") return { amount: value.amount as number, foreignAmount: null, fxRate: null };
   return {
-    amount: Math.round(value.foreignAmount! * value.fxRate! * 100) / 100,
+    amount: roundMoney(value.foreignAmount! * value.fxRate!),
     foreignAmount: value.foreignAmount!,
     fxRate: value.fxRate!,
   };
@@ -223,7 +224,7 @@ export const transactionDraftSchema = z
     const entered = moneySchema.parse(Number(draft.amount));
     if (draft.currency === "NPR") return { ...draft, amount: entered, foreignAmount: null, fxRate: null };
     const fxRate = Math.round(Number(draft.fxRate) * 1e6) / 1e6;
-    return { ...draft, amount: Math.round(entered * fxRate * 100) / 100, foreignAmount: entered, fxRate };
+    return { ...draft, amount: roundMoney(entered * fxRate), foreignAmount: entered, fxRate };
   });
 
 export type TransactionDraft = z.input<typeof transactionDraftSchema>;

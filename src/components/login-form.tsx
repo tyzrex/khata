@@ -63,7 +63,7 @@ export function LoginForm({ googleEnabled }: { googleEnabled: boolean }) {
   const busy = submitting || googlePending;
 
   const seg = (active: boolean) =>
-    "h-full flex-1 rounded-md text-[13px] font-medium outline-none transition-colors duration-200 focus-visible:ring-2 focus-visible:ring-ring " +
+    "h-full flex-1 rounded-md text-sm font-medium outline-none transition-colors duration-200 focus-visible:ring-2 focus-visible:ring-ring " +
     (active ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-secondary hover:text-display");
 
   return (
@@ -80,7 +80,7 @@ export function LoginForm({ googleEnabled }: { googleEnabled: boolean }) {
         <h1 className="display text-[28px] sm:text-[32px]">{signingUp ? "Create your khata" : "Welcome back"}</h1>
         <p className="mt-2 text-sm leading-6 text-muted-foreground">{signingUp ? "A private NPR ledger, with friends and settle-up built in." : "Sign in to see your entries, splits and settlements."}</p>
 
-        <div className="mt-8 flex h-10 items-center rounded-xl bg-card p-1 shadow-card" role="group" aria-label="Mode">
+        <div className="mt-8 flex h-11 items-center rounded-xl bg-card p-0.5 shadow-card" role="group" aria-label="Mode">
           <button type="button" aria-pressed={!signingUp} className={seg(!signingUp)} onClick={() => switchMode("sign-in")}>
             Sign in
           </button>
@@ -100,7 +100,7 @@ export function LoginForm({ googleEnabled }: { googleEnabled: boolean }) {
               </svg>
               {googlePending ? "Redirecting" : "Continue with Google"}
             </Button>
-            <div className="my-6 flex items-center gap-3 text-xs text-disabled" aria-hidden>
+            <div className="my-6 flex items-center gap-3 text-[13px] text-disabled" aria-hidden>
               <span className="h-px flex-1 bg-input" />
               or with email
               <span className="h-px flex-1 bg-input" />
@@ -109,7 +109,7 @@ export function LoginForm({ googleEnabled }: { googleEnabled: boolean }) {
         ) : (
           <>
             {process.env.NODE_ENV === "development" ? (
-              <p className="mt-4 text-xs leading-5 text-disabled">
+              <p className="mt-4 text-[13px] leading-5 text-disabled">
                 Google sign-in appears after <code>GOOGLE_CLIENT_ID</code> and <code>GOOGLE_CLIENT_SECRET</code> are set.
               </p>
             ) : null}
@@ -150,7 +150,7 @@ export function LoginForm({ googleEnabled }: { googleEnabled: boolean }) {
                   </FormControl>
                   <button
                     type="button"
-                    className="absolute inset-y-0 right-1 my-auto flex size-9 items-center justify-center rounded-lg text-muted-foreground outline-none hover:text-display focus-visible:ring-2 focus-visible:ring-ring"
+                    className="absolute inset-y-0 right-1 my-auto flex size-10 items-center justify-center rounded-lg text-muted-foreground outline-none hover:text-display focus-visible:ring-2 focus-visible:ring-ring"
                     aria-label={reveal ? "Hide password" : "Show password"}
                     aria-pressed={reveal}
                     onClick={() => setReveal((value) => !value)}
@@ -160,7 +160,7 @@ export function LoginForm({ googleEnabled }: { googleEnabled: boolean }) {
                 </div>
                 <FormDescription>{signingUp ? "At least 8 characters. Stored hashed, never in plain text." : undefined}</FormDescription>
                 {signingUp ? null : (
-                  <p className="text-xs leading-5">
+                  <p className="text-[13px] leading-5">
                     <Link className="text-interactive underline-offset-4 hover:underline" href="/reset-password">
                       Forgot your password?
                     </Link>
@@ -183,7 +183,7 @@ export function LoginForm({ googleEnabled }: { googleEnabled: boolean }) {
         </Form>
       </div>
 
-      <p className="text-center text-xs text-disabled">Private by default. Your ledger is only visible to you.</p>
+      <p className="text-center text-[13px] text-disabled">Private by default. Your ledger is only visible to you.</p>
     </main>
   );
 }

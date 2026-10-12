@@ -23,8 +23,8 @@ function PersonLine({ name, detail, amount, tone, href, onSettle }: { name: stri
     <>
       <PersonAvatar name={name} />
       <span className="min-w-0 flex-1">
-        <span className="block truncate text-sm font-semibold text-display">{name}</span>
-        <span className={cn("block truncate text-xs font-medium", color)}>
+        <span className="block truncate text-[15px] font-semibold text-display">{name}</span>
+        <span className={cn("block truncate text-[13px] font-medium", color)}>
           {tone === "owed" ? "owes you" : "you owe"} <span className="figure">{formatNpr(amount)}</span>
           {detail ? <span className="font-normal text-muted-foreground"> · {detail}</span> : null}
         </span>

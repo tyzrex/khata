@@ -59,11 +59,11 @@ export function NotificationRow({
         className="min-w-0 flex-1 rounded-xl px-1 py-0.5 text-left outline-none transition-colors duration-200 hover:bg-secondary focus-visible:bg-secondary focus-visible:ring-2 focus-visible:ring-ring"
       >
         <span className="flex items-start justify-between gap-2">
-          <span className="min-w-0 flex-1 truncate text-sm font-semibold text-display">{item.title}</span>
+          <span className="min-w-0 flex-1 truncate text-[15px] font-semibold text-display">{item.title}</span>
           {!item.read ? <span className="mt-1.5 size-2 shrink-0 rounded-full bg-brand" aria-label="Unread" /> : null}
         </span>
-        <span className="mt-0.5 block text-xs leading-5 text-muted-foreground text-pretty">{item.detail}</span>
-        <span className="mt-1 flex items-center gap-2 text-[11px] text-disabled">
+        <span className="mt-0.5 block text-[13px] leading-5 text-muted-foreground text-pretty">{item.detail}</span>
+        <span className="mt-1 flex items-center gap-2 text-[12px] text-disabled">
           <span>{look.label}</span>
           <span aria-hidden>·</span>
           <span>{stamp}</span>

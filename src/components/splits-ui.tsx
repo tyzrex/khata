@@ -24,14 +24,14 @@ export function SplitCardHead({ title, hint, children }: { title: string; hint?:
     <div className="flex items-start justify-between gap-3">
       <div className="min-w-0">
         <h2 className="text-[15px] leading-5 font-semibold tracking-[-0.015em] text-display">{title}</h2>
-        {hint ? <p className="mt-0.5 truncate text-xs text-muted-foreground">{hint}</p> : null}
+        {hint ? <p className="mt-0.5 truncate text-[13px] text-muted-foreground">{hint}</p> : null}
       </div>
       {children ? <div className="flex shrink-0 items-center gap-1.5">{children}</div> : null}
     </div>
   );
 }
 
-const AVATAR_SIZE = { sm: "size-7 text-[10px]", md: "size-9 text-[11px]", lg: "size-12 text-sm" } as const;
+const AVATAR_SIZE = { sm: "size-7 text-[11px]", md: "size-10 text-[13px]", lg: "size-12 text-sm" } as const;
 
 /** Initials in a circle. `linked` adds a small brand dot: that person has their own Khata account. */
 export function PersonAvatar({
@@ -65,7 +65,7 @@ export function AvatarStack({ names, max = 4 }: { names: string[]; max?: number 
       {shown.map((name, index) => (
         <PersonAvatar key={`${name}-${index}`} name={name} size="sm" className="ring-2 ring-card" />
       ))}
-      {rest > 0 ? <span className="flex size-7 items-center justify-center rounded-full bg-secondary text-[10px] font-semibold text-muted-foreground ring-2 ring-card">+{rest}</span> : null}
+      {rest > 0 ? <span className="flex size-7 items-center justify-center rounded-full bg-secondary text-[11px] font-semibold text-muted-foreground ring-2 ring-card">+{rest}</span> : null}
     </span>
   );
 }
@@ -76,7 +76,7 @@ export function GroupTile({ name, active = false, size = "md" }: { name: string;
     <span
       className={cn(
         "flex shrink-0 items-center justify-center rounded-xl font-semibold",
-        size === "lg" ? "size-12 text-base" : "size-9 text-[13px]",
+        size === "lg" ? "size-12 text-base" : "size-10 text-[13px]",
         active ? "bg-primary text-primary-foreground" : "bg-accent text-accent-foreground",
       )}
       aria-hidden
@@ -94,11 +94,11 @@ export function netWords(value: number) {
 
 /** Compact two-line readout for list rows: direction above, amount below. */
 export function NetStack({ value, owesLabel = "owes you", oweLabel = "you owe" }: { value: number; owesLabel?: string; oweLabel?: string }) {
-  if (Math.abs(value) < SETTLED) return <span className="shrink-0 text-xs font-medium text-muted-foreground">Settled</span>;
+  if (Math.abs(value) < SETTLED) return <span className="shrink-0 text-[13px] font-medium text-muted-foreground">Settled</span>;
   const owed = value > 0;
   return (
     <span className="flex shrink-0 flex-col items-end leading-tight">
-      <span className={cn("text-[11px] font-medium", owed ? "text-credit" : "text-warning")}>{owed ? owesLabel : oweLabel}</span>
+      <span className={cn("text-[12px] font-medium", owed ? "text-credit" : "text-warning")}>{owed ? owesLabel : oweLabel}</span>
       <span className={cn("figure mt-0.5 text-sm", owed ? "text-credit" : "text-warning")}>{formatNpr(Math.abs(value))}</span>
     </span>
   );
@@ -139,7 +139,7 @@ function StripCell({ label, value, hint, className }: { label: string; value: Re
     <div className={cn("min-w-0 border-border p-4 sm:p-5", className)}>
       <p className="label">{label}</p>
       <p className="figure mt-2 truncate text-xl text-display sm:text-2xl">{value}</p>
-      {hint ? <p className="mt-1.5 truncate text-xs text-muted-foreground">{hint}</p> : null}
+      {hint ? <p className="mt-1.5 truncate text-[13px] text-muted-foreground">{hint}</p> : null}
     </div>
   );
 }

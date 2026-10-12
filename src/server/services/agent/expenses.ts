@@ -1,3 +1,4 @@
+import { roundMoney } from "@/lib/money";
 import { accountOf } from "@/db/agent";
 import { ensureDirectGroup, findSharedExpense, getShareBook } from "@/db/shares";
 import { normalizeName } from "@/server/agent/match";
@@ -31,7 +32,7 @@ export async function listExpenses(userId: string, query: ExpenseQuery): Promise
   const wanted = withName ? normalizeName(withName) : "";
   const matches = expenseViews(book).filter((expense) => matchesQuery(expense, { groupId, category, from, to, wanted }));
   const rows = matches.slice(0, limit);
-  const round = (total: number) => Math.round(total * 100) / 100;
+  const round = roundMoney;
   const total = round(matches.reduce((sum, expense) => sum + expense.amount, 0));
   const yourShare = round(matches.reduce((sum, expense) => sum + expense.yourShare, 0));
   return {

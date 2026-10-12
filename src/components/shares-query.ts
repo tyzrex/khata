@@ -2,6 +2,7 @@
 
 import { queryOptions } from "@tanstack/react-query";
 import { requestJson } from "@/lib/api-client";
+import { IDEMPOTENCY_HEADER, submitOnce } from "@/lib/submit-once";
 import type { ShareBook } from "@/db/shares";
 
 /**
@@ -67,7 +68,8 @@ export function postInvite(groupId: string, input: { email?: string; personId?: 
 }
 
 export function postExpense(input: unknown, id?: string) {
-  return requestJson<unknown>(id ? `/api/shared-expenses/${id}` : "/api/shared-expenses", { method: id ? "PATCH" : "POST", json: input });
+  if (id) return requestJson<unknown>(`/api/shared-expenses/${id}`, { method: "PATCH", json: input });
+  return submitOnce("expense", input, (key) => requestJson<unknown>("/api/shared-expenses", { method: "POST", json: input, headers: { [IDEMPOTENCY_HEADER]: key } }));
 }
 
 export function deleteExpense(id: string) {
@@ -75,7 +77,8 @@ export function deleteExpense(id: string) {
 }
 
 export function postSettlement(input: unknown, id?: string) {
-  return requestJson<unknown>(id ? `/api/settlements/${id}` : "/api/settlements", { method: id ? "PATCH" : "POST", json: input });
+  if (id) return requestJson<unknown>(`/api/settlements/${id}`, { method: "PATCH", json: input });
+  return submitOnce("settlement", input, (key) => requestJson<unknown>("/api/settlements", { method: "POST", json: input, headers: { [IDEMPOTENCY_HEADER]: key } }));
 }
 
 export function deleteSettlement(id: string) {

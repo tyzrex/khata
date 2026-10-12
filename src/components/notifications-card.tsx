@@ -112,17 +112,17 @@ export function NotificationsCard() {
         {loading ? (
           <p className="label py-2">Loading notifications</p>
         ) : error ? (
-          <div className="rounded-2xl bg-destructive/10 p-3 text-xs leading-5 text-destructive">
+          <div className="rounded-2xl bg-destructive/10 p-3 text-[13px] leading-5 text-destructive">
             {error instanceof Error ? error.message : "Notification settings could not be loaded."}
           </div>
         ) : !data?.supported ? (
-          <div className="rounded-2xl bg-secondary p-3 text-xs leading-5 text-muted-foreground">
+          <div className="rounded-2xl bg-secondary p-3 text-[13px] leading-5 text-muted-foreground">
             {/* The reason is worth more than "unsupported": on iPhone it is the one thing
                 that has to change, and it is not a setting the person can reach. */}
             {data?.blockedReason ?? "Notifications need a production build served over HTTPS. In development Khata keeps its service worker off, so this browser cannot subscribe yet."}
           </div>
         ) : !data?.configured ? (
-          <div className="rounded-2xl bg-secondary p-3 text-xs leading-5 text-muted-foreground">
+          <div className="rounded-2xl bg-secondary p-3 text-[13px] leading-5 text-muted-foreground">
             Khata&apos;s notification service is not configured on this deployment. An operator needs to set the VAPID keys before anyone here can turn notifications on.
           </div>
         ) : (
@@ -156,13 +156,13 @@ export function NotificationsCard() {
             </div>
 
             {denied ? (
-              <div className="rounded-2xl bg-destructive/10 p-3 text-xs leading-5 text-destructive">
+              <div className="rounded-2xl bg-destructive/10 p-3 text-[13px] leading-5 text-destructive">
                 Your browser is blocking notifications for this site. Allow them in the address bar or your device settings, then turn them on again.
               </div>
             ) : null}
 
             {data?.enabled && !data?.registered ? (
-              <div className="rounded-2xl bg-secondary p-3 text-xs leading-5 text-muted-foreground">
+              <div className="rounded-2xl bg-secondary p-3 text-[13px] leading-5 text-muted-foreground">
                 This browser is subscribed, but the subscription is not attached to this account. Register it so shared activity can reach you.
               </div>
             ) : null}
@@ -191,7 +191,7 @@ export function NotificationsCard() {
               />
             </div>
 
-            <p className="text-xs leading-5 text-muted-foreground">
+            <p className="text-[13px] leading-5 text-muted-foreground">
               Notifications are per browser, so turn them on on each device you use. Only shared activity reaches you, and Khata never sends anything to a browser you turn off here.
             </p>
           </>
@@ -206,8 +206,8 @@ function Switch({ title, hint, checked, disabled, onChange }: { title: string; h
   return (
     <div className="flex items-start gap-3 py-3 first:pt-0 last:pb-0">
       <div className="min-w-0 flex-1">
-        <p className="text-sm font-semibold text-display">{title}</p>
-        <p className="mt-0.5 text-xs leading-5 text-muted-foreground">{hint}</p>
+        <p className="text-[15px] font-semibold text-display">{title}</p>
+        <p className="mt-0.5 text-[13px] leading-5 text-muted-foreground">{hint}</p>
       </div>
       <button
         type="button"

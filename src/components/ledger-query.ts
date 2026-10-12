@@ -2,6 +2,7 @@
 
 import { queryOptions } from "@tanstack/react-query";
 import { requestJson } from "@/lib/api-client";
+import { IDEMPOTENCY_HEADER, submitOnce } from "@/lib/submit-once";
 import type { AccountDto, CategoryDto, ImportResult, SummaryResponse, TransactionDto } from "@/lib/types";
 
 /**
@@ -59,7 +60,8 @@ type CategoriesResponse = { categories: CategoryDto[] };
 type TransactionsResponse = { transactions: TransactionDto[] };
 
 export function postTransaction(input: unknown, id?: string) {
-  return requestJson<unknown>(id ? `/api/transactions/${id}` : "/api/transactions", { method: id ? "PATCH" : "POST", json: input });
+  if (id) return requestJson<unknown>(`/api/transactions/${id}`, { method: "PATCH", json: input });
+  return submitOnce("transaction", input, (key) => requestJson<unknown>("/api/transactions", { method: "POST", json: input, headers: { [IDEMPOTENCY_HEADER]: key } }));
 }
 
 export function deleteTransaction(id: string) {

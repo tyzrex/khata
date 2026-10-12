@@ -20,7 +20,7 @@ function CopyButton({ value, label }: { value: string; label: string }) {
     <Button
       type="button"
       variant="outline"
-      size="icon-xs"
+      size="icon-sm"
       className="bg-card"
       aria-label={label}
       title={label}
@@ -107,13 +107,13 @@ export function ApiKeysCard() {
           <div className="rounded-2xl bg-accent p-4 text-accent-foreground">
             <p className="text-sm font-semibold">Copy “{fresh.name}” now. It will not be shown again.</p>
             <div className="mt-3 flex items-center gap-2">
-              <code className="min-w-0 flex-1 truncate rounded-xl bg-card px-3 py-2.5 font-mono text-xs text-display">{fresh.token}</code>
+              <code className="min-w-0 flex-1 truncate rounded-xl bg-card px-3 py-2.5 font-mono text-[13px] text-display">{fresh.token}</code>
               <CopyButton value={fresh.token} label="Copy key" />
             </div>
-            <p className="mt-3 text-xs leading-5 text-accent-foreground/80">
+            <p className="mt-3 text-[13px] leading-5 text-accent-foreground/80">
               Send it as <code className="font-mono">Authorization: Bearer …</code>. Anyone with this key can read and change your ledger and splits, so keep it in the bot’s secrets, not in chat.
             </p>
-            <Button type="button" variant="link" className="mt-1 min-h-0 text-xs" onClick={() => setFresh(null)}>
+            <Button type="button" variant="link" className="mt-1 min-h-0 text-[13px]" onClick={() => setFresh(null)}>
               I saved it
             </Button>
           </div>
@@ -147,8 +147,8 @@ export function ApiKeysCard() {
             {keys.map((key) => (
               <li key={key.id} className="flex items-center gap-3 py-2.5">
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-semibold text-display">{key.name}</p>
-                  <p className="truncate text-xs text-muted-foreground">
+                  <p className="truncate text-[15px] font-semibold text-display">{key.name}</p>
+                  <p className="truncate text-[13px] text-muted-foreground">
                     <span className="font-mono">{key.prefix}…</span> · made {dates.full(key.createdAt.slice(0, 10))} · {key.lastUsedAt ? `last used ${dates.full(key.lastUsedAt.slice(0, 10))}` : "never used"}
                   </p>
                 </div>
@@ -162,7 +162,7 @@ export function ApiKeysCard() {
                     </Button>
                   </span>
                 ) : (
-                  <Button type="button" variant="outline" size="icon-xs" aria-label={`Revoke ${key.name}`} title="Revoke" onClick={() => setConfirming(key.id)}>
+                  <Button type="button" variant="outline" size="icon-sm" aria-label={`Revoke ${key.name}`} title="Revoke" onClick={() => setConfirming(key.id)}>
                     <Trash2 className="size-4" />
                   </Button>
                 )}
@@ -171,7 +171,7 @@ export function ApiKeysCard() {
           </ul>
         ) : null}
 
-        <div className="rounded-2xl bg-secondary p-3 text-xs leading-5 text-muted-foreground">
+        <div className="rounded-2xl bg-secondary p-3 text-[13px] leading-5 text-muted-foreground">
           <div className="flex items-center gap-2">
             <span className="shrink-0 font-medium text-display">Base URL</span>
             <code className="min-w-0 flex-1 truncate font-mono">{base}</code>

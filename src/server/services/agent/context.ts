@@ -1,3 +1,4 @@
+import { roundMoney } from "@/lib/money";
 import { accountOf } from "@/db/agent";
 import { listAccounts } from "@/db/accounts";
 import { summarizeLedger } from "@/db/ledger";
@@ -27,7 +28,7 @@ export async function contextView(userId: string): Promise<Rendered<Record<strin
 
   const lines = balanceLines(book);
   const joinedNet = book.joinedGroups.reduce((total, group) => total + netOf(group.balances), 0);
-  const net = Math.round((netOf(book.overall) + joinedNet) * 100) / 100;
+  const net = roundMoney(netOf(book.overall) + joinedNet);
 
   return {
     data: {

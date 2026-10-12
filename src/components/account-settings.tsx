@@ -193,7 +193,7 @@ export function AccountSettings({
           </span>
           <div className="min-w-0">
             <h2 className="text-[15px] font-semibold tracking-[-0.015em] text-display">Your details</h2>
-            <p className="mt-0.5 text-xs leading-5 text-muted-foreground">How you show up to friends you split with.</p>
+            <p className="mt-0.5 text-[13px] leading-5 text-muted-foreground">How you show up to friends you split with.</p>
           </div>
         </div>
 
@@ -216,7 +216,7 @@ export function AccountSettings({
               <Button type="submit" size="sm" disabled={busy === "name" || !nameForm.formState.isDirty}>
                 {busy === "name" ? "Saving" : "Save name"}
               </Button>
-              <Button type="button" variant="ghost" size="xs" className="min-h-0 px-2 text-xs" onClick={onSignOut}>
+              <Button type="button" variant="ghost" size="xs" className="px-3 text-[13px]" onClick={onSignOut}>
                 <LogOut className="size-3.5" />
                 Sign out
               </Button>
@@ -258,7 +258,7 @@ export function AccountSettings({
           </span>
           <div className="min-w-0">
             <h2 className="text-[15px] font-semibold tracking-[-0.015em] text-display">Password</h2>
-            <p className="mt-0.5 text-xs leading-5 text-muted-foreground">
+            <p className="mt-0.5 text-[13px] leading-5 text-muted-foreground">
               {hasPassword === false
                 ? "You sign in with Google, so there is no password to change here."
                 : hasPassword === null
@@ -320,7 +320,7 @@ export function AccountSettings({
                 <Button type="submit" size="sm" disabled={busy === "password"}>
                   {busy === "password" ? "Changing" : "Change password"}
                 </Button>
-                <Button type="button" variant="ghost" size="xs" className="min-h-0 px-2 text-xs" onClick={() => setShowPassword((value) => !value)}>
+                <Button type="button" variant="ghost" size="xs" className="px-3 text-[13px]" onClick={() => setShowPassword((value) => !value)}>
                   {showPassword ? "Hide" : "Show"} passwords
                 </Button>
               </div>
@@ -337,7 +337,7 @@ export function AccountSettings({
             </span>
             <div className="min-w-0">
               <h2 className="text-[15px] font-semibold tracking-[-0.015em] text-display">Signed-in devices</h2>
-              <p className="mt-0.5 text-xs leading-5 text-muted-foreground">Anything signed in as you can read and change your ledger. Sign out what you do not recognise.</p>
+              <p className="mt-0.5 text-[13px] leading-5 text-muted-foreground">Anything signed in as you can read and change your ledger. Sign out what you do not recognise.</p>
             </div>
           </div>
           {others > 0 ? (
@@ -362,15 +362,15 @@ export function AccountSettings({
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-medium text-display">
                     {label}
-                    {item.current ? <span className="ml-2 rounded-md bg-accent px-1.5 py-0.5 text-[10px] font-semibold text-accent-foreground">This device</span> : null}
+                    {item.current ? <span className="ml-2 rounded-md bg-accent px-1.5 py-0.5 text-[11px] font-semibold text-accent-foreground">This device</span> : null}
                   </p>
-                  <p className="truncate text-xs text-muted-foreground">
+                  <p className="truncate text-[13px] text-muted-foreground">
                     {where ? `${where} · ` : ""}
                     signed in {new Date(item.createdAt).toLocaleDateString()}
                   </p>
                 </div>
                 {item.current ? null : (
-                  <Button type="button" variant="ghost" size="xs" className="min-h-0 shrink-0 px-2 text-xs" disabled={busy === busyKey} onClick={() => void revokeSession(item.id)}>
+                  <Button type="button" variant="ghost" size="xs" className="shrink-0 px-3 text-[13px]" disabled={busy === busyKey} onClick={() => void revokeSession(item.id)}>
                     {busy === busyKey ? "…" : "Sign out"}
                   </Button>
                 )}
@@ -387,7 +387,7 @@ export function AccountSettings({
           </span>
           <div className="min-w-0">
             <h2 className="text-[15px] font-semibold tracking-[-0.015em] text-display">Delete this account</h2>
-            <p className="mt-0.5 text-xs leading-5 text-muted-foreground">
+            <p className="mt-0.5 text-[13px] leading-5 text-muted-foreground">
               Removes your entries, friends, groups, splits, settlements and API keys. Nothing can be recovered afterwards.
             </p>
           </div>

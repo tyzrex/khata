@@ -141,7 +141,7 @@ export function GroupDetail({
         <div className="p-4 sm:p-5 2xl:p-6">
           <Link
             href={backHref}
-            className="-ml-2 mb-2 flex h-9 w-fit items-center gap-1.5 rounded-lg px-2 text-[13px] font-medium text-muted-foreground transition-colors outline-none hover:bg-secondary hover:text-display focus-visible:ring-2 focus-visible:ring-ring lg:hidden"
+            className="-ml-2 mb-2 flex h-11 w-fit items-center gap-1.5 rounded-xl px-2.5 text-sm font-medium text-muted-foreground transition-colors outline-none hover:bg-secondary hover:text-display focus-visible:ring-2 focus-visible:ring-ring lg:hidden"
           >
             <ArrowLeft className="size-4" aria-hidden />
             All groups
@@ -151,7 +151,7 @@ export function GroupDetail({
               <GroupTile name={group.name} size="lg" />
               <div className="min-w-0">
                 <h2 className="truncate text-xl font-semibold tracking-[-0.02em] text-display sm:text-2xl">{group.name}</h2>
-                <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                <p className="mt-0.5 truncate text-[13px] text-muted-foreground">
                   {group.members.length} {group.members.length === 1 ? "person" : "people"} · {owner}
                 </p>
               </div>
@@ -181,7 +181,7 @@ export function GroupDetail({
 
           <ul className="mt-4 flex flex-wrap gap-1.5" aria-label="Members">
             {group.members.map((member) => (
-              <li key={member.id} className="flex items-center gap-1.5 rounded-full bg-secondary py-0.5 pr-2.5 pl-0.5 text-xs font-medium text-foreground">
+              <li key={member.id} className="flex items-center gap-1.5 rounded-full bg-secondary py-0.5 pr-2.5 pl-0.5 text-[13px] font-medium text-foreground">
                 <PersonAvatar name={member.name} size="sm" tone={member.id === group.selfId ? "brand" : "neutral"} linked={member.linkedUserId != null && member.id !== group.selfId} />
                 {member.id === group.selfId ? "You" : member.name}
               </li>
@@ -190,13 +190,13 @@ export function GroupDetail({
 
           {confirmingLeave && onLeaveGroup ? (
             <div id="leave-group-confirmation" className="mt-4 rounded-xl bg-secondary px-3 py-3">
-              <p className="text-sm font-semibold text-display">Leave {group.name}?</p>
-              <p className="mt-1 text-xs leading-5 text-muted-foreground">
+              <p className="text-[15px] font-semibold text-display">Leave {group.name}?</p>
+              <p className="mt-1 text-[13px] leading-5 text-muted-foreground">
                 {yourDebts.length
                   ? "Settle every open balance first. This keeps money owed to you or by you from becoming inaccessible."
                   : "The group keeps its expense and payment history. You will lose access to the group and its future updates."}
               </p>
-              {leaveError ? <p role="alert" className="mt-2 text-xs font-medium text-destructive">{leaveError}</p> : null}
+              {leaveError ? <p role="alert" className="mt-2 text-[13px] font-medium text-destructive">{leaveError}</p> : null}
               <div className="mt-3 flex flex-wrap justify-end gap-2">
                 <Button type="button" variant="ghost" size="sm" disabled={leaving} onClick={() => setConfirmingLeave(false)}>
                   Keep access
@@ -219,7 +219,7 @@ export function GroupDetail({
             ) : (
               <p className={cn("figure mt-1 text-[32px] leading-none sm:text-[40px]", group.net > 0 ? "text-credit" : "text-warning")}>{formatNpr(Math.abs(group.net))}</p>
             )}
-            {!settled && yourDebts.length > 1 ? <p className="mt-1.5 text-xs text-muted-foreground">Across {yourDebts.length} people in this group</p> : null}
+            {!settled && yourDebts.length > 1 ? <p className="mt-1.5 text-[13px] text-muted-foreground">Across {yourDebts.length} people in this group</p> : null}
           </div>
           <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
             <Button type="button" onClick={onAddExpense}>
@@ -349,8 +349,8 @@ function BalancesPanel({ group, onSettle }: { group: GroupView; onSettle: (debt:
               <li key={line.id} className="flex items-center gap-3 py-3">
                 <PersonAvatar name={line.name} size="md" tone={you ? "brand" : "neutral"} />
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate text-sm font-semibold text-display">{you ? "You" : line.name}</span>
-                  <span className={cn("block truncate text-xs", !open ? "text-muted-foreground" : line.net > 0 ? "text-credit" : "text-warning")}>
+                  <span className="block truncate text-[15px] font-semibold text-display">{you ? "You" : line.name}</span>
+                  <span className={cn("block truncate text-[13px]", !open ? "text-muted-foreground" : line.net > 0 ? "text-credit" : "text-warning")}>
                     {!open ? "settled up" : line.net > 0 ? `${you ? "get" : "gets"} back ${formatNpr(line.net)}` : `${you ? "owe" : "owes"} ${formatNpr(-line.net)}`}
                   </span>
                 </span>
@@ -401,7 +401,7 @@ function TotalsPanel({ group }: { group: GroupView }) {
           <EmptyNote>Totals appear once the group has expenses.</EmptyNote>
         ) : (
           <>
-            <p className="mt-3 flex gap-4 text-[11px] font-medium text-muted-foreground" aria-hidden>
+            <p className="mt-3 flex gap-4 text-[12px] font-medium text-muted-foreground" aria-hidden>
               <span className="flex items-center gap-1.5">
                 <span className="size-2 rounded-full bg-primary" /> Paid
               </span>
@@ -412,7 +412,7 @@ function TotalsPanel({ group }: { group: GroupView }) {
             <ul className="mt-3 flex flex-col gap-4">
               {lines.map((line) => (
                 <li key={line.id} className="grid grid-cols-1 items-center gap-1 sm:grid-cols-[minmax(0,9rem)_minmax(0,1fr)] sm:gap-x-3">
-                  <span className="truncate sm:row-span-2 text-sm font-medium text-display">{line.id === group.selfId ? "You" : line.name}</span>
+                  <span className="truncate sm:row-span-2 text-[15px] font-medium text-display">{line.id === group.selfId ? "You" : line.name}</span>
                   <Bar value={line.paid} scale={scale} tone="bg-primary" label={`paid ${formatNpr(line.paid)}`} />
                   <Bar value={line.share} scale={scale} tone="bg-chart-soft" label={`share ${formatNpr(line.share)}`} />
                 </li>
@@ -431,7 +431,7 @@ function Bar({ value, scale, tone, label }: { value: number; scale: number; tone
       <span className="h-2 min-w-0 flex-1 overflow-hidden rounded-full bg-secondary">
         <span className={cn("block h-full rounded-full", tone)} style={{ width: `${Math.max(value > 0 ? 2 : 0, (value / scale) * 100)}%` }} />
       </span>
-      <span className="figure w-28 shrink-0 text-right text-[11px] text-muted-foreground">{label}</span>
+      <span className="figure w-28 shrink-0 text-right text-[12px] text-muted-foreground">{label}</span>
     </span>
   );
 }
@@ -440,7 +440,7 @@ function Stat({ label, value, className }: { label: string; value: string; class
   return (
     <div className={cn("min-w-0 p-3 sm:p-5", className)}>
       <p className="label truncate">{label}</p>
-      <p className="figure mt-2 truncate text-sm text-display sm:text-xl">{value}</p>
+      <p className="figure mt-2 truncate text-[17px] text-display sm:text-xl">{value}</p>
     </div>
   );
 }

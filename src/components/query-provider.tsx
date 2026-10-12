@@ -10,9 +10,8 @@ import { useState, type ReactNode } from "react";
  * request during a server render, which lets one person's data leak into another's.
  * `useState` gives every render pass its own, and keeps one across re-renders.
  *
- * `staleTime: 0` is deliberate. The notification feed is a background signal that
- * should not refetch the instant a component mounts, so each query sets its own
- * `staleTime` and `refetchInterval`; this is only the floor for the rest of the app.
+ * Each query sets its own `staleTime` and `refetchInterval`; this is only the
+ * floor for the rest of the app.
  */
 export function QueryProvider({ children }: { children: ReactNode }) {
   const [client] = useState(

@@ -87,19 +87,21 @@ export async function saveEntries(userId: string, payload: unknown): Promise<Ren
 
   const keyed = ready.filter((item) => item.row.externalId);
   const saved: TransactionDto[] = [];
+  let created = 0;
   let updated = 0;
   if (keyed.length) {
     const result = await importTransactions(userId, {
       transactions: keyed.map(({ row }) => ({ ...row, externalId: row.externalId!, source: "agent" })),
     });
+    created = result.created;
     updated = result.updated;
     saved.push(...(await transactionsByExternalId(userId, keyed.map((item) => item.row.externalId!))));
   }
   for (const { row } of ready.filter((item) => !item.row.externalId)) {
     saved.push(await createTransaction(userId, row));
+    created += 1;
   }
 
-  const created = saved.length - updated;
   return {
     data: { transactions: saved, created, updated, invalid },
     message: single && saved[0]
@@ -116,6 +118,13 @@ export async function editEntry(userId: string, id: string, payload: unknown): P
   if (!current) throw new NotFoundError(MISSING);
 
   const type = patch.type ?? current.type;
+  // A foreign-currency entry's NPR amount is foreignAmount x fxRate, recomputed on every save. An
+  // `amount` sent alongside would be overwritten without a word, and the reply would still say
+  // "Updated". Refuse it and say which field actually moves the number.
+  const currency = patch.currency ?? current.currency;
+  if (patch.amount !== undefined && currency !== "NPR") {
+    throw new ValidationError(`This entry is in ${currency}, so its NPR amount is foreignAmount x fxRate. Send "foreignAmount" (and "fxRate" if the rate changed) instead of "amount", or set "currency" to NPR.`);
+  }
   const [categories, accounts] = await Promise.all([listCategories(userId), listAccountNames(userId)]);
   // The three currency fields travel together. A patch may change the amount, the
   // rate, or the currency itself; anything it leaves out keeps the row's current

@@ -24,7 +24,7 @@ export default function OfflinePage() {
         <span className="flex size-11 items-center justify-center rounded-xl bg-accent text-accent-foreground" aria-hidden>
           <CloudOff className="size-5" />
         </span>
-        <p className="mt-5 text-xs font-medium text-muted-foreground">No connection</p>
+        <p className="mt-5 text-[13px] font-medium text-muted-foreground">No connection</p>
         <h1 className="display mt-1.5 text-[28px]">You are offline</h1>
         <p className="mt-2 text-sm leading-6 text-pretty text-muted-foreground">Check your Wi-Fi or mobile data. Khata opens again the moment you are back.</p>
 

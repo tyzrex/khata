@@ -91,6 +91,17 @@ self.addEventListener("message", (event) => {
 
 type PushPayload = { title?: string; body?: string; url?: string; tag?: string };
 
+/** A same-origin path to open, or "/". "//evil.com" starts with a slash too, so build the URL and compare origins. */
+function sameOriginPath(raw: unknown) {
+  if (typeof raw !== "string" || !raw.startsWith("/")) return "/";
+  try {
+    const target = new URL(raw, self.location.origin);
+    return target.origin === self.location.origin ? `${target.pathname}${target.search}${target.hash}` : "/";
+  } catch {
+    return "/";
+  }
+}
+
 /**
  * Push notifications carry shared expense and settlement activity. The payload
  * holds only a title, a body (amounts only when the recipient opted in), and a
@@ -105,7 +116,7 @@ self.addEventListener("push", (event) => {
   }
   const title = typeof payload.title === "string" && payload.title ? payload.title : "Khata";
   const body = typeof payload.body === "string" && payload.body ? payload.body : "Shared activity in your book.";
-  const url = typeof payload.url === "string" && payload.url.startsWith("/") ? payload.url : "/";
+  const url = sameOriginPath(payload.url);
   const tag = typeof payload.tag === "string" && payload.tag ? payload.tag : "khata-shared";
   event.waitUntil(
     self.registration.showNotification(title, {
@@ -123,7 +134,7 @@ self.addEventListener("push", (event) => {
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
   const raw = (event.notification.data as { url?: unknown } | null)?.url;
-  const url = typeof raw === "string" && raw.startsWith("/") ? raw : "/";
+  const url = sameOriginPath(raw);
   event.waitUntil(
     (async () => {
       const windows = await self.clients.matchAll({ type: "window", includeUncontrolled: true });

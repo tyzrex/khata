@@ -22,6 +22,7 @@ Auth: send the user's personal key as \`Authorization: Bearer khata_...\` (or \`
   {"currency": "USD", "foreignAmount": 20, "fxRate": 134.25} instead of "amount" and the NPR value
   is computed from those two. Dates are YYYY-MM-DD, "today" or "yesterday", in Asia/Kathmandu. Date defaults to today.
 - Confirm with the user before any DELETE.
+- When retrying a POST /expenses or POST /settlements after a timeout, resend it with the same Idempotency-Key header (any unique string, or an "externalId" in the body). The first answer comes back instead of a second entry.
 
 ## Endpoints
 

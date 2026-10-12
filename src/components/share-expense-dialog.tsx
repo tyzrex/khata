@@ -326,7 +326,7 @@ export function ShareExpenseDialog({
                     <FormItem>
                       <FormLabel>Amount</FormLabel>
                       <div className="relative">
-                        <span className="pointer-events-none absolute inset-y-0 left-4 flex items-center text-xs font-semibold text-muted-foreground">NPR</span>
+                        <span className="pointer-events-none absolute inset-y-0 left-4 flex items-center text-[13px] font-semibold text-muted-foreground">NPR</span>
                         <FormControl>
                           <Input inputMode="decimal" autoComplete="off" required className="figure pl-13 text-base" placeholder="0" {...field} />
                         </FormControl>
@@ -410,7 +410,7 @@ export function ShareExpenseDialog({
                       <ToggleGroup
                         variant="default"
                         spacing={1}
-                        className="grid w-full grid-cols-4 rounded-xl bg-secondary p-1"
+                        className="grid w-full grid-cols-4 rounded-xl bg-secondary p-0.5"
                         value={[field.value]}
                         onValueChange={(value) => {
                           const next = value.find((item) => item !== field.value);
@@ -418,7 +418,7 @@ export function ShareExpenseDialog({
                         }}
                       >
                         {modes.map((item) => (
-                          <ToggleGroupItem key={item.id} value={item.id} className="h-8 w-full rounded-md px-2">
+                          <ToggleGroupItem key={item.id} value={item.id} className="h-10 w-full rounded-md px-2">
                             {item.label}
                           </ToggleGroupItem>
                         ))}
@@ -440,10 +440,10 @@ export function ShareExpenseDialog({
                           Split between <span className="font-normal text-muted-foreground">· {included.length} of {rows.length}</span>
                         </FormLabel>
                         <span className="flex gap-1">
-                          <Button type="button" variant="ghost" size="xs" className="min-h-0 px-2 text-xs" onClick={() => setAll(true)}>
+                          <Button type="button" variant="ghost" size="xs" className="px-3" onClick={() => setAll(true)}>
                             Everyone
                           </Button>
-                          <Button type="button" variant="ghost" size="xs" className="min-h-0 px-2 text-xs" onClick={() => setAll(false)}>
+                          <Button type="button" variant="ghost" size="xs" className="px-3" onClick={() => setAll(false)}>
                             Only payer
                           </Button>
                         </span>
@@ -458,13 +458,13 @@ export function ShareExpenseDialog({
                               <label className="flex min-w-0 flex-1 items-center gap-3">
                                 <input
                                   type="checkbox"
-                                  className="size-4"
+                                  className="size-5"
                                   checked={row.included}
                                   onChange={(event) => field.onChange(rows.map((item) => (item.personId === row.personId ? { ...item, included: event.target.checked } : item)))}
                                 />
-                                <PersonMark name={person?.name ?? "?"} tone={person?.isSelf ? "brand" : "neutral"} className="size-7 text-[10px]" />
+                                <PersonMark name={person?.name ?? "?"} tone={person?.isSelf ? "brand" : "neutral"} className="size-7 text-[11px]" />
                                 <span className="min-w-0 truncate font-medium text-display">{name}</span>
-                                {row.personId === paidById ? <span className="shrink-0 rounded-md bg-accent px-1.5 py-0.5 text-[10px] font-semibold text-accent-foreground">Paid</span> : null}
+                                {row.personId === paidById ? <span className="shrink-0 rounded-md bg-accent px-1.5 py-0.5 text-[11px] font-semibold text-accent-foreground">Paid</span> : null}
                               </label>
                               {row.included && mode === "exact" ? (
                                 <Input
@@ -474,7 +474,7 @@ export function ShareExpenseDialog({
                                   placeholder="0"
                                   value={row.amount}
                                   onChange={(event) => field.onChange(rows.map((item) => (item.personId === row.personId ? { ...item, amount: event.target.value } : item)))}
-                                  className="figure h-8 w-24 rounded-lg bg-card text-right text-sm"
+                                  className="figure h-10 w-24 rounded-lg bg-card text-right text-sm"
                                 />
                               ) : null}
                               {row.included && (mode === "shares" || mode === "percent") ? (
@@ -485,9 +485,9 @@ export function ShareExpenseDialog({
                                     autoComplete="off"
                                     value={row.weight}
                                     onChange={(event) => field.onChange(rows.map((item) => (item.personId === row.personId ? { ...item, weight: event.target.value } : item)))}
-                                    className="figure h-8 w-20 rounded-lg bg-card pr-6 text-right text-sm"
+                                    className="figure h-10 w-20 rounded-lg bg-card pr-6 text-right text-sm"
                                   />
-                                  <span className="pointer-events-none absolute inset-y-0 right-2.5 flex items-center text-xs text-muted-foreground">{mode === "percent" ? "%" : "×"}</span>
+                                  <span className="pointer-events-none absolute inset-y-0 right-2.5 flex items-center text-[13px] text-muted-foreground">{mode === "percent" ? "%" : "×"}</span>
                                 </span>
                               ) : null}
                               {mode !== "exact" ? <span className="figure w-20 shrink-0 text-right text-[13px] text-display">{row.included && share != null ? formatNpr(share) : "—"}</span> : null}
@@ -496,7 +496,7 @@ export function ShareExpenseDialog({
                         })}
                       </div>
                       {tally && total > 0 ? (
-                        <div className={`flex items-center justify-between rounded-lg px-3 py-2 text-xs font-medium ${Math.abs(tally.left) < 0.005 ? "bg-credit/10 text-credit" : "bg-warning/10 text-warning"}`} role="status">
+                        <div className={`flex items-center justify-between rounded-lg px-3 py-2 text-[13px] font-medium ${Math.abs(tally.left) < 0.005 ? "bg-credit/10 text-credit" : "bg-warning/10 text-warning"}`} role="status">
                           <span>{Math.abs(tally.left) < 0.005 ? "Everything is assigned" : tally.left > 0 ? "Left to assign" : "Assigned too much"}</span>
                           <span className="figure">{Math.abs(tally.left) < 0.005 ? "✓" : tally.unit === "percent" ? `${Math.abs(tally.left)}%` : formatNpr(Math.abs(tally.left))}</span>
                         </div>
@@ -559,16 +559,16 @@ export function ShareExpenseDialog({
                           <label key={transaction.id} className="flex items-center gap-3 px-3 py-2 text-sm">
                             <input
                               type="checkbox"
-                              className="size-4"
+                              className="size-5"
                               checked={linked.includes(transaction.id)}
                               onChange={(event) =>
                                 field.onChange(event.target.checked ? [...linked, transaction.id] : linked.filter((id) => id !== transaction.id))
                               }
                             />
                             <span className="min-w-0 flex-1 truncate">
-                              <span className="text-display">{transaction.merchant}</span> <span className="deva text-xs text-muted-foreground">· {dates.entry(transaction.date)}</span>
+                              <span className="text-display">{transaction.merchant}</span> <span className="deva text-[13px] text-muted-foreground">· {dates.entry(transaction.date)}</span>
                             </span>
-                            <span className="figure text-xs">{formatNpr(transaction.amount)}</span>
+                            <span className="figure text-[13px]">{formatNpr(transaction.amount)}</span>
                           </label>
                         ))}
                       </div>
@@ -578,7 +578,7 @@ export function ShareExpenseDialog({
                 />
               ) : null}
               {expense ? (
-                <section aria-labelledby="expense-audit-title" className="rounded-xl bg-secondary/70 px-3 py-2.5 text-xs text-muted-foreground">
+                <section aria-labelledby="expense-audit-title" className="rounded-xl bg-secondary/70 px-3 py-2.5 text-[13px] text-muted-foreground">
                   <h3 id="expense-audit-title" className="font-semibold text-foreground">History</h3>
                   <p className="mt-1">
                     Added by {expense.createdByName ?? "Someone"} · {formatAuditDate(expense.createdAt)}

@@ -44,7 +44,7 @@ function Choice<T extends string>({
     >
       {Icon ? <Icon className="size-4 shrink-0" aria-hidden /> : null}
       <span className="flex min-w-0 flex-col gap-0.5">
-        <span className={detail ? cn("text-xs font-medium", active ? "text-accent-foreground/80" : "text-muted-foreground") : "text-sm font-semibold"}>{title}</span>
+        <span className={detail ? cn("text-[13px] font-medium", active ? "text-accent-foreground/80" : "text-muted-foreground") : "text-sm font-semibold"}>{title}</span>
         {detail ? <span className="deva max-w-full truncate text-[15px] font-semibold tracking-[-0.01em]">{detail}</span> : null}
       </span>
     </button>
@@ -55,8 +55,8 @@ function Row({ title, hint, children }: { title: string; hint?: string; children
   return (
     <div className="grid gap-2.5 py-4 first:pt-1 last:pb-0">
       <div>
-        <h3 className="text-sm font-semibold text-display">{title}</h3>
-        {hint ? <p className="mt-0.5 text-xs leading-5 text-muted-foreground">{hint}</p> : null}
+        <h3 className="text-[15px] font-semibold text-display">{title}</h3>
+        {hint ? <p className="mt-0.5 text-[13px] leading-5 text-muted-foreground">{hint}</p> : null}
       </div>
       {children}
     </div>
@@ -87,7 +87,7 @@ export function SettingsView({
       />
 
       <div className="grid items-start gap-3 lg:grid-cols-2 2xl:gap-4">
-        <Card title="Dates" hint="Calendar, month names and digits" aside={<span className="rounded-md bg-secondary px-2 py-0.5 text-[11px] font-semibold text-muted-foreground">{style.calendar}</span>}>
+        <Card title="Dates" hint="Calendar, month names and digits" aside={<span className="rounded-md bg-secondary px-2 py-0.5 text-[12px] font-semibold text-muted-foreground">{style.calendar}</span>}>
           <div className="divide-y divide-border">
             <Row title="Calendar" hint="Used in every date picker, list and dashboard period.">
               <div role="radiogroup" aria-label="Calendar" className="grid gap-2 sm:grid-cols-2">

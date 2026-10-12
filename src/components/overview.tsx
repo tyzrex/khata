@@ -74,11 +74,11 @@ function Delta({ value, good }: { value: number | null; good: "up" | "down" }) {
 /** Spend change for one category against the period before: up is bad, so up is red. */
 function CategoryDelta({ now, before, hasPrevious }: { now: number; before?: number; hasPrevious: boolean }) {
   if (!hasPrevious) return null;
-  if (!before) return <span className="shrink-0 rounded-md bg-secondary px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground">New</span>;
+  if (!before) return <span className="shrink-0 rounded-md bg-secondary px-1.5 py-0.5 text-[11px] font-semibold text-muted-foreground">New</span>;
   const delta = (now - before) / before;
   if (Math.abs(delta) < 0.05) return null;
   return (
-    <span className={`shrink-0 text-[11px] font-semibold tabular-nums ${delta > 0 ? "text-negative" : "text-credit"}`} title="Against the period before">
+    <span className={`shrink-0 text-[12px] font-semibold tabular-nums ${delta > 0 ? "text-negative" : "text-credit"}`} title="Against the period before">
       {delta > 0 ? "↑" : "↓"}
       {Math.round(Math.abs(delta) * 100)}%
     </span>
@@ -128,10 +128,10 @@ function Figure({ label, value, foot, badge, tone, className, chart }: { label: 
     <div className={`@container flex min-w-0 flex-col border-border p-4 sm:p-5 2xl:p-6 ${className ?? ""}`}>
       <div className="flex items-baseline justify-between gap-2">
         <p className="label">{label}</p>
-        {badge ? <span className="text-xs font-semibold text-muted-foreground tabular-nums">{badge}</span> : null}
+        {badge ? <span className="text-[13px] font-semibold text-muted-foreground tabular-nums">{badge}</span> : null}
       </div>
       <Fit text={value} className={`figure mt-2 text-[length:min(1.25rem,var(--fit))] leading-tight sm:text-[length:min(1.5rem,var(--fit))] 2xl:text-[length:min(28px,var(--fit))] ${tone ?? "text-display"}`} />
-      <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">{foot}</div>
+      <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-[13px] text-muted-foreground">{foot}</div>
       {chart ? <div className="mt-4 flex min-h-8 flex-1 items-end">{chart}</div> : null}
     </div>
   );
@@ -365,7 +365,7 @@ export function Overview({
             <span className="text-sm font-semibold tracking-normal text-muted-foreground">NPR</span>
           </p>
           {trailMove != null ? (
-            <p className={`relative mt-2 text-xs font-medium tabular-nums ${trailMove >= 0 ? "text-credit" : "text-warning"}`}>
+            <p className={`relative mt-2 text-[13px] font-medium tabular-nums ${trailMove >= 0 ? "text-credit" : "text-warning"}`}>
               {trailMove >= 0 ? "+" : "−"}
               {formatNpr(Math.abs(trailMove))} this period
             </p>
@@ -374,7 +374,7 @@ export function Overview({
           <div className="relative mt-auto pt-4">
             {holdings.length > 0 ? (
               <>
-                <ul className="flex flex-wrap gap-x-4 gap-y-1.5 text-xs text-muted-foreground">
+                <ul className="flex flex-wrap gap-x-4 gap-y-1.5 text-[13px] text-muted-foreground">
                   {holdings.slice(0, 3).map((account, index) => (
                     <li key={account.account} className="flex min-w-0 items-center gap-1.5">
                       <span className={`size-1.5 shrink-0 rounded-full ${HOLDING_TONES[Math.min(index, HOLDING_TONES.length - 1)]}`} aria-hidden />
@@ -385,11 +385,11 @@ export function Overview({
                 </ul>
               </>
             ) : (
-              <p className="text-xs text-muted-foreground">
+              <p className="text-[13px] text-muted-foreground">
                 {accounts.length} {accounts.length === 1 ? "account" : "accounts"}
               </p>
             )}
-            {afterSplits != null && owe != null && owed != null && (owe > 0 || owed > 0) ? <p className="mt-3 border-t border-border pt-3 text-xs text-muted-foreground">{formatNpr(afterSplits)} once splits settle</p> : null}
+            {afterSplits != null && owe != null && owed != null && (owe > 0 || owed > 0) ? <p className="mt-3 border-t border-border pt-3 text-[13px] text-muted-foreground">{formatNpr(afterSplits)} once splits settle</p> : null}
           </div>
         </section>
 
@@ -452,15 +452,15 @@ export function Overview({
                 <Donut slices={donutSlices} size={164} thickness={18} active={slice} onActive={setSlice}>
                   {activeSlice ? (
                     <>
-                      <span className="max-w-full truncate text-xs font-medium text-muted-foreground">{activeSlice.name}</span>
+                      <span className="max-w-full truncate text-[13px] font-medium text-muted-foreground">{activeSlice.name}</span>
                       <span className="figure mt-0.5 text-lg text-display">{formatNpr(activeSlice.value)}</span>
-                      <span className="mt-0.5 text-xs font-semibold text-muted-foreground tabular-nums">{Math.round((activeSlice.value / stats.spent) * 100)}% of spend</span>
+                      <span className="mt-0.5 text-[13px] font-semibold text-muted-foreground tabular-nums">{Math.round((activeSlice.value / stats.spent) * 100)}% of spend</span>
                     </>
                   ) : (
                     <>
-                      <span className="text-xs font-medium text-muted-foreground">Spent</span>
+                      <span className="text-[13px] font-medium text-muted-foreground">Spent</span>
                       <span className="figure mt-0.5 text-lg text-display">{formatNpr(stats.spent)}</span>
-                      <span className="mt-0.5 text-xs text-muted-foreground">
+                      <span className="mt-0.5 text-[13px] text-muted-foreground">
                         {stats.expenseCount} {stats.expenseCount === 1 ? "expense" : "expenses"}
                       </span>
                     </>
@@ -490,7 +490,7 @@ export function Overview({
                             <span className="block h-full rounded-full" style={{ width: `${Math.max(share * 100, 2)}%`, background: item.color }} />
                           </span>
                           <CategoryDelta now={item.value} before={before.get(item.name)} hasPrevious={previous != null && item.name !== "Everything else"} />
-                          <span className="w-9 shrink-0 text-right text-xs font-semibold text-muted-foreground tabular-nums">{Math.round(share * 100)}%</span>
+                          <span className="w-9 shrink-0 text-right text-[13px] font-semibold text-muted-foreground tabular-nums">{Math.round(share * 100)}%</span>
                         </span>
                       </button>
                     </li>
@@ -532,14 +532,14 @@ export function Overview({
                 <ul className="mt-4 divide-y divide-border">
                   {peopleRows.map(([name, net]) => (
                     <li key={name} className="flex items-center gap-3 py-3">
-                      <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-secondary text-xs font-semibold text-foreground" aria-hidden>
+                      <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-secondary text-[13px] font-semibold text-foreground" aria-hidden>
                         {initials(name)}
                       </span>
                       <span className="min-w-0 flex-1">
-                        <span className="block truncate text-sm font-semibold text-display">{name}</span>
-                        <span className="block text-xs text-muted-foreground">{net > 0 ? "owes you" : "you owe"}</span>
+                        <span className="block truncate text-[15px] font-semibold text-display">{name}</span>
+                        <span className="block text-[13px] text-muted-foreground">{net > 0 ? "owes you" : "you owe"}</span>
                       </span>
-                      <span className={`figure shrink-0 text-sm ${net > 0 ? "text-credit" : "text-warning"}`}>{formatNpr(Math.abs(net))}</span>
+                      <span className={`figure shrink-0 text-[15px] ${net > 0 ? "text-credit" : "text-warning"}`}>{formatNpr(Math.abs(net))}</span>
                     </li>
                   ))}
                 </ul>
@@ -565,14 +565,14 @@ export function Overview({
               {accounts.map((account) => (
                 <li key={account.account}>
                   <div className="flex items-baseline justify-between gap-3">
-                    <span className="min-w-0 truncate text-sm font-semibold text-display">{account.account}</span>
-                    <span className={`figure shrink-0 text-sm ${account.balance < 0 ? "text-negative" : "text-display"}`}>
+                    <span className="min-w-0 truncate text-[15px] font-semibold text-display">{account.account}</span>
+                    <span className={`figure shrink-0 text-[15px] ${account.balance < 0 ? "text-negative" : "text-display"}`}>
                       {account.balance < 0 ? "−" : ""}
                       {formatNpr(Math.abs(account.balance))}
                     </span>
                   </div>
                   <SegmentBar className="mt-2" size="compact" tone={account.balance < 0 ? "over" : "neutral"} value={Math.abs(account.balance) / maxAccount} />
-                  <p className="mt-1.5 text-xs text-muted-foreground">
+                  <p className="mt-1.5 text-[13px] text-muted-foreground">
                     {formatNpr(account.credits)} in · {formatNpr(account.spent)} out
                   </p>
                 </li>
@@ -609,17 +609,17 @@ export function Overview({
               const incoming = transaction.type !== "expense";
               return (
                 <li key={transaction.id} className="flex items-center gap-3 py-2.5">
-                  <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-secondary text-[11px] font-semibold text-foreground" aria-hidden>
+                  <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-secondary text-[13px] font-semibold text-foreground" aria-hidden>
                     {initials(transaction.merchant)}
                   </span>
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate text-sm font-semibold text-display">{transaction.merchant}</span>
-                    <span className="mt-0.5 block truncate text-xs text-muted-foreground">
+                    <span className="block truncate text-[15px] font-semibold text-display">{transaction.merchant}</span>
+                    <span className="mt-0.5 block truncate text-[13px] text-muted-foreground">
                       {transaction.category} · {transaction.account}
                     </span>
                   </span>
-                  <span className="deva hidden w-36 shrink-0 text-right text-xs text-muted-foreground sm:block">{dates.entry(transaction.date)}</span>
-                  <span className={incoming ? "figure min-w-32 shrink-0 text-right text-sm whitespace-nowrap text-credit" : "figure min-w-32 shrink-0 text-right text-sm whitespace-nowrap text-display"}>
+                  <span className="deva hidden w-36 shrink-0 text-right text-[13px] text-muted-foreground sm:block">{dates.entry(transaction.date)}</span>
+                  <span className={incoming ? "figure min-w-32 shrink-0 text-right text-[15px] whitespace-nowrap text-credit" : "figure min-w-32 shrink-0 text-right text-[15px] whitespace-nowrap text-display"}>
                     {formatNpr(transaction.amount, incoming ? "in" : "out")}
                   </span>
                 </li>
@@ -641,10 +641,10 @@ export function Overview({
                   <li key={merchant.merchant}>
                     <div className="flex items-baseline justify-between gap-3">
                       <span className="flex min-w-0 items-baseline gap-2">
-                        <span className="truncate text-sm font-semibold text-display">{merchant.merchant}</span>
-                        <span className="shrink-0 text-xs font-medium text-muted-foreground">{merchant.count}×</span>
+                        <span className="truncate text-[15px] font-semibold text-display">{merchant.merchant}</span>
+                        <span className="shrink-0 text-[13px] font-medium text-muted-foreground">{merchant.count}×</span>
                       </span>
-                      <span className="figure shrink-0 text-sm text-display">{formatNpr(merchant.amount)}</span>
+                      <span className="figure shrink-0 text-[15px] text-display">{formatNpr(merchant.amount)}</span>
                     </div>
                     <SegmentBar className="mt-2" size="compact" value={maxMerchant ? merchant.amount / maxMerchant : 0} />
                   </li>
@@ -661,14 +661,14 @@ export function Overview({
               <ul className="mt-3 divide-y divide-border">
                 {groupRows.slice(0, 4).map((group) => (
                   <li key={group.id} className="flex items-center gap-3 py-3">
-                    <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-accent text-xs font-semibold text-accent-foreground" aria-hidden>
+                    <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-accent text-[13px] font-semibold text-accent-foreground" aria-hidden>
                       {initials(group.name)}
                     </span>
                     <span className="min-w-0 flex-1">
-                      <span className="block truncate text-sm font-semibold text-display">{group.name}</span>
-                      <span className="block text-xs text-muted-foreground">{group.members} members</span>
+                      <span className="block truncate text-[15px] font-semibold text-display">{group.name}</span>
+                      <span className="block text-[13px] text-muted-foreground">{group.members} members</span>
                     </span>
-                    <span className={`shrink-0 ${Math.abs(group.net) < 0.005 ? "text-xs font-medium text-muted-foreground" : group.net > 0 ? "figure text-sm text-credit" : "figure text-sm text-warning"}`}>
+                    <span className={`shrink-0 ${Math.abs(group.net) < 0.005 ? "text-[13px] font-medium text-muted-foreground" : group.net > 0 ? "figure text-sm text-credit" : "figure text-sm text-warning"}`}>
                       {Math.abs(group.net) < 0.005 ? "Settled" : `${group.net > 0 ? "+" : "−"}${formatNpr(Math.abs(group.net))}`}
                     </span>
                   </li>

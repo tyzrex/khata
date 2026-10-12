@@ -38,6 +38,7 @@ const fxRate = z.preprocess(
 
 const name = z.string().trim().min(1).max(80);
 const note = z.string().max(500).optional().default("");
+const externalId = z.string().trim().min(1).max(200);
 
 /** ["Sameer", "Anita"], "Sameer, Anita" and "Sameer and Anita" all become a list. */
 const nameList = z.preprocess(
@@ -64,7 +65,7 @@ export function transactionInput(today: string) {
       account: z.string().trim().max(40).optional(),
       date: date(today),
       note,
-      externalId: z.string().trim().min(1).max(200).optional(),
+      externalId: externalId.optional(),
       currency: currency.optional(),
       foreignAmount: amount.optional(),
       fxRate,
@@ -152,6 +153,8 @@ export function expenseInput(today: string) {
     excludeMe: z.boolean().optional().default(false),
     splitMode: z.preprocess(lower, z.enum(SPLIT_MODES, { error: "splitMode must be equal, exact, shares, or percent." })).optional(),
     split: splitEntries.optional(),
+    /** A retry key. Sending the same one again returns the first answer instead of adding a second expense. */
+    externalId: externalId.optional(),
     /** One of the fixed shared categories. Omit it and the expense stays uncategorised. */
     category: z.preprocess(lower, z.enum(SHARED_CATEGORIES, { error: `category must be one of: ${SHARED_CATEGORIES.join(", ")}.` })).optional(),
     note,
@@ -174,6 +177,8 @@ export function settlementInput(today: string) {
     amount,
     date: date(today),
     group: z.string().trim().max(100).nullable().optional(),
+    /** A retry key. Sending the same one again returns the first answer instead of recording the payment twice. */
+    externalId: externalId.optional(),
     note,
   });
 }

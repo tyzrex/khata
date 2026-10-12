@@ -231,7 +231,7 @@ export function SettleDialog({
                   <FormItem>
                     <FormLabel>Amount</FormLabel>
                     <div className="relative">
-                      <span className="pointer-events-none absolute inset-y-0 left-4 flex items-center text-xs font-semibold text-muted-foreground">NPR</span>
+                      <span className="pointer-events-none absolute inset-y-0 left-4 flex items-center text-[13px] font-semibold text-muted-foreground">NPR</span>
                       <FormControl>
                         <Input inputMode="decimal" autoComplete="off" className="figure pl-13 text-base" {...field} />
                       </FormControl>
@@ -256,7 +256,7 @@ export function SettleDialog({
             </div>
 
             {openDebt || reverse ? (
-              <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-secondary px-3 py-2.5 text-xs">
+              <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-secondary px-3 py-2.5 text-[13px]">
                 <span className="text-muted-foreground">
                   {openDebt ? (
                     <>
@@ -272,12 +272,12 @@ export function SettleDialog({
                   value === openDebt.amount ? (
                     <span className="font-semibold text-credit">Settles it in full</span>
                   ) : (
-                    <Button type="button" variant="secondary" size="xs" className="h-7 text-xs" onClick={() => form.setValue("amount", String(openDebt.amount), { shouldValidate: true })}>
+                    <Button type="button" variant="secondary" size="xs" onClick={() => form.setValue("amount", String(openDebt.amount), { shouldValidate: true })}>
                       Use full amount
                     </Button>
                   )
                 ) : (
-                  <Button type="button" variant="secondary" size="xs" className="h-7 text-xs" onClick={swap}>
+                  <Button type="button" variant="secondary" size="xs" onClick={swap}>
                     Swap
                   </Button>
                 )}
@@ -329,9 +329,9 @@ export function SettleDialog({
                           <SelectItem key={transaction.id} value={transaction.id}>
                             <span className="flex w-full min-w-0 items-center justify-between gap-3">
                               <span className="min-w-0 truncate">
-                                {transaction.merchant} <span className="deva text-xs text-muted-foreground">· {dates.entry(transaction.date)}</span>
+                                {transaction.merchant} <span className="deva text-[13px] text-muted-foreground">· {dates.entry(transaction.date)}</span>
                               </span>
-                              <span className="figure shrink-0 text-xs">{formatNpr(transaction.amount)}</span>
+                              <span className="figure shrink-0 text-[13px]">{formatNpr(transaction.amount)}</span>
                             </span>
                           </SelectItem>
                         ))}
@@ -362,7 +362,7 @@ export function SettleDialog({
             />
 
             {settlement ? (
-              <section aria-label="Settlement history" className="rounded-xl bg-secondary/70 px-3 py-2.5 text-xs text-muted-foreground">
+              <section aria-label="Settlement history" className="rounded-xl bg-secondary/70 px-3 py-2.5 text-[13px] text-muted-foreground">
                 <p>Added by {settlement.createdByName ?? "Someone"} · {formatAuditDate(settlement.createdAt)}</p>
                 {settlement.version > 1 ? <p className="mt-0.5">Last edited by {settlement.updatedByName ?? "Someone"} · {formatAuditDate(settlement.updatedAt)}</p> : null}
               </section>

@@ -13,7 +13,7 @@ function DateChip({ iso }: { iso: string }) {
   const view = dateView(iso, style);
   return (
     <span className="flex w-11 shrink-0 flex-col items-center justify-center rounded-xl bg-secondary py-1.5 leading-none" aria-hidden>
-      <span className="deva text-[10px] font-semibold tracking-wide text-muted-foreground uppercase">{view.monthShort}</span>
+      <span className="deva text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">{view.monthShort}</span>
       <span className="figure mt-1 text-[17px] text-display">{view.num(view.day)}</span>
     </span>
   );
@@ -21,11 +21,11 @@ function DateChip({ iso }: { iso: string }) {
 
 function EffectReadout({ expense, selfId, withId }: { expense: Expense; selfId: string; withId?: string }) {
   const effect = effectOf(expense, selfId, withId);
-  if (effect.kind === "none") return <span className="shrink-0 text-right text-[11px] font-medium text-disabled">{effect.label}</span>;
+  if (effect.kind === "none") return <span className="shrink-0 text-right text-[12px] font-medium text-disabled">{effect.label}</span>;
   const tone = effect.kind === "lent" ? "text-credit" : "text-warning";
   return (
     <span className="flex shrink-0 flex-col items-end leading-tight">
-      <span className={cn("text-[11px] font-medium", tone)}>{effect.kind === "lent" ? "you lent" : "you borrowed"}</span>
+      <span className={cn("text-[12px] font-medium", tone)}>{effect.kind === "lent" ? "you lent" : "you borrowed"}</span>
       <span className={cn("figure mt-0.5 text-sm", tone)}>{formatNpr(effect.amount)}</span>
     </span>
   );
@@ -59,7 +59,7 @@ export function ExpenseFeed({
     <div className="mt-1 flex flex-col gap-4">
       {months.map((month) => (
         <section key={month.label} aria-label={month.label}>
-          <h3 className="deva pb-1 text-xs font-semibold text-muted-foreground">{month.label}</h3>
+          <h3 className="deva pb-1 text-[13px] font-semibold text-muted-foreground">{month.label}</h3>
           <ul className="-mx-2 flex flex-col">
             {month.items.map((item) => (
               <li key={`${item.kind}-${item.id}`}>
@@ -72,12 +72,12 @@ export function ExpenseFeed({
                     <DateChip iso={item.date} />
                     <span className="min-w-0 flex-1">
                       <span className="flex min-w-0 items-center gap-2">
-                        <span className="truncate text-sm font-semibold text-display">{item.expense.description}</span>
+                        <span className="truncate text-[15px] font-semibold text-display">{item.expense.description}</span>
                         {item.expense.groupName && item.expense.groupName !== hideGroup ? (
-                          <span className="hidden shrink-0 rounded-md bg-secondary px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground sm:inline">{item.expense.groupName}</span>
+                          <span className="hidden shrink-0 rounded-md bg-secondary px-1.5 py-0.5 text-[11px] font-semibold text-muted-foreground sm:inline">{item.expense.groupName}</span>
                         ) : null}
                       </span>
-                      <span className="mt-0.5 block truncate text-xs text-muted-foreground">
+                      <span className="mt-0.5 block truncate text-[13px] text-muted-foreground">
                         {who(item.expense.paidById, item.expense.paidByName, selfId)} paid <span className="figure text-foreground">{formatNpr(item.expense.amount)}</span>
                       </span>
                     </span>
@@ -112,11 +112,11 @@ function SettlementContent({ settlement, selfId, date }: { settlement: Settlemen
         <HandCoins className="size-4" />
       </span>
       <span className="min-w-0 flex-1">
-        <span className="block truncate text-sm font-medium text-display">
+        <span className="block truncate text-[15px] font-medium text-display">
           {who(settlement.fromPersonId, settlement.fromName, selfId)} paid {who(settlement.toPersonId, settlement.toName, selfId, true)}{" "}
           <span className="figure">{formatNpr(settlement.amount)}</span>
         </span>
-        <span className="deva mt-0.5 block truncate text-xs text-muted-foreground">
+        <span className="deva mt-0.5 block truncate text-[13px] text-muted-foreground">
           {date} · Payment{settlement.note ? ` · ${settlement.note}` : ""}
         </span>
       </span>

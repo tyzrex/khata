@@ -1,10 +1,9 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { createContext, useCallback, useContext, useMemo, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, type ReactNode } from "react";
 import { ledgerKeys } from "@/components/ledger-query";
 import {
-  LIVE_POLL_MS,
   notificationsKey,
   notificationsQuery,
   postMarkRead,
@@ -12,7 +11,6 @@ import {
   type MarkReadInput,
 } from "@/components/notifications-query";
 import { sharesKey } from "@/components/shares-query";
-import { useFeedStream } from "@/components/use-feed-stream";
 import type { NotificationDto } from "@/db/notifications";
 
 export type NotificationsValue = {
@@ -42,26 +40,39 @@ export function useNotifications() {
  * rolls back if the write fails, so a person is never left looking at a badge that the
  * server disagrees with.
  *
- * Live updates arrive over the server-sent stream rather than by waiting for the poll.
- * A shared expense moves more than the feed — it changes the balances of everyone in
- * the book — so a signal that names a shared write refetches those too, which is what
- * stops an open tab from sitting on numbers that stopped being true.
+ * Freshness comes from plain polling (see `notifications-query.ts`). A new feed row
+ * means a shared write happened somewhere, and that moves balances too — so when
+ * the poll returns ids this tab has not seen before, the share book and ledger go
+ * along with it. That is what stops an open tab from sitting on numbers that
+ * stopped being true, without any stream or socket.
  */
 export function NotificationsProvider({ children }: { children: ReactNode }) {
   const queryClient = useQueryClient();
-  const onSignal = useCallback(
-    ({ activity }: { activity: boolean }) => {
-      const keys: readonly (readonly unknown[])[] = activity ? [notificationsKey, sharesKey, ...ledgerKeys] : [notificationsKey];
-      void queryClient.invalidateQueries({ queryKey: keys });
-    },
-    [queryClient],
-  );
-  const live = useFeedStream(onSignal);
+  const { data, isPending, refetch } = useQuery(notificationsQuery);
 
-  // The stream is the fast path; the poll is what guarantees eventual consistency
-  // when it is not connected. While it is, the poll is only a safety net and can
-  // step well back so an open tab is not re-reading the feed every minute.
-  const { data, isPending, refetch } = useQuery({ ...notificationsQuery, refetchInterval: live ? LIVE_POLL_MS : notificationsQuery.refetchInterval });
+  // Ids this tab has already accounted for. New ones mean a shared write landed
+  // elsewhere, so the balances alongside the bell need a re-read too.
+  const seenIds = useRef<Set<string> | null>(null);
+  useEffect(() => {
+    if (!data) return;
+    const current = new Set(data.notifications.map((item) => item.id));
+    if (seenIds.current) {
+      let fresh = false;
+      for (const id of current) {
+        if (!seenIds.current.has(id)) {
+          fresh = true;
+          break;
+        }
+      }
+      if (fresh) {
+        // One shared write behind the new rows; loop because a single
+        // `queryKey` can only name one resource.
+        void queryClient.invalidateQueries({ queryKey: sharesKey });
+        for (const key of ledgerKeys) void queryClient.invalidateQueries({ queryKey: key });
+      }
+    }
+    seenIds.current = current;
+  }, [data, queryClient]);
 
   const mark = useMutation({
     mutationFn: postMarkRead,

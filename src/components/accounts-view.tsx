@@ -126,7 +126,7 @@ export function AccountsView({
         <section className="rounded-3xl bg-card p-4 shadow-card sm:p-5 2xl:p-6">
           <div className="flex items-baseline justify-between gap-3">
             <h2 className="text-[15px] leading-5 font-semibold tracking-[-0.015em] text-display">Your accounts</h2>
-            <span className="rounded-md bg-secondary px-1.5 py-0.5 text-[11px] font-semibold text-muted-foreground tabular-nums">
+            <span className="rounded-md bg-secondary px-1.5 py-0.5 text-[12px] font-semibold text-muted-foreground tabular-nums">
               {used} of {accounts.length} in use
             </span>
           </div>
@@ -141,12 +141,12 @@ export function AccountsView({
                     <Wallet className="size-4" />
                   </span>
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-semibold text-display">{account.name}</p>
+                    <p className="truncate text-[15px] font-semibold text-display">{account.name}</p>
                     <div className="mt-1 flex items-center gap-2">
                       <span className="h-1 flex-1 overflow-hidden rounded-full bg-secondary">
                         <span className="block h-full rounded-full bg-brand-tint" style={{ width: `${(count / max) * 100}%` }} />
                       </span>
-                      <span className="shrink-0 text-[11px] text-muted-foreground tabular-nums">
+                      <span className="shrink-0 text-[12px] text-muted-foreground tabular-nums">
                         {count === 0 ? "no entries" : `${count} ${count === 1 ? "entry" : "entries"}`}
                       </span>
                     </div>
@@ -162,13 +162,13 @@ export function AccountsView({
                     </span>
                   ) : (
                     <span className="flex shrink-0 items-center gap-1">
-                      <Button type="button" variant="ghost" size="icon-xs" aria-label={`Rename ${account.name}`} title="Rename" onClick={() => start(account)}>
+                      <Button type="button" variant="ghost" size="icon-sm" aria-label={`Rename ${account.name}`} title="Rename" onClick={() => start(account)}>
                         <Pencil className="size-3.5" />
                       </Button>
                       <Button
                         type="button"
                         variant="ghost"
-                        size="icon-xs"
+                        size="icon-sm"
                         className="hover:bg-destructive/10 hover:text-destructive"
                         aria-label={`Delete ${account.name}`}
                         title="Delete"
@@ -184,7 +184,7 @@ export function AccountsView({
             })}
           </ul>
 
-          <p className="mt-4 text-xs text-muted-foreground">
+          <p className="mt-4 text-[13px] text-muted-foreground">
             An account can only be deleted while no entries use it. Move or remove those entries first.
           </p>
         </section>

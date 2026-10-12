@@ -104,7 +104,7 @@ export function DatePicker({
           <CalendarDays className="size-5 shrink-0 text-muted-foreground" />
           <span className="min-w-0 flex-1 truncate">{value ? formatFullDate(value, style) : <span className="font-normal text-muted-foreground">{placeholder}</span>}</span>
           {value ? (
-            <span className="hidden shrink-0 text-xs font-normal text-muted-foreground @min-[300px]:block">
+            <span className="hidden shrink-0 text-[13px] font-normal text-muted-foreground @min-[300px]:block">
               {other} {formatFullDate(value, { calendar: other, script: style.script })}
             </span>
           ) : null}
@@ -189,7 +189,7 @@ export function DateRangePicker({
           disabledDays={disabledDays}
           onRangeChange={commit}
         />
-        <p className="px-5 pb-4 text-center text-xs text-muted-foreground">Pick the first day, then the last.</p>
+        <p className="px-5 pb-4 text-center text-[13px] text-muted-foreground">Pick the first day, then the last.</p>
       </PopoverContent>
     </Popover>
   );

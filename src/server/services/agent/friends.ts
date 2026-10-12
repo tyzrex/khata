@@ -26,7 +26,7 @@ export async function listFriends(userId: string): Promise<Rendered<unknown>> {
 export async function addFriends(userId: string, input: { name?: string; names?: string[] }): Promise<Rendered<unknown>> {
   const names = [...(input.name ? [input.name] : []), ...(input.names ?? [])];
   const [book, account] = await Promise.all([getShareBook(userId), accountOf(userId)]);
-  const { ids, created } = await peopleFor(userId, book, names, { createMissing: true, accountName: account.name });
+  const { ids, created } = await peopleFor(userId, book, names, { createMissing: true, exactOnly: true, accountName: account.name });
   const newIds = new Set(created.map((person) => person.id));
   const friends = ids
     .filter((id) => id !== book.self.id)

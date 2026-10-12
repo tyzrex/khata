@@ -34,7 +34,7 @@ function Toast({ item }: { item: ToastItem }) {
       onFocus={() => setPaused(true)}
       onBlur={() => setPaused(false)}
     >
-      <span className={`flex size-9 shrink-0 items-center justify-center rounded-full ${look.badge}`} aria-hidden>
+      <span className={`flex size-10 shrink-0 items-center justify-center rounded-full ${look.badge}`} aria-hidden>
         <Icon className="size-[18px]" strokeWidth={2.25} />
       </span>
       <p className="min-w-0 flex-1 text-sm leading-snug font-medium text-display">

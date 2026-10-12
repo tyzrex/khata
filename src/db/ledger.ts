@@ -1,9 +1,9 @@
-import { and, desc, eq, gte, ilike, lte, or } from "drizzle-orm";
+import { and, desc, eq, gte, ilike, lte, or, sql } from "drizzle-orm";
 import { getDb } from "@/db/client";
-import { ensureAccounts, ensureNamedAccount } from "@/db/accounts";
-import { accounts, categories, transactions, type TransactionRow } from "@/db/schema";
-import { ensureCategories, ensureNamedCategory } from "@/db/categories";
-import { DEFAULT_CATEGORIES, type TxType } from "@/lib/constants";
+import { ensureAccounts, holdNamedAccount } from "@/db/accounts";
+import { categories, transactions, type TransactionRow } from "@/db/schema";
+import { ensureCategories, holdNamedCategory } from "@/db/categories";
+import { type TxType } from "@/lib/constants";
 import { summarize, type LedgerAmount } from "@/lib/period";
 import { parseImportPayload, type ImportTransaction, type ManualTransaction } from "@/lib/schemas";
 import type { ImportResult, SummaryResponse, TransactionDto } from "@/lib/types";
@@ -60,7 +60,8 @@ export async function listTransactions(userId: string, filters: TransactionFilte
     .select()
     .from(transactions)
     .where(clauses.length ? and(...clauses) : undefined)
-    .orderBy(desc(transactions.date), desc(transactions.createdAt));
+    // `id` last: rows imported in one batch share a timestamp, and without a tiebreaker their order may change between calls.
+    .orderBy(desc(transactions.date), desc(transactions.createdAt), desc(transactions.id));
   return rows.map(toTransaction);
 }
 
@@ -84,41 +85,58 @@ function transactionValues(userId: string, input: ManualTransaction | ImportTran
   };
 }
 
-export async function createTransaction(userId: string, input: ManualTransaction) {
+/**
+ * `idempotencyKey` is one per form submission. The entry's external id is derived from
+ * it, and `(user, external id)` is unique, so a double-click or a retry after a dropped
+ * response finds the entry the first request wrote instead of adding another.
+ */
+export async function createTransaction(userId: string, input: ManualTransaction, idempotencyKey?: string) {
   await ensureCategories(userId);
-  await ensureNamedCategory(userId, input.category, input.type);
-  await ensureNamedAccount(userId, input.account);
-  const [row] = await getDb()
-    .insert(transactions)
-    .values({
-      id: crypto.randomUUID(),
-      ...transactionValues(userId, input, `manual-${crypto.randomUUID()}`, "manual"),
-    })
-    .returning();
-  return toTransaction(row);
+  const externalId = `manual-${idempotencyKey ?? crypto.randomUUID()}`;
+  return getDb().transaction(async (tx) => {
+    // The account and category are held until this entry is written, so deleting one of
+    // them cannot slip in between and leave the entry pointing at nothing.
+    await holdNamedCategory(userId, input.category, input.type, tx);
+    await holdNamedAccount(userId, input.account, tx);
+    const [row] = await tx
+      .insert(transactions)
+      .values({ id: crypto.randomUUID(), ...transactionValues(userId, input, externalId, "manual") })
+      .onConflictDoNothing({ target: [transactions.userId, transactions.externalId] })
+      .returning();
+    if (row) return toTransaction(row);
+    const [existing] = await tx
+      .select()
+      .from(transactions)
+      .where(and(eq(transactions.userId, userId), eq(transactions.externalId, externalId)))
+      .limit(1);
+    return toTransaction(existing!);
+  });
 }
 
 export async function updateTransaction(userId: string, id: string, input: ManualTransaction) {
   await ensureCategories(userId);
-  await ensureNamedCategory(userId, input.category, input.type);
-  await ensureNamedAccount(userId, input.account);
-  const [row] = await getDb()
-    .update(transactions)
-    .set({
-      date: input.date,
-      type: input.type,
-      amount: input.amount,
-      currency: input.currency,
-      foreignAmount: input.foreignAmount,
-      fxRate: input.fxRate,
-      categoryName: input.category,
-      merchant: input.merchant,
-      account: input.account,
-      note: input.note,
-      updatedAt: new Date(),
-    })
-    .where(and(eq(transactions.id, id), eq(transactions.userId, userId)))
-    .returning();
+  const row = await getDb().transaction(async (tx) => {
+    await holdNamedCategory(userId, input.category, input.type, tx);
+    await holdNamedAccount(userId, input.account, tx);
+    const [updated] = await tx
+      .update(transactions)
+      .set({
+        date: input.date,
+        type: input.type,
+        amount: input.amount,
+        currency: input.currency,
+        foreignAmount: input.foreignAmount,
+        fxRate: input.fxRate,
+        categoryName: input.category,
+        merchant: input.merchant,
+        account: input.account,
+        note: input.note,
+        updatedAt: new Date(),
+      })
+      .where(and(eq(transactions.id, id), eq(transactions.userId, userId)))
+      .returning();
+    return updated;
+  });
   if (!row) return null;
   return toTransaction(row);
 }
@@ -141,47 +159,20 @@ export async function importTransactions(userId: string, payload: unknown): Prom
 
   await db.transaction(async (tx) => {
     for (const row of rows) {
-      await tx
-        .insert(accounts)
-        .values({
-          id: crypto.randomUUID(),
-          userId,
-          name: row.account,
-          sortOrder: 200,
-        })
-        .onConflictDoNothing({ target: [accounts.userId, accounts.name] });
+      await holdNamedAccount(userId, row.account, tx);
+      await holdNamedCategory(userId, row.category, row.type, tx);
 
-      await tx
-        .insert(categories)
-        .values({
-          id: crypto.randomUUID(),
-          userId,
-          name: row.category,
-          kind: row.type === "expense" ? "expense" : row.type === "income" ? "income" : "transfer",
-          color: DEFAULT_CATEGORIES.find((category) => category.name === row.category)?.color ?? "#7c828a",
-          sortOrder: DEFAULT_CATEGORIES.find((category) => category.name === row.category)?.sortOrder ?? 200,
-        })
-        .onConflictDoNothing({ target: [categories.userId, categories.name] });
-
-      const [existing] = await tx
-        .select({ id: transactions.id })
-        .from(transactions)
-        .where(and(eq(transactions.userId, userId), eq(transactions.externalId, row.externalId)))
-        .limit(1);
-
-      if (existing) {
-        await tx
-          .update(transactions)
-          .set(transactionValues(userId, row, row.externalId, row.source))
-          .where(and(eq(transactions.id, existing.id), eq(transactions.userId, userId)));
-        updated += 1;
-      } else {
-        await tx.insert(transactions).values({
-          id: crypto.randomUUID(),
-          ...transactionValues(userId, row, row.externalId, row.source),
-        });
-        created += 1;
-      }
+      // One statement, so two imports of the same external id (a bot retrying) cannot both
+      // pass a "does it exist?" check and then collide on the unique index. In Postgres a
+      // row that was just inserted has xmax = 0; one that was updated through the conflict does not.
+      const values = transactionValues(userId, row, row.externalId, row.source);
+      const [written] = await tx
+        .insert(transactions)
+        .values({ id: crypto.randomUUID(), ...values })
+        .onConflictDoUpdate({ target: [transactions.userId, transactions.externalId], set: values })
+        .returning({ inserted: sql<boolean>`(xmax = 0)` });
+      if (written?.inserted) created += 1;
+      else updated += 1;
     }
   });
 

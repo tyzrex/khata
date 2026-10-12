@@ -30,7 +30,7 @@ function Shell({ title, intro, children }: { title: string; intro: string; child
         <div className="mt-8 grid gap-4">{children}</div>
       </div>
 
-      <p className="text-center text-xs text-disabled">
+      <p className="text-center text-[13px] text-disabled">
         <Link href="/login" className="text-interactive underline-offset-4 hover:underline">
           Back to sign in
         </Link>
@@ -43,7 +43,7 @@ function Reveal({ revealed, onToggle }: { revealed: boolean; onToggle: () => voi
   return (
     <button
       type="button"
-      className="absolute inset-y-0 right-1 my-auto flex size-9 items-center justify-center rounded-lg text-muted-foreground outline-none hover:text-display focus-visible:ring-2 focus-visible:ring-ring"
+      className="absolute inset-y-0 right-1 my-auto flex size-10 items-center justify-center rounded-lg text-muted-foreground outline-none hover:text-display focus-visible:ring-2 focus-visible:ring-ring"
       aria-label={revealed ? "Hide password" : "Show password"}
       aria-pressed={revealed}
       onClick={onToggle}
@@ -122,7 +122,7 @@ export function ResetPasswordForm({ token, invalid }: { token: string | null; in
           <ArrowLeft className="size-4" />
           Use a different email
         </Button>
-        <p className="text-xs leading-5 text-muted-foreground">
+        <p className="text-[13px] leading-5 text-muted-foreground">
           Nothing arrived? Check spam, then try again. Only email-and-password accounts can reset this way; a Google-only account has no password to reset.
         </p>
       </Shell>

@@ -46,7 +46,7 @@ export function FriendDetail({
         <div className="p-4 sm:p-5 2xl:p-6">
           <Link
             href="/friends"
-            className="-ml-2 mb-2 flex h-9 w-fit items-center gap-1.5 rounded-lg px-2 text-[13px] font-medium text-muted-foreground transition-colors outline-none hover:bg-secondary hover:text-display focus-visible:ring-2 focus-visible:ring-ring lg:hidden"
+            className="-ml-2 mb-2 flex h-11 w-fit items-center gap-1.5 rounded-xl px-2.5 text-sm font-medium text-muted-foreground transition-colors outline-none hover:bg-secondary hover:text-display focus-visible:ring-2 focus-visible:ring-ring lg:hidden"
           >
             <ArrowLeft className="size-4" aria-hidden />
             All friends
@@ -56,7 +56,7 @@ export function FriendDetail({
               <PersonAvatar name={friend.name} size="lg" tone="accent" linked={!entry.own || friend.linkedUserId != null} />
               <div className="min-w-0">
                 <h2 className="truncate text-xl font-semibold tracking-[-0.02em] text-display sm:text-2xl">{friend.name}</h2>
-                <p className="mt-0.5 text-xs text-muted-foreground">{accountNote(entry)}</p>
+                <p className="mt-0.5 text-[13px] text-muted-foreground">{accountNote(entry)}</p>
               </div>
             </div>
             {entry.own ? (
@@ -82,7 +82,7 @@ export function FriendDetail({
             ) : (
               <p className={cn("figure mt-1 text-[32px] leading-none sm:text-[40px]", owed ? "text-credit" : "text-warning")}>{formatNpr(Math.abs(entry.net))}</p>
             )}
-            {open.length > 1 ? <p className="mt-1.5 text-xs text-muted-foreground">Across {open.length} books. Settle each one below.</p> : null}
+            {open.length > 1 ? <p className="mt-1.5 text-[13px] text-muted-foreground">Across {open.length} books. Settle each one below.</p> : null}
           </div>
           <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
             <Button type="button" onClick={onAddExpense}>
@@ -149,8 +149,8 @@ function BookLine({ row, onSettle }: { row: BookRow; onSettle: () => void }) {
   const openBalance = Math.abs(row.net) >= SETTLED;
   const label = (
     <span className="min-w-0 flex-1">
-      <span className="block truncate text-sm font-medium text-display">{row.name}</span>
-      <span className="mt-0.5 block text-xs text-muted-foreground">{row.direct ? "Direct" : row.id ? "Group" : "Not in a group"}</span>
+      <span className="block truncate text-[15px] font-medium text-display">{row.name}</span>
+      <span className="mt-0.5 block text-[13px] text-muted-foreground">{row.direct ? "Direct" : row.id ? "Group" : "Not in a group"}</span>
     </span>
   );
   const linkable = row.id != null && !row.direct;

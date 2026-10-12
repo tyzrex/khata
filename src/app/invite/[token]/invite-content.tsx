@@ -100,14 +100,14 @@ export function InviteContent() {
                   {info.direct ? <UserPlus className="size-6" /> : <Users className="size-6" />}
                 </span>
                 <div>
-                  <p className="text-xs font-medium text-muted-foreground">{info.direct ? "Friend invite from" : `${info.creatorName} invited you to`}</p>
+                  <p className="text-[13px] font-medium text-muted-foreground">{info.direct ? "Friend invite from" : `${info.creatorName} invited you to`}</p>
                   <h1 className="display mt-1 text-2xl sm:text-[28px]">{info.groupName}</h1>
                 </div>
                 <p className="text-sm leading-6 text-muted-foreground">
                   {info.direct ? `${info.creatorName} wants to split expenses and settle up with you.` : "Split expenses and settle up with everyone in this group."}
                 </p>
                 {info.inviteeEmail ? (
-                  <span className="inline-flex max-w-full items-center gap-1.5 rounded-lg bg-secondary px-2.5 py-1 text-xs text-muted-foreground">
+                  <span className="inline-flex max-w-full items-center gap-1.5 rounded-lg bg-secondary px-2.5 py-1 text-[13px] text-muted-foreground">
                     <Mail className="size-3.5 shrink-0" aria-hidden />
                     <span className="truncate">For {info.inviteeEmail}</span>
                   </span>
@@ -132,7 +132,7 @@ export function InviteContent() {
                     <Button type="button" className="w-full" disabled={session.isPending} onClick={() => router.push(loginHref)}>
                       Sign in to join
                     </Button>
-                    <p className="text-center text-xs text-muted-foreground">New here? You can create an account on the next screen, then come straight back.</p>
+                    <p className="text-center text-[13px] text-muted-foreground">New here? You can create an account on the next screen, then come straight back.</p>
                   </div>
                 )
               ) : (
@@ -141,7 +141,7 @@ export function InviteContent() {
                 </Button>
               )}
 
-              <p className="flex items-start gap-2 border-t border-border pt-4 text-xs leading-5 text-muted-foreground">
+              <p className="flex items-start gap-2 border-t border-border pt-4 text-[13px] leading-5 text-muted-foreground">
                 <ShieldCheck className="mt-0.5 size-3.5 shrink-0 text-credit" aria-hidden />
                 Joining shares only {info.direct ? "the expenses between the two of you" : "this group's expenses"}. Your personal ledger stays private.
               </p>

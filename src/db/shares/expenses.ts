@@ -47,6 +47,10 @@ async function expenseRevision(
     .from(people)
     .where(and(eq(people.id, expense.paidById), eq(people.userId, expense.userId)))
     .limit(1);
+  const splits = await getDb()
+    .select({ personId: sharedSplits.personId, amount: sharedSplits.amount })
+    .from(sharedSplits)
+    .where(eq(sharedSplits.expenseId, expense.id));
   const names = await loadUserNames([actorId, expense.userId]);
   const paidByName = payer?.isSelf ? names.get(expense.userId) ?? payer.name : payer?.name ?? "Someone";
   return {
@@ -62,6 +66,10 @@ async function expenseRevision(
       description: expense.description,
       amount: expense.amount,
       date: expense.date,
+      // Who was on the expense. Splits are deleted with it, so this is the only record of whom
+      // a deleted or edited expense touched — the notification fan-out reads it back.
+      paidById: expense.paidById,
+      splits,
       paidByName,
       splitMode: expense.splitMode,
       category: expense.category,
@@ -112,8 +120,10 @@ async function writeExpense(
     scope = await groupScope(actorId, input.groupId);
   }
   await requirePeople(scope.ownerId, personIds);
+  // The owner is held to this too: a person outside the group would otherwise land in its
+  // balances without being able to see it.
+  if (input.groupId) await requireGroupMembers(input.groupId, personIds);
   if (!scope.isOwner) {
-    await requireGroupMembers(input.groupId!, personIds);
     if (input.transactionIds.length) throw new ShareInputError("Bank lines can only be linked by the person who owns that ledger.");
   }
   const splits = buildSplits({

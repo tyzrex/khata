@@ -116,20 +116,20 @@ export function Ledger({
           <div className="flex gap-2">
             <label className="relative min-w-0 flex-1">
               <span className="sr-only">Search entries</span>
-              <Search className="pointer-events-none absolute top-1/2 left-3.5 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
-              <Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search merchant, note, account" className="pl-10" type="search" />
+              <Search className="pointer-events-none absolute top-1/2 left-4 size-4.5 -translate-y-1/2 text-muted-foreground" aria-hidden />
+              <Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search merchant, note, account" className="pl-11" type="search" />
             </label>
             <Button
               type="button"
               variant="outline"
-              className="relative shrink-0 gap-2 px-3.5 lg:hidden"
+              className="relative shrink-0 gap-2 px-4 lg:hidden"
               aria-expanded={showFilters}
               aria-controls="ledger-filters"
               onClick={() => setShowFilters((value) => !value)}
             >
-              <SlidersHorizontal />
+              <SlidersHorizontal className="size-5" />
               <span className="max-sm:sr-only">Filters</span>
-              {activeCount ? <span className="flex size-5 items-center justify-center rounded-md bg-primary text-[11px] font-semibold text-primary-foreground">{activeCount}</span> : null}
+              {activeCount ? <span className="flex size-5 items-center justify-center rounded-md bg-primary text-[13px] font-semibold text-primary-foreground">{activeCount}</span> : null}
             </Button>
           </div>
 
@@ -190,7 +190,7 @@ export function Ledger({
           </div>
 
           <div className="mt-3 flex flex-wrap items-center gap-2" aria-live="polite">
-            <p className="text-xs font-medium text-muted-foreground">
+            <p className="text-[13px] font-medium text-muted-foreground">
               {transactions.length} {transactions.length === 1 ? "entry" : "entries"}
               {dirty ? " matching" : ""}
             </p>
@@ -199,17 +199,17 @@ export function Ledger({
                 key={chip.key}
                 type="button"
                 onClick={chip.clear}
-                className="deva inline-flex h-7 items-center gap-1 rounded-lg bg-accent pr-1.5 pl-2.5 text-xs font-medium text-accent-foreground transition-colors outline-none hover:bg-accent/70 focus-visible:ring-2 focus-visible:ring-ring"
+                className="deva inline-flex h-8 items-center gap-1 rounded-lg bg-accent pr-2 pl-3 text-[13px] font-medium text-accent-foreground transition-colors outline-none hover:bg-accent/70 focus-visible:ring-2 focus-visible:ring-ring"
                 aria-label={`Remove filter: ${chip.label}`}
               >
                 {chip.label}
-                <X className="size-3.5" aria-hidden />
+                <X className="size-4" aria-hidden />
               </button>
             ))}
             {dirty ? (
               <button
                 type="button"
-                className="ml-auto rounded-lg px-2 py-1 text-xs font-medium text-interactive transition-colors outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring"
+                className="ml-auto rounded-xl px-3 py-2 text-[13px] font-medium text-interactive transition-colors outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring"
                 onClick={() => {
                   setQuery("");
                   onFilter(EMPTY_LEDGER_FILTERS);
@@ -224,11 +224,11 @@ export function Ledger({
         <div>
           {groups.length === 0 ? (
             <section className="flex flex-col items-center rounded-3xl bg-card px-6 py-16 text-center shadow-card">
-              <span className="flex size-12 items-center justify-center rounded-2xl bg-accent text-accent-foreground">
-                <ReceiptText className="size-5" aria-hidden />
+              <span className="flex size-14 items-center justify-center rounded-2xl bg-accent text-accent-foreground">
+                <ReceiptText className="size-6" aria-hidden />
               </span>
-              <h2 className="mt-4 text-[15px] font-semibold tracking-[-0.015em] text-display">{dirty ? "No entries match" : "No entries yet"}</h2>
-              <p className="mt-1 max-w-xs text-sm text-muted-foreground">{dirty ? "Loosen a filter or clear them all to see every line." : "Add your first entry, or load the sample week from Sync."}</p>
+              <h2 className="mt-4 text-base font-semibold tracking-[-0.015em] text-display">{dirty ? "No entries match" : "No entries yet"}</h2>
+              <p className="mt-1 max-w-xs text-[13px] leading-5 text-muted-foreground">{dirty ? "Loosen a filter or clear them all to see every line." : "Add your first entry, or load the sample week from Sync."}</p>
               <div className="mt-5 flex gap-2">
                 {dirty ? (
                   <Button
@@ -250,34 +250,44 @@ export function Ledger({
               </div>
             </section>
           ) : (
-            <div className="flex flex-col gap-3 2xl:gap-4">
-              {groups.map((group) => (
-                <section key={group.date} className="rounded-3xl bg-card shadow-card" aria-labelledby={`day-${group.date}`}>
-                  <header className="sticky top-[68px] z-10 flex items-baseline justify-between gap-3 rounded-t-3xl border-b border-border bg-card/95 px-4 py-3 backdrop-blur-sm sm:px-5 lg:top-0 2xl:px-6">
+            /*
+             * One statement, not one card per day. The book is read as a running list, so the
+             * days are section bars inside a single rounded sheet rather than separate cards —
+             * each with the day's own total — which is what made a long week look like a stack
+             * of disconnected boxes.
+             */
+            <section className="rounded-3xl bg-card shadow-card" aria-label="Entries by day">
+              {groups.map((group, index) => (
+                <div key={group.date}>
+                  <header
+                    className={`sticky top-[68px] z-10 flex items-baseline justify-between gap-3 border-b border-border bg-secondary px-4 py-2.5 sm:px-5 lg:top-0 2xl:px-6 ${
+                      index === 0 ? "rounded-t-3xl" : ""
+                    }`}
+                  >
                     <h2 id={`day-${group.date}`} className="deva text-[13px] font-semibold text-display">
                       {dates.entry(group.date)}
                     </h2>
-                    <p className="text-xs text-muted-foreground">
+                    <p className="text-[13px] text-foreground/80">
                       <span className="mr-2">
                         {group.items.length} {group.items.length === 1 ? "entry" : "entries"}
                       </span>
                       <span className={`figure ${group.net < 0 ? "text-display" : "text-credit"}`}>{signed(group.net)}</span>
                     </p>
                   </header>
-                  <ul className="divide-y divide-border px-2 py-1 sm:px-3 2xl:px-4">
-                    {group.items.map((transaction, index) => (
+                  <ul className="divide-y divide-border px-2 sm:px-3 2xl:px-4">
+                    {group.items.map((transaction, itemIndex) => (
                       <Row
                         key={transaction.id}
                         transaction={transaction}
-                        color={colors.get(transaction.category) ?? SWATCHES[index % SWATCHES.length]!}
+                        color={colors.get(transaction.category) ?? SWATCHES[itemIndex % SWATCHES.length]!}
                         links={linksFor.get(transaction.id) ?? []}
                         onEdit={onEdit}
                       />
                     ))}
                   </ul>
-                </section>
+                </div>
               ))}
-            </div>
+            </section>
           )}
         </div>
       </div>
@@ -287,9 +297,9 @@ export function Ledger({
 
 function Total({ label, value, tone = "text-display", className }: { label: string; value: string; tone?: string; className?: string }) {
   return (
-    <div className={`min-w-0 p-3 sm:p-5 2xl:p-6 ${className ?? ""}`}>
+    <div className={`min-w-0 p-3.5 sm:p-5 2xl:p-6 ${className ?? ""}`}>
       <p className="label">{label}</p>
-      <p className={`figure mt-1 truncate text-sm sm:mt-1.5 sm:text-xl ${tone}`} title={value}>{value}</p>
+      <p className={`figure mt-1 truncate text-[17px] sm:mt-1.5 sm:text-xl ${tone}`} title={value}>{value}</p>
     </div>
   );
 }
@@ -301,17 +311,17 @@ function Row({ transaction, color, links, onEdit }: { transaction: TransactionDt
     <li>
       <button
         type="button"
-        className="group/row flex w-full items-center gap-3 rounded-xl px-2 py-3 text-left transition-colors duration-200 outline-none hover:bg-secondary focus-visible:bg-secondary focus-visible:ring-2 focus-visible:ring-ring"
+        className="group/row flex w-full items-center gap-3.5 rounded-2xl px-2 py-3.5 text-left transition-colors duration-200 outline-none hover:bg-secondary focus-visible:bg-secondary focus-visible:ring-2 focus-visible:ring-ring"
         onClick={() => onEdit(transaction)}
         aria-label={`Edit ${transaction.merchant}, ${formatNpr(transaction.amount, incoming ? "in" : "out")}`}
       >
-        <span className="relative flex size-9 shrink-0 items-center justify-center rounded-full bg-secondary text-[11px] font-semibold text-foreground" aria-hidden>
+        <span className="relative flex size-10 shrink-0 items-center justify-center rounded-full bg-secondary text-[13px] font-semibold text-foreground" aria-hidden>
           {transaction.merchant.trim().slice(0, 1).toUpperCase() || "?"}
           <span className="absolute -right-0.5 -bottom-0.5 size-3 rounded-full ring-2 ring-card" style={{ background: color }} />
         </span>
         <span className="min-w-0 flex-1">
-          <span className="block truncate text-sm font-semibold text-display">{transaction.merchant}</span>
-          <span className="mt-0.5 block truncate text-xs text-muted-foreground">
+          <span className="block truncate text-[15px] font-semibold text-display">{transaction.merchant}</span>
+          <span className="mt-0.5 block truncate text-[13px] text-muted-foreground">
             {transaction.category}
             <span className="px-1 text-disabled">·</span>
             {transaction.account}
@@ -329,21 +339,21 @@ function Row({ transaction, color, links, onEdit }: { transaction: TransactionDt
               </>
             ) : null}
           </span>
-          {transaction.note ? <span className="mt-1 block truncate text-xs text-muted-foreground/80">{transaction.note}</span> : null}
+          {transaction.note ? <span className="mt-1 block truncate text-[13px] text-muted-foreground/80">{transaction.note}</span> : null}
           {links.map((link) => (
             <span key={link.kind + link.title} className="mt-1.5 flex min-w-0 items-center gap-1.5">
-              <span className="shrink-0 rounded-md bg-accent px-1.5 py-0.5 text-[10px] font-semibold text-accent-foreground">{link.kind === "settlement" ? "Settlement" : "Shared"}</span>
-              <span className="truncate text-xs text-muted-foreground">
+              <span className="shrink-0 rounded-md bg-accent px-1.5 py-0.5 text-[12px] font-semibold text-accent-foreground">{link.kind === "settlement" ? "Settlement" : "Shared"}</span>
+              <span className="truncate text-[13px] text-muted-foreground">
                 {link.title}
                 {link.kind === "settlement" && link.bankAmount != null && link.bankAmount !== link.shareAmount ? ` · book ${formatNpr(link.shareAmount)}` : ""}
               </span>
             </span>
           ))}
         </span>
-        <span className={incoming ? "figure shrink-0 text-right text-sm text-credit" : "figure shrink-0 text-right text-sm text-display"}>
+        <span className={incoming ? "figure shrink-0 text-right text-[15px] text-credit" : "figure shrink-0 text-right text-[15px] text-display"}>
           {formatNpr(transaction.amount, incoming ? "in" : "out")}
         </span>
-        <ChevronRight className="size-4 shrink-0 text-disabled transition-transform duration-200 group-hover/row:translate-x-0.5" aria-hidden />
+        <ChevronRight className="size-5 shrink-0 text-disabled transition-transform duration-200 group-hover/row:translate-x-0.5" aria-hidden />
       </button>
     </li>
   );

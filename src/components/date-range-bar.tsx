@@ -186,7 +186,7 @@ function MobilePeriodSheet({
         type="button"
         onClick={() => setOpen(true)}
         aria-haspopup="dialog"
-        className="flex h-11 w-full items-center gap-2 rounded-xl bg-card px-4 text-left text-sm font-semibold text-display shadow-card transition-colors duration-200 hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        className="flex h-11 w-full items-center gap-2 rounded-xl bg-card px-4 text-left text-[15px] font-semibold text-display shadow-card transition-colors duration-200 hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
         <CalendarRange className="size-4 shrink-0 text-muted-foreground" aria-hidden />
         <span className="min-w-0 flex-1 truncate">{label}</span>
@@ -232,7 +232,7 @@ function MobilePeriodSheet({
                       }
                     >
                       <span className={active ? "text-sm font-semibold text-accent-foreground" : "text-sm font-medium text-display"}>{item.label}</span>
-                      <span className="ml-auto text-xs text-muted-foreground">{item.hint}</span>
+                      <span className="ml-auto text-[13px] text-muted-foreground">{item.hint}</span>
                     </button>
                   </li>
                 );

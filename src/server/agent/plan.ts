@@ -1,8 +1,9 @@
+import { roundMoney } from "@/lib/money";
 import type { BalanceScope, ShareBook } from "@/db/shares";
 import type { SharedCategory } from "@/lib/constants";
 import { formatNpr } from "@/lib/format";
 import { buildSplits, ShareInputError, type BuiltSplit, type SplitMode, type SplitParticipant } from "@/lib/split";
-import { AgentInputError, isSelfWord, matchNamed, matchPerson, type Named } from "@/server/agent/match";
+import { AgentInputError, AmbiguousNameError, isSelfWord, matchNamed, matchPerson, type Named } from "@/server/agent/match";
 
 /**
  * Turns an agent's name-based request into the id-based input the share book
@@ -103,6 +104,10 @@ function pickScope(book: ShareBook, names: string[], accountName?: string): Reso
   try {
     return { scope: own, ids: resolveIn(own, names, accountName) };
   } catch (ownError) {
+    // Only "nobody by that name" may send the search to a book someone else owns. Two
+    // matches in your own book is a question for the caller; answering it from another
+    // person's ledger would write the expense where they never meant it.
+    if (ownError instanceof AmbiguousNameError) throw ownError;
     const fits = groups
       .filter((scope) => !scope.owned)
       .flatMap((scope) => {
@@ -337,13 +342,13 @@ export function personName(scope: BookScope, id: string) {
 export function netWith(scope: BalanceScope, friendId: string) {
   const owed = scope.youAreOwed.filter((debt) => debt.fromId === friendId).reduce((total, debt) => total + debt.amount, 0);
   const owe = scope.youOwe.filter((debt) => debt.toId === friendId).reduce((total, debt) => total + debt.amount, 0);
-  return Math.round((owed - owe) * 100) / 100;
+  return roundMoney(owed - owe);
 }
 
 export function netOf(scope: BalanceScope) {
   const owed = scope.youAreOwed.reduce((total, debt) => total + debt.amount, 0);
   const owe = scope.youOwe.reduce((total, debt) => total + debt.amount, 0);
-  return Math.round((owed - owe) * 100) / 100;
+  return roundMoney(owed - owe);
 }
 
 /** "Sameer owes you NPR 1,425" / "You owe Anita NPR 2,000" / "You and Rajan are settled up". */

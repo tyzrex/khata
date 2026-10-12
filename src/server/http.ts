@@ -38,6 +38,26 @@ export async function beginRequest() {
   await connection();
 }
 
+/** Reads the body, giving up as soon as it passes the cap instead of buffering a chunked upload whole. */
+async function readCappedText(request: Request) {
+  const reader = request.body?.getReader();
+  if (!reader) return "";
+  const decoder = new TextDecoder();
+  let bytes = 0;
+  let text = "";
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    bytes += value.byteLength;
+    if (bytes > MAX_JSON_BYTES) {
+      await reader.cancel().catch(() => undefined);
+      throw new RequestError("That request is too large.", 413);
+    }
+    text += decoder.decode(value, { stream: true });
+  }
+  return text + decoder.decode();
+}
+
 /**
  * Parse a JSON body with a size cap. Malformed JSON is a 400, not a 500, and an
  * oversized body is refused before it is buffered when Content-Length says so.
@@ -45,8 +65,7 @@ export async function beginRequest() {
 export async function readJson(request: Request): Promise<unknown> {
   const declared = Number(request.headers.get("content-length") ?? "");
   if (Number.isFinite(declared) && declared > MAX_JSON_BYTES) throw new RequestError("That request is too large.", 413);
-  const text = await request.text();
-  if (text.length > MAX_JSON_BYTES) throw new RequestError("That request is too large.", 413);
+  const text = await readCappedText(request);
   if (!text.trim()) throw new RequestError("Send a JSON body.", 400);
   try {
     return JSON.parse(text) as unknown;

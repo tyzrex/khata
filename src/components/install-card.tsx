@@ -49,20 +49,20 @@ export function InstallCard() {
                 {busy ? "Installing" : "Install Khata"}
               </Button>
             </div>
-            <p className="text-xs leading-5 text-muted-foreground">
+            <p className="text-[13px] leading-5 text-muted-foreground">
               Once installed, Khata opens without browser bars, starts even when you are offline, and can tell you when someone shares an expense or settles up with you.
             </p>
           </>
         ) : needsManualSteps ? (
           <>
-            <div className="rounded-2xl bg-secondary p-3 text-xs leading-5 text-muted-foreground">
+            <div className="rounded-2xl bg-secondary p-3 text-[13px] leading-5 text-muted-foreground">
               <p className="font-medium text-display">On this browser, install from the Share sheet</p>
               <p className="mt-1.5">
                 Tap <Share className="mx-0.5 inline size-3.5 align-[-2px]" aria-hidden /> <span className="font-medium text-display">Share</span>, then{" "}
                 <span className="font-medium text-display">Add to Home Screen</span>. Khata then opens full screen with no browser bars.
               </p>
             </div>
-            <p className="text-xs leading-5 text-muted-foreground">
+            <p className="text-[13px] leading-5 text-muted-foreground">
               Installed, Khata starts even when you are offline and can tell you when someone shares an expense or settles up with you.
             </p>
           </>

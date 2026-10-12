@@ -1,3 +1,4 @@
+import { roundMoney } from "@/lib/money";
 import type { ShareBook } from "@/db/shares";
 import { formatNpr } from "@/lib/format";
 import type { TransactionDto } from "@/lib/types";
@@ -56,7 +57,7 @@ function view(
     net,
     summary: Math.abs(net) < 0.005 ? `You are settled up in "${name}"` : net > 0 ? `You are owed ${formatNpr(net)} in "${name}"` : `You owe ${formatNpr(-net)} in "${name}"`,
     balances: lines,
-    totalSpent: Math.round(expenses.reduce((total, expense) => total + expense.amount, 0) * 100) / 100,
+    totalSpent: roundMoney(expenses.reduce((total, expense) => total + expense.amount, 0)),
     expenseCount: expenses.length,
   };
 }
@@ -108,7 +109,7 @@ export function expenseView(expense: ShareBook["expenses"][number], selfId: stri
 
 /** Spent is expenses only; credited is income plus transfers, matching the dashboard. */
 export function transactionTotals(rows: TransactionDto[]) {
-  const sum = (filter: (row: TransactionDto) => boolean) => Math.round(rows.filter(filter).reduce((total, row) => total + row.amount, 0) * 100) / 100;
+  const sum = (filter: (row: TransactionDto) => boolean) => roundMoney(rows.filter(filter).reduce((total, row) => total + row.amount, 0));
   return { count: rows.length, spent: sum((row) => row.type === "expense"), credited: sum((row) => row.type !== "expense") };
 }
 
