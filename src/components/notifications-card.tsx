@@ -117,8 +117,9 @@ export function NotificationsCard() {
           </div>
         ) : !data?.supported ? (
           <div className="rounded-2xl bg-secondary p-3 text-xs leading-5 text-muted-foreground">
-            Notifications need a production build served over HTTPS. In development Khata keeps its service worker off, so this browser cannot subscribe yet. Deploy a preview, or run{" "}
-            <code className="font-mono">bun run build && bun run start</code> locally to try them.
+            {/* The reason is worth more than "unsupported": on iPhone it is the one thing
+                that has to change, and it is not a setting the person can reach. */}
+            {data?.blockedReason ?? "Notifications need a production build served over HTTPS. In development Khata keeps its service worker off, so this browser cannot subscribe yet."}
           </div>
         ) : !data?.configured ? (
           <div className="rounded-2xl bg-secondary p-3 text-xs leading-5 text-muted-foreground">

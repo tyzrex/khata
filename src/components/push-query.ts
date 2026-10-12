@@ -2,7 +2,7 @@
 
 import { queryOptions } from "@tanstack/react-query";
 import { requestJson } from "@/lib/api-client";
-import { getCurrentPushSubscription } from "@/lib/push-client";
+import { getCurrentPushSubscription, pushUnavailableReason } from "@/lib/push-client";
 
 /**
  * Push notification settings, read as one thing.
@@ -32,8 +32,10 @@ export type PushSettings = {
   /** This browser holds a local subscription at all. */
   enabled: boolean;
   permission: NotificationPermission | null;
-  /** The browser cannot subscribe here (no HTTPS, no service worker, not production). */
+  /** The browser cannot subscribe here (no HTTPS, no service worker, iOS in a tab, not production). */
   supported: boolean;
+  /** Why it cannot, in words worth showing rather than a generic "unsupported". */
+  blockedReason: string | null;
 };
 
 /** Shown before the server answers, and whenever a read fails — the panel must never render a half-known switch. */
@@ -44,21 +46,15 @@ export const DEFAULT_PUSH_PREFERENCES: PushPreferences = { expenseActivity: true
  * an unsupported browser this resolves without a request at all.
  */
 export function pushSupported() {
-  return (
-    process.env.NODE_ENV === "production" &&
-    typeof window !== "undefined" &&
-    window.isSecureContext &&
-    "serviceWorker" in navigator &&
-    "PushManager" in window &&
-    "Notification" in window
-  );
+  return pushUnavailableReason() === null;
 }
 
 export const pushSettingsQuery = queryOptions({
   queryKey: pushSettingsKey,
   queryFn: async (): Promise<PushSettings> => {
-    if (!pushSupported()) {
-      return { configured: false, publicKey: null, preferences: DEFAULT_PUSH_PREFERENCES, registered: false, enabled: false, permission: null, supported: false };
+    const blockedReason = pushUnavailableReason();
+    if (blockedReason) {
+      return { configured: false, publicKey: null, preferences: DEFAULT_PUSH_PREFERENCES, registered: false, enabled: false, permission: null, supported: false, blockedReason };
     }
     let endpoint: string | null = null;
     try {
@@ -67,8 +63,8 @@ export const pushSettingsQuery = queryOptions({
       // No service worker yet, or the browser refused to answer: treated as "not subscribed".
       endpoint = null;
     }
-    const body = await requestJson<Omit<PushSettings, "enabled" | "permission" | "supported">>(`/api/push${endpoint ? `?endpoint=${encodeURIComponent(endpoint)}` : ""}`);
-    return { ...body, enabled: endpoint !== null, permission: Notification.permission, supported: true };
+    const body = await requestJson<Omit<PushSettings, "enabled" | "permission" | "supported" | "blockedReason">>(`/api/push${endpoint ? `?endpoint=${encodeURIComponent(endpoint)}` : ""}`);
+    return { ...body, enabled: endpoint !== null, permission: Notification.permission, supported: true, blockedReason: null };
   },
   /** Only re-read on an explicit action; the card is a settings panel, not a live feed. */
   staleTime: 60_000,

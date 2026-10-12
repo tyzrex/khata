@@ -1,6 +1,7 @@
 "use client";
 
 import { apiError, withTimeout } from "@/lib/api-client";
+import { isIosLike, isStandalone } from "@/lib/pwa-install";
 
 const DEVELOPMENT_MESSAGE = "Push notifications are unavailable in development because the Khata service worker is disabled. Use a production build over HTTPS.";
 const UNSUPPORTED_MESSAGE = "This browser does not support web push notifications.";
@@ -12,11 +13,30 @@ type SerializedPushSubscription = {
   keys: { p256dh: string; auth: string };
 };
 
+/**
+ * Why notifications cannot work here, or `null` when they can.
+ *
+ * iOS is the one worth naming out loud. Apple only delivers web push to an app
+ * that has been added to the Home Screen — Safari can grant the permission, the
+ * subscribe call can succeed, and nothing is ever delivered while the app runs
+ * in a tab. Every other platform delivers from a plain browser. Without saying
+ * this, the phone gets a permission error whose advice ("change it in your
+ * browser settings") is wrong, and the working answer — install it — is one
+ * screen away and never mentioned.
+ */
+export function pushUnavailableReason(): string | null {
+  if (typeof window === "undefined") return DEVELOPMENT_MESSAGE;
+  if (process.env.NODE_ENV !== "production") return DEVELOPMENT_MESSAGE;
+  if (!window.isSecureContext) return "Push notifications require a secure HTTPS connection.";
+  if (!("serviceWorker" in navigator) || !("Notification" in window)) return UNSUPPORTED_MESSAGE;
+  if (isIosLike() && !isStandalone()) return "On iPhone and iPad, notifications only reach Khata once it is installed to your Home Screen. Add it from the Share menu, open Khata from your home screen, then come back here.";
+  if (!("PushManager" in window)) return UNSUPPORTED_MESSAGE;
+  return null;
+}
+
 function assertPushEnvironment() {
-  if (typeof window === "undefined") throw new Error("Push notifications are only available in a browser.");
-  if (process.env.NODE_ENV !== "production") throw new Error(DEVELOPMENT_MESSAGE);
-  if (!window.isSecureContext) throw new Error("Push notifications require a secure HTTPS connection.");
-  if (!("serviceWorker" in navigator) || !("PushManager" in window) || !("Notification" in window)) throw new Error(UNSUPPORTED_MESSAGE);
+  const reason = pushUnavailableReason();
+  if (reason) throw new Error(reason);
 }
 
 function isKhataRegistration(registration: ServiceWorkerRegistration) {

@@ -3,14 +3,6 @@ import type { NextConfig } from "next";
 const isDev = process.env.NODE_ENV !== "production";
 
 /**
- * Identifies this build to the browser. The update prompt stores it when someone dismisses an
- * update, so a genuinely new deploy prompts again while the same build stays quiet — without it,
- * a worker left waiting by `skipWaiting: false` re-shows the prompt on every page load.
- * Vercel pins the commit, so it only changes when the deployed code changes.
- */
-const buildId = process.env.VERCEL_GIT_COMMIT_SHA ?? "local";
-
-/**
  * Content Security Policy.
  *
  * Scripts allow 'unsafe-inline' because Next streams inline bootstrap scripts and
@@ -49,7 +41,9 @@ const securityHeaders = [
 ];
 
 const nextConfig: NextConfig = {
-  env: { NEXT_PUBLIC_BUILD_ID: buildId },
+  // The build id used to live here and be read by the update prompt. It does not any
+  // more: that prompt now asks the waiting service worker which build it is, so the
+  // two can never be from different builds. See serwist.config.mjs.
   // The dev server listens on 0.0.0.0. Opening it at 127.0.0.1 is treated as
   // cross-origin, which blocks the HMR socket and leaves the page on the SSR shell.
   allowedDevOrigins: ["127.0.0.1"],

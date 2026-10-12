@@ -30,13 +30,14 @@ function emit() {
 }
 
 /** iPadOS 13+ reports a desktop UA, so a Mac with a touchscreen is an iPad. */
-function isIosLike() {
+export function isIosLike() {
   if (typeof navigator === "undefined") return false;
   const ua = navigator.userAgent;
   return /iphone|ipad|ipod/i.test(ua) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
 }
 
-function isStandalone() {
+/** True when the page is running as an installed app rather than inside a browser tab. */
+export function isStandalone() {
   if (typeof window === "undefined") return false;
   // display-mode is the standard check; navigator.standalone is the legacy iOS one.
   return window.matchMedia("(display-mode: standalone)").matches || (navigator as { standalone?: boolean }).standalone === true;
