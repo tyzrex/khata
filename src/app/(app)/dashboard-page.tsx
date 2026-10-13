@@ -25,8 +25,9 @@ export function DashboardPage() {
       period={period}
       // Stepping through periods replaces the entry, so Back leaves the dashboard instead of walking every month.
       onPeriod={(next) => router.replace(`${pathname}${dashboardQuery(next, today)}`, { scroll: false })}
-      onLedger={() => router.push("/ledger")}
+      onLedger={(href) => router.push(href ?? "/ledger")}
       onAdd={khata.openAdd}
+      onEdit={khata.openEdit}
       onSplit={() => khata.openExpense(null)}
       onSample={async () => {
         const result = await khata.loadSample();

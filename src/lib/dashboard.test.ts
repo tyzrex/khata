@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { accountBalances, addDays, balanceTrail, change, computeStats, describeRange, previousRange, rangeFor, shiftAnchor, type Money } from "./dashboard";
+import { accountBalances, addDays, balanceTrail, change, comparisonRanges, computeStats, describeRange, previousRange, rangeFor, shiftAnchor, type Money } from "./dashboard";
 
 const rows: Money[] = [
   { date: "2026-10-05", type: "expense", amount: 100, category: "Food", merchant: "Cafe", account: "Nabil" },
@@ -29,6 +29,41 @@ test("ranges read naturally", () => {
   assert.equal(describeRange("week", { start: "2026-10-05", end: "2026-10-11" }), "5 – 11 Oct 2026");
   assert.equal(describeRange("month", { start: "2026-10-01", end: "2026-10-31" }), "October 2026");
   assert.equal(describeRange("custom", { start: "2026-09-28", end: "2026-10-04" }), "28 Sep – 4 Oct 2026");
+});
+
+test("an unfinished period compares matching elapsed days", () => {
+  assert.deepEqual(comparisonRanges("month", rangeFor("month", "2026-10-13"), "2026-10-13"), {
+    current: { start: "2026-10-01", end: "2026-10-13" },
+    previous: { start: "2026-09-01", end: "2026-09-13" }, partial: true,
+  });
+  assert.deepEqual(comparisonRanges("month", rangeFor("month", "2026-03-30"), "2026-03-30"), {
+    current: { start: "2026-03-01", end: "2026-03-28" },
+    previous: { start: "2026-02-01", end: "2026-02-28" }, partial: true,
+  });
+  const week = rangeFor("week", "2026-10-07");
+  assert.deepEqual(comparisonRanges("week", week, "2026-10-07")?.previous, { start: "2026-09-28", end: "2026-09-30" });
+  assert.equal(comparisonRanges("all", week, "2026-10-07"), null);
+  assert.equal(comparisonRanges("month", rangeFor("month", "2026-11-01"), "2026-10-13"), null);
+});
+
+test("completed and BS periods retain their calendar boundaries", () => {
+  const finished = rangeFor("month", "2026-09-15");
+  assert.deepEqual(comparisonRanges("month", finished, "2026-10-13"), {
+    current: finished, previous: { start: "2026-08-01", end: "2026-08-31" }, partial: false,
+  });
+  const range = rangeFor("month", "2026-10-08", {}, "BS");
+  const comparison = comparisonRanges("month", range, "2026-10-08", "BS")!;
+  assert.equal(comparison.current.end, "2026-10-08");
+  assert.equal(comparison.previous.start, previousRange("month", range, "BS").start);
+  assert.equal(comparison.previous.end, addDays(comparison.previous.start, 21));
+});
+
+test("future entries do not inflate daily pace or the spending forecast", () => {
+  const future: Money = { ...rows[0]!, date: "2026-10-10", amount: 900 };
+  const stats = computeStats([...rows, future], { start: "2026-10-05", end: "2026-10-11" }, "2026-10-07");
+  assert.equal(stats.spent, 1500);
+  assert.equal(stats.avgDaily, 200);
+  assert.equal(stats.projected, 1400);
 });
 
 test("stats roll up one week", () => {

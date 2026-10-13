@@ -124,12 +124,11 @@ export function BalanceStrip({
     <section className="grid grid-cols-2 rounded-3xl bg-card shadow-card sm:grid-cols-3">
       <StripCell className="border-r" label="You are owed" value={<span className={owed > SETTLED ? "text-credit" : "text-display"}>{formatNpr(owed)}</span>} hint={owedHint} />
       <StripCell className="sm:border-r" label="You owe" value={<span className={owe > SETTLED ? "text-warning" : "text-display"}>{formatNpr(owe)}</span>} hint={oweHint} />
-      <StripCell
-        className="col-span-2 border-t sm:col-span-1 sm:border-t-0"
-        label={third.label}
-        value={third.value}
-        hint={third.hint ?? <span className={words.tone}>{Math.abs(net) < SETTLED ? "Everyone is square" : `${net > 0 ? "Net owed to you" : "Net you owe"} ${formatNpr(Math.abs(net))}`}</span>}
-      />
+      <div className="col-span-2 flex items-center justify-between gap-3 border-t border-border px-4 py-3 sm:col-span-1 sm:block sm:border-t-0 sm:p-5">
+        <div className="min-w-0"><p className="label">{third.label}</p><p className="mt-1 truncate text-xs text-muted-foreground sm:hidden">{third.hint}</p></div>
+        <p className="figure text-xl text-display sm:mt-2 sm:text-2xl">{third.value}</p>
+        <p className="mt-1.5 hidden truncate text-[13px] text-muted-foreground sm:block">{third.hint ?? <span className={words.tone}>{Math.abs(net) < SETTLED ? "Everyone is square" : `${net > 0 ? "Net owed to you" : "Net you owe"} ${formatNpr(Math.abs(net))}`}</span>}</p>
+      </div>
     </section>
   );
 }

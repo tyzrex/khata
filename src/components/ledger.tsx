@@ -7,7 +7,7 @@ import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { SWATCHES, TX_TYPES, type TxType } from "@/lib/constants";
+import { SWATCHES, TX_TYPES } from "@/lib/constants";
 import { useDateFormat } from "@/components/use-date-style";
 import { formatForeign, formatNpr, formatRate } from "@/lib/format";
 import type { AccountDto, CategoryDto, TransactionDto } from "@/lib/types";
@@ -76,8 +76,8 @@ export function Ledger({
     return () => window.clearTimeout(timer);
   }, [query, filters, onFilter]);
 
-  const dirty = Boolean(filters.q || filters.from || filters.to || filters.type || filters.category);
-  const activeCount = [filters.from, filters.to, filters.type, filters.category, filters.account].filter(Boolean).length;
+  const dirty = Boolean(filters.q || filters.from || filters.to || filters.type || filters.category || filters.account || filters.merchant);
+  const activeCount = [filters.from, filters.to, filters.type, filters.category, filters.account, filters.merchant].filter(Boolean).length;
   const groups = groupByDate(transactions);
   const sum = totals(transactions);
   const colors = new Map(categories.map((category) => [category.name, category.color]));
@@ -85,7 +85,9 @@ export function Ledger({
   for (const link of links) linksFor.set(link.transactionId, [...(linksFor.get(link.transactionId) ?? []), link]);
 
   const chips = [
-    filters.type ? { key: "type", label: filters.type[0]!.toUpperCase() + filters.type.slice(1), clear: () => onFilter({ ...filters, type: "" }) } : null,
+    filters.type ? { key: "type", label: filters.type === "credit" ? "Money in" : filters.type[0]!.toUpperCase() + filters.type.slice(1), clear: () => onFilter({ ...filters, type: "" }) } : null,
+    filters.account ? { key: "account", label: filters.account, clear: () => onFilter({ ...filters, account: "" }) } : null,
+    filters.merchant ? { key: "merchant", label: filters.merchant, clear: () => onFilter({ ...filters, merchant: "" }) } : null,
     filters.category ? { key: "category", label: filters.category, clear: () => onFilter({ ...filters, category: "" }) } : null,
     filters.from ? { key: "from", label: `From ${dates.entry(filters.from)}`, clear: () => onFilter({ ...filters, from: "" }) } : null,
     filters.to ? { key: "to", label: `To ${dates.entry(filters.to)}`, clear: () => onFilter({ ...filters, to: "" }) } : null,
@@ -135,15 +137,16 @@ export function Ledger({
 
           <div id="ledger-filters" className={`${showFilters ? "grid" : "hidden"} mt-2 grid-cols-2 gap-2 lg:mt-3 lg:grid lg:grid-cols-5`}>
             <Select
-              items={{ all: "All types", expense: "Expense", income: "Income", transfer: "Transfer" }}
+              items={{ all: "All types", credit: "Money in", expense: "Expense", income: "Income", transfer: "Transfer" }}
               value={filters.type || "all"}
-              onValueChange={(value) => onFilter({ ...filters, type: value && value !== "all" ? (value as TxType) : "" })}
+              onValueChange={(value) => onFilter({ ...filters, type: value && value !== "all" ? (value as LedgerFilters["type"]) : "" })}
             >
               <SelectTrigger className="w-full" aria-label="Filter by type">
                 <SelectValue placeholder="Type" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All types</SelectItem>
+                <SelectItem value="credit">Money in</SelectItem>
                 {TX_TYPES.map((type) => (
                   <SelectItem key={type} value={type}>
                     {type[0]!.toUpperCase() + type.slice(1)}

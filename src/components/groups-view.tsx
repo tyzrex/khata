@@ -1,15 +1,16 @@
 "use client";
 
 import { cn } from "cn";
-import { Plus, UserRound } from "lucide-react";
+import { ChevronRight, Plus, UserRound, UsersRound } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 import { InviteDialog, type InviteActions } from "@/components/invite-dialog";
 import { PageHeader } from "@/components/page-header";
-import { GroupDetail, groupViewOf, positionWords, type GroupView } from "@/components/splits/group-detail";
+import { GroupDetail, groupViewOf, type GroupView } from "@/components/splits/group-detail";
+import { DirectoryControls, DirectoryEmpty, type DirectoryFilter, type DirectorySort } from "@/components/splits/directory-controls";
 import { GroupFormDialog } from "@/components/splits/group-form-dialog";
-import { SETTLED, type Expense, type Settlement } from "@/components/splits/ledger-math";
-import { AvatarStack, BalanceStrip, GroupTile, SplitCard, SplitCardHead } from "@/components/splits-ui";
+import { hasOpenBalance, SETTLED, type Expense, type Settlement } from "@/components/splits/ledger-math";
+import { BalanceStrip, GroupTile, NetStack, SplitCard, SplitCardHead } from "@/components/splits-ui";
 import { Button } from "@/components/ui/button";
 import type { BalanceScope, ShareBook } from "@/db/shares";
 
@@ -17,6 +18,7 @@ type Debt = BalanceScope["youOwe"][number];
 type Group = ShareBook["groups"][number];
 
 const sum = (debts: Debt[]) => debts.reduce((total, debt) => total + debt.amount, 0);
+const groupIsOpen = (group: GroupView) => hasOpenBalance(group.balances);
 
 function inGroups(count: number) {
   return count === 0 ? "In no group" : `In ${count} ${count === 1 ? "group" : "groups"}`;
@@ -59,23 +61,30 @@ export function GroupsView({
     ...book.groups.filter((group) => group.kind === "group").map((group) => groupViewOf(book, { kind: "owned", group })),
     ...book.joinedGroups.filter((group) => group.kind === "group").map((group) => groupViewOf(book, { kind: "joined", group })),
   ];
-  // On a wide screen /groups still shows a group beside the list; phones show only the list there.
-  const selected = groups.find((group) => group.id === selectedId) ?? groups[0];
   const showDetail = selectedId != null;
+  const [query, setQuery] = useState("");
+  const [filter, setFilter] = useState<DirectoryFilter>("all");
+  const [sort, setSort] = useState<DirectorySort>("balance");
   const [form, setForm] = useState<{ open: boolean; group: Group | null }>({ open: false, group: null });
   const [inviteFor, setInviteFor] = useState<string | null>(null);
 
   const owedTotal = groups.reduce((total, group) => total + sum(group.balances.youAreOwed), 0);
   const oweTotal = groups.reduce((total, group) => total + sum(group.balances.youOwe), 0);
-  const openGroups = groups.filter((group) => Math.abs(group.net) >= SETTLED).length;
+  const openGroups = groups.filter(groupIsOpen).length;
+  const latest = (group: GroupView) => [...group.expenses, ...group.settlements].reduce((date, item) => item.date > date ? item.date : date, "");
+  const needle = query.trim().toLowerCase();
+  const balanceSize = (group: GroupView) => Math.max(sum(group.balances.youOwe), sum(group.balances.youAreOwed));
+  const visible = groups.filter((group) => (!needle || group.name.toLowerCase().includes(needle) || group.members.some((member) => member.name.toLowerCase().includes(needle))) && (filter === "all" || (filter === "open" ? groupIsOpen(group) : !groupIsOpen(group)))).sort((a, b) => sort === "name" ? a.name.localeCompare(b.name) : sort === "recent" ? latest(b).localeCompare(latest(a)) || a.name.localeCompare(b.name) : balanceSize(b) - balanceSize(a) || a.name.localeCompare(b.name));
+  const selected = selectedId ? groups.find((group) => group.id === selectedId) : visible[0];
   const ownedSelected = selected?.entry.kind === "owned" ? selected.entry.group : null;
 
   return (
-    <div className="rise flex flex-col gap-6">
+    <div className="flex flex-col gap-6">
       <PageHeader
-        eyebrow="Splits"
+        eyebrow={null}
         title="Groups"
-        description="Trips, flats and rides. Everyone in a group sees the same tab, and settling here never moves your bank ledger."
+        className={showDetail ? "hidden lg:flex" : undefined}
+        description="Trips, home, and everything in between. Share the costs, keep the good company."
         actions={
           <>
             <Button type="button" variant="outline" className="bg-card shadow-card" onClick={onFriends}>
@@ -90,16 +99,16 @@ export function GroupsView({
         }
       />
 
-      {groups.length === 0 || !selected ? (
-        <SplitCard className="flex flex-col items-start gap-4 sm:p-6">
-          <GroupTile name="+" size="lg" />
-          <div>
-            <h2 className="text-lg font-semibold tracking-[-0.02em] text-display">No groups yet</h2>
-            <p className="mt-1 max-w-md text-sm leading-6 text-muted-foreground">Start one for a trip, a flat, or the people you ride with. Add an expense, and Khata works out who owes whom.</p>
+      {groups.length === 0 ? (
+        <SplitCard className="flex flex-col items-center gap-5 py-12 text-center sm:py-16">
+          <UsersRound className="size-10 text-interactive" strokeWidth={1.5} aria-hidden />
+          <div className="max-w-md">
+            <h2 className="text-xl font-semibold tracking-[-0.02em] text-display">Good company. Shared expenses.</h2>
+            <p className="mt-2 text-sm leading-6 text-muted-foreground">Start a group for your next trip, your flat, or everyday plans. Add expenses, see everyone’s share, and settle up in one place.</p>
           </div>
           <Button type="button" onClick={() => setForm({ open: true, group: null })}>
             <Plus />
-            New group
+              Create your first group
           </Button>
         </SplitCard>
       ) : (
@@ -110,20 +119,25 @@ export function GroupsView({
               owe={oweTotal}
               owedHint={inGroups(groups.filter((group) => sum(group.balances.youAreOwed) >= SETTLED).length)}
               oweHint={inGroups(groups.filter((group) => sum(group.balances.youOwe) >= SETTLED).length)}
-              third={{ label: "Groups", value: groups.length, hint: openGroups ? `${openGroups} with open balances` : "All settled" }}
+              third={{ label: "To settle", value: openGroups, hint: openGroups ? `of ${groups.length} ${groups.length === 1 ? "group" : "groups"}` : "All settled" }}
             />
           </div>
 
-          <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(17rem,22rem)_minmax(0,1fr)] lg:items-start 2xl:gap-4">
+          <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(18rem,21rem)_minmax(0,1fr)] lg:items-start">
             <SplitCard className={cn("lg:sticky lg:top-6", showDetail && "hidden lg:block")}>
-              <SplitCardHead title="Your groups" hint={`${groups.length} ${groups.length === 1 ? "group" : "groups"}`} />
-              <ul className="-mx-2 mt-2 flex flex-col">
-                {groups.map((group) => (
-                  <GroupRow key={group.id} group={group} active={group.id === selected.id} />
+              <SplitCardHead title="Your groups" hint={`${groups.length} ${groups.length === 1 ? "group" : "groups"}`}>
+                <Button type="button" variant="outline" size="icon-sm" aria-label="New group" onClick={() => setForm({ open: true, group: null })}><Plus /></Button>
+              </SplitCardHead>
+              <DirectoryControls noun="groups" query={query} onQuery={setQuery} filter={filter} onFilter={setFilter} sort={sort} onSort={setSort} counts={{ all: groups.length, open: openGroups, settled: groups.length - openGroups }} />
+              <ul aria-label="Groups" className="-mx-2 mt-2 flex flex-col lg:max-h-[60vh] lg:overflow-y-auto">
+                {visible.map((group) => (
+                  <GroupRow key={group.id} group={group} active={group.id === selected?.id} />
                 ))}
               </ul>
+              {visible.length === 0 ? <DirectoryEmpty noun="groups" onReset={() => { setQuery(""); setFilter("all"); }} /> : null}
             </SplitCard>
 
+            {selected ? (
             <div className={showDetail ? "min-w-0" : "hidden min-w-0 lg:block"}>
               <GroupDetail
                 key={selected.id}
@@ -145,6 +159,7 @@ export function GroupsView({
                 }
               />
             </div>
+            ) : selectedId ? <SplitCard><h2 className="text-lg font-semibold">Group unavailable</h2><p className="mt-2 text-sm text-muted-foreground">This group was removed or you no longer have access.</p><Button variant="outline" className="mt-4" onClick={() => onSelect(null)}>All groups</Button></SplitCard> : <SplitCard className="hidden lg:block"><p className="py-12 text-center text-sm text-muted-foreground">Choose a group to see expenses and balances.</p></SplitCard>}
           </div>
         </div>
       )}
@@ -168,7 +183,7 @@ export function GroupsView({
 }
 
 function GroupRow({ group, active }: { group: GroupView; active: boolean }) {
-  const position = positionWords(group.net);
+  const offsetting = Math.abs(group.net) < SETTLED && groupIsOpen(group);
   return (
     <li>
       <Link
@@ -176,7 +191,7 @@ function GroupRow({ group, active }: { group: GroupView; active: boolean }) {
         scroll={false}
         aria-current={active ? "page" : undefined}
         className={cn(
-          "flex w-full items-center gap-3 rounded-2xl px-2 py-3 text-left transition-colors duration-200 outline-none focus-visible:ring-2 focus-visible:ring-ring",
+          "flex w-full items-center gap-3 rounded-xl px-2 py-3.5 text-left transition-colors duration-200 outline-none focus-visible:ring-2 focus-visible:ring-ring",
           active ? "lg:bg-accent" : "hover:bg-secondary",
         )}
       >
@@ -186,9 +201,10 @@ function GroupRow({ group, active }: { group: GroupView; active: boolean }) {
             <span className={cn("truncate text-[15px] text-display", active ? "font-semibold" : "font-medium")}>{group.name}</span>
             {group.entry.kind === "joined" ? <span className="shrink-0 rounded-md bg-secondary px-1.5 py-0.5 text-[11px] font-semibold text-muted-foreground">Joined</span> : null}
           </span>
-          <span className={cn("mt-0.5 block truncate text-[13px] font-medium", position.tone)}>{position.text}</span>
+          <span className="mt-1 block truncate text-xs text-muted-foreground">{group.members.length} members · {group.expenses.length} {group.expenses.length === 1 ? "expense" : "expenses"}</span>
         </span>
-        <AvatarStack names={group.members.map((member) => member.name)} max={3} />
+        {offsetting ? <span className="shrink-0 text-xs font-medium text-warning">To settle</span> : <NetStack value={group.net} owesLabel="you are owed" />}
+        <ChevronRight className="size-3.5 shrink-0 text-muted-foreground lg:hidden" aria-hidden />
       </Link>
     </li>
   );

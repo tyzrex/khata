@@ -1,6 +1,8 @@
 "use client";
 
 import { ArrowDownRight, ArrowUpRight, CircleCheck, HandCoins, Info, Plus, TriangleAlert, Wallet } from "lucide-react";
+import Link from "next/link";
+import { dashboardDebts } from "@/components/dashboard-shares";
 import { useMemo, useState, type CSSProperties, type ReactNode } from "react";
 import { CardHead } from "@/components/card-head";
 import { NotificationFeedCard } from "@/components/notification-feed-card";
@@ -17,6 +19,7 @@ import {
   accountBalances,
   balanceTrail,
   change,
+  comparisonRanges,
   computeStats,
   dataBounds,
   describeRange,
@@ -28,7 +31,8 @@ import {
 } from "@/lib/dashboard";
 import { useDateFormat } from "@/components/use-date-style";
 import { formatAmount, formatNpr } from "@/lib/format";
-import type { DashboardState } from "@/lib/url-state";
+import { EMPTY_LEDGER_FILTERS, ledgerQuery, type DashboardState, type LedgerFilters } from "@/lib/url-state";
+import { toast } from "@/lib/status";
 import type { AccountDto, CategoryDto, TransactionDto } from "@/lib/types";
 
 type Debt = BalanceScope["youOwe"][number];
@@ -123,9 +127,9 @@ function Fit({ text, className, reserve = 0 }: { text: string; className: string
   );
 }
 
-function Figure({ label, value, foot, badge, tone, className, chart }: { label: string; value: string; foot: ReactNode; badge?: string; tone?: string; className?: string; chart?: ReactNode }) {
+function Figure({ label, value, foot, badge, tone, className, chart, href }: { href: string; label: string; value: string; foot: ReactNode; badge?: string; tone?: string; className?: string; chart?: ReactNode }) {
   return (
-    <div className={`@container flex min-w-0 flex-col border-border p-4 sm:p-5 2xl:p-6 ${className ?? ""}`}>
+    <Link href={href} className={`@container flex min-w-0 flex-col border-border p-4 outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring sm:p-5 2xl:p-6 ${className ?? ""}`}>
       <div className="flex items-baseline justify-between gap-2">
         <p className="label">{label}</p>
         {badge ? <span className="text-[13px] font-semibold text-muted-foreground tabular-nums">{badge}</span> : null}
@@ -133,7 +137,7 @@ function Figure({ label, value, foot, badge, tone, className, chart }: { label: 
       <Fit text={value} className={`figure mt-2 text-[length:min(1.25rem,var(--fit))] leading-tight sm:text-[length:min(1.5rem,var(--fit))] 2xl:text-[length:min(28px,var(--fit))] ${tone ?? "text-display"}`} />
       <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-[13px] text-muted-foreground">{foot}</div>
       {chart ? <div className="mt-4 flex min-h-8 flex-1 items-end">{chart}</div> : null}
-    </div>
+    </Link>
   );
 }
 
@@ -151,6 +155,7 @@ export function Overview({
   onPeriod,
   onLedger,
   onAdd,
+  onEdit,
   onSplit,
   onSample,
   onBalances,
@@ -166,8 +171,9 @@ export function Overview({
   /** The period shown. It lives in the URL; see readDashboardState. */
   period: DashboardState;
   onPeriod: (next: DashboardState) => void;
-  onLedger: () => void;
+  onLedger: (href?: string) => void;
   onAdd: () => void;
+  onEdit: (transaction: TransactionDto) => void;
   onSplit: () => void;
   onSample: () => Promise<void>;
   onBalances: () => void;
@@ -190,14 +196,18 @@ export function Overview({
   const bounds = useMemo(() => dataBounds(rows, today), [rows, today]);
   const range = useMemo(() => rangeFor(kind, anchor, { custom, all: bounds }, style.calendar), [kind, anchor, custom, bounds, style.calendar]);
   const stats = useMemo(() => computeStats(rows, range, today, style), [rows, range, today, style]);
-  const previous = useMemo(() => (kind === "all" ? null : computeStats(rows, previousRange(kind, range, style.calendar), today, style)), [rows, kind, range, today, style]);
-  const accounts = useMemo(() => accountBalances(rows, ledgerAccounts), [rows, ledgerAccounts]);
+  const comparison = useMemo(() => comparisonRanges(kind, range, today, style.calendar), [kind, range, today, style.calendar]);
+  const currentComparison = useMemo(() => comparison ? computeStats(rows, comparison.current, today, style) : null, [rows, comparison, today, style]);
+  const previous = useMemo(() => comparison ? computeStats(rows, comparison.previous, today, style) : null, [rows, comparison, today, style]);
+  const chartPrevious = useMemo(() => comparison && stats.granularity === "day" ? computeStats(rows, previousRange(kind, range, style.calendar), today, style).series : undefined, [rows, comparison, stats.granularity, kind, range, today, style]);
+  const accounts = useMemo(() => accountBalances(rows.filter((row) => row.date <= today), ledgerAccounts), [rows, today, ledgerAccounts]);
   const trail = useMemo(() => balanceTrail(rows, stats.series, stats.range.end, today), [rows, stats, today]);
   const colors = useMemo(() => new Map(categories.map((category) => [category.name, category.color])), [categories]);
 
   const label = describeRange(kind, range, style);
   const stepping = kind === "week" || kind === "month" || kind === "year";
-  const compare = compareLabels[kind];
+  const compare = `${compareLabels[kind]}${comparison?.partial ? " (matched dates)" : ""}`;
+  const ledgerHref = (filters: Partial<LedgerFilters> = {}, allTime = false) => `/ledger${ledgerQuery({ ...EMPTY_LEDGER_FILTERS, ...(!allTime ? { from: range.start, to: range.end } : {}), ...filters })}`;
 
   if (transactions.length === 0) {
     return (
@@ -219,7 +229,7 @@ export function Overview({
             disabled={sampling}
             onClick={() => {
               setSampling(true);
-              void onSample().finally(() => setSampling(false));
+              void onSample().catch((caught) => toast.error(caught instanceof Error ? caught.message : "Could not load the sample week. Try again.")).finally(() => setSampling(false));
             }}
           >
             {sampling ? "Loading sample" : "Load sample week"}
@@ -234,34 +244,23 @@ export function Overview({
 
   // What you have: every credit minus every expense, across all accounts and all time.
   const balance = accounts.reduce((total, account) => total + account.balance, 0);
-  const balanceText = `${balance < 0 ? "−" : ""}${formatAmount(balance)}`;
+  const balanceText = `${balance < 0 ? "−" : ""}${formatAmount(Math.abs(balance))}`;
   const tileFigure = "figure mt-1.5 text-[length:min(1.125rem,var(--fit))] leading-snug";
   // Opening balance is the first close minus that bucket's own movement.
   const first = stats.series[0];
   const lived = stats.series.filter((bucket) => bucket.key <= today).length;
   const trailMove = trail.length > 0 && first ? trail.at(-1)!.balance - (trail[0]!.balance - (first.credits - first.spent)) : null;
   const holdings = accounts.filter((account) => account.balance > 0).sort((a, b) => b.balance - a.balance);
-  const owe = book ? sum(book.overall.youOwe) + book.joinedGroups.reduce((total, group) => total + sum(group.balances.youOwe), 0) : null;
-  const owed = book ? sum(book.overall.youAreOwed) + book.joinedGroups.reduce((total, group) => total + sum(group.balances.youAreOwed), 0) : null;
+  const debts = book ? dashboardDebts(book) : [];
+  const owe = book ? debts.filter((debt) => !debt.incoming).reduce((total, debt) => total + debt.amount, 0) : null;
+  const owed = book ? debts.filter((debt) => debt.incoming).reduce((total, debt) => total + debt.amount, 0) : null;
   const afterSplits = owe == null || owed == null ? null : balance + owed - owe;
-
-  const people = new Map<string, number>();
-  if (book) {
-    const scopes = [book.overall, ...book.joinedGroups.map((group) => group.balances)];
-    for (const scope of scopes) {
-      for (const debt of scope.youAreOwed) people.set(debt.fromName, (people.get(debt.fromName) ?? 0) + debt.amount);
-      for (const debt of scope.youOwe) people.set(debt.toName, (people.get(debt.toName) ?? 0) - debt.amount);
-    }
-  }
-  const peopleRows = [...people.entries()]
-    .filter(([, net]) => Math.abs(net) >= 0.005)
-    .sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]))
-    .slice(0, 5);
+  const peopleRows = debts.slice(0, 5);
 
   const groupRows = book
     ? [
-        ...book.groups.filter((group) => group.kind === "group").map((group) => ({ id: group.id, name: group.name, members: group.members.length, net: sum(group.balances.youAreOwed) - sum(group.balances.youOwe) })),
-        ...book.joinedGroups.filter((group) => group.kind === "group").map((group) => ({ id: group.id, name: group.name, members: group.members.length, net: sum(group.balances.youAreOwed) - sum(group.balances.youOwe) })),
+        ...book.groups.filter((group) => group.kind === "group").map((group) => ({ id: group.id, name: group.name, members: group.members.length, open: sum(group.balances.youAreOwed) + sum(group.balances.youOwe) >= 0.005, net: sum(group.balances.youAreOwed) - sum(group.balances.youOwe) })),
+        ...book.joinedGroups.filter((group) => group.kind === "group").map((group) => ({ id: group.id, name: group.name, members: group.members.length, open: sum(group.balances.youAreOwed) + sum(group.balances.youOwe) >= 0.005, net: sum(group.balances.youAreOwed) - sum(group.balances.youOwe) })),
       ]
     : [];
 
@@ -281,8 +280,8 @@ export function Overview({
   const activeSlice = donutSlices.find((item) => item.name === slice);
   const before = new Map(previous?.byCategory.map((item) => [item.category, item.amount]) ?? []);
 
-  const spentChange = previous ? change(stats.spent, previous.spent) : null;
-  const creditChange = previous ? change(stats.credits, previous.credits) : null;
+  const spentChange = previous && currentComparison ? change(currentComparison.spent, previous.spent) : null;
+  const creditChange = previous && currentComparison ? change(currentComparison.credits, previous.credits) : null;
   const maxAccount = Math.max(...accounts.map((account) => Math.abs(account.balance)), 1);
 
   const insights: { tone: "good" | "warn" | "info"; text: string }[] = [];
@@ -295,7 +294,7 @@ export function Overview({
   else if (stats.credits === 0 && stats.spent > 0) insights.push({ tone: "info", text: "Nothing came in this period, so every rupee spent came out of savings." });
   const top = stats.byCategory[0];
   if (top) insights.push({ tone: "info", text: `${top.category} is your biggest category at ${Math.round(top.share * 100)}% of spending.` });
-  if (stats.projected != null) insights.push({ tone: stats.projected > stats.spent * 1.5 ? "warn" : "info", text: `At ${formatNpr(Math.round(stats.avgDaily))} a day you will spend about ${formatNpr(Math.round(stats.projected))} by ${describeRange("custom", { start: stats.range.end, end: stats.range.end }, style)}.` });
+  if (stats.projected != null) insights.push({ tone: "info", text: `At ${formatNpr(Math.round(stats.avgDaily))} a day you will spend about ${formatNpr(Math.round(stats.projected))} by ${describeRange("custom", { start: stats.range.end, end: stats.range.end }, style)}.` });
   if (stats.biggest) insights.push({ tone: "info", text: `Biggest expense: ${stats.biggest.merchant}, ${formatNpr(stats.biggest.amount)} on ${dates.entry(stats.biggest.date)}.` });
   if (owed != null && owed > 0) insights.push({ tone: "good", text: `Friends owe you ${formatNpr(owed)}. Settle up to bring it in.` });
   if (owe != null && owe > 0) insights.push({ tone: "warn", text: `You owe ${formatNpr(owe)} to friends and groups.` });
@@ -394,15 +393,16 @@ export function Overview({
         </section>
 
         <section className="grid grid-cols-2 rounded-3xl bg-card shadow-card sm:grid-cols-3 xl:col-span-8 2xl:col-span-9">
-          <Figure className="border-r" label="Money in" value={formatNpr(stats.credits)} chart={<MicroBars values={stats.series.map((bucket) => bucket.credits)} tone="credit" lived={lived} />} foot={<><Delta value={creditChange} good="up" /> {compare && creditChange != null ? `vs ${compare}` : `${stats.creditCount} ${stats.creditCount === 1 ? "entry" : "entries"}`}</>} />
-          <Figure className="sm:border-r" label="Money out" value={formatNpr(stats.spent)} chart={<MicroBars values={stats.series.map((bucket) => bucket.spent)} tone="brand" lived={lived} />} foot={<><Delta value={spentChange} good="down" /> {compare && spentChange != null ? `vs ${compare}` : `${stats.expenseCount} ${stats.expenseCount === 1 ? "expense" : "expenses"}`}</>} />
+          <Figure href={ledgerHref({ type: "credit" })} className="border-r" label="Money in" value={formatNpr(stats.credits)} chart={<MicroBars values={stats.series.map((bucket) => bucket.credits)} tone="credit" lived={lived} />} foot={<><Delta value={creditChange} good="up" /> {compare && creditChange != null ? `vs ${compare}` : `${stats.creditCount} ${stats.creditCount === 1 ? "entry" : "entries"}`}</>} />
+          <Figure href={ledgerHref({ type: "expense" })} className="sm:border-r" label="Money out" value={formatNpr(stats.spent)} chart={<MicroBars values={stats.series.map((bucket) => bucket.spent)} tone="brand" lived={lived} />} foot={<><Delta value={spentChange} good="down" /> {compare && spentChange != null ? `vs ${compare}` : `${stats.expenseCount} ${stats.expenseCount === 1 ? "expense" : "expenses"}`}</>} />
           <Figure
+            href={ledgerHref()}
             className="col-span-2 border-t sm:col-span-1 sm:border-t-0"
             label="Kept"
             value={formatNpr(stats.net)}
             tone={stats.net < 0 ? "text-negative" : undefined}
-            badge={stats.savingsRate == null ? undefined : stats.savingsRate < 0 ? `Spent ${Math.round((stats.spent / stats.credits) * 100)}% of income` : `${Math.round(stats.savingsRate * 100)}% of income`}
-            foot={stats.credits === 0 ? "No money in yet" : stats.net < 0 ? "Spending is above income" : "Money in minus money out"}
+            badge={stats.savingsRate == null ? undefined : stats.savingsRate < 0 ? `Spent ${Math.round((stats.spent / stats.credits) * 100)}% of money in` : `${Math.round(stats.savingsRate * 100)}% of money in`}
+            foot={stats.credits === 0 ? "No money in yet" : stats.net < 0 ? "Spending is above money in" : "Money in minus money out"}
             chart={<SegmentBar size="compact" tone={stats.net < 0 ? "over" : "neutral"} value={stats.savingsRate == null ? 0 : stats.net < 0 ? 1 : stats.savingsRate} />}
           />
         </section>
@@ -414,7 +414,7 @@ export function Overview({
             <CardHead title="Cash flow" hint={stats.granularity === "day" ? "Spending by day, or how it is pacing" : "Spending by month, or how it is pacing"} />
           </div>
           <div className="mt-3">
-            <CashFlowChart buckets={stats.series} previous={previous?.series} compareLabel={compare || undefined} today={today} average={stats.granularity === "day" ? stats.avgDaily : undefined} />
+            <CashFlowChart buckets={stats.series} previous={chartPrevious} compareLabel={compareLabels[kind] || undefined} today={today} average={stats.granularity === "day" ? stats.avgDaily : undefined} />
           </div>
           <dl className="mt-4 grid grid-cols-2 gap-x-6 gap-y-3 border-t border-border pt-4 sm:grid-cols-4">
             <div className="@container min-w-0">
@@ -476,6 +476,7 @@ export function Overview({
                       <button
                         type="button"
                         className={`w-full rounded-xl px-2 py-1.5 text-left transition-[background-color,opacity] duration-200 outline-none focus-visible:ring-2 focus-visible:ring-ring ${slice === item.name ? "bg-secondary" : ""} ${dim ? "opacity-45" : ""}`}
+                        onClick={() => onLedger(ledgerHref({ type: "expense", ...(item.name !== "Everything else" ? { category: item.name } : {}) }))}
                         onPointerEnter={() => setSlice(item.name)}
                         onFocus={() => setSlice(item.name)}
                         onBlur={() => setSlice(null)}
@@ -489,7 +490,7 @@ export function Overview({
                           <span className="block h-1 min-w-0 flex-1 overflow-hidden rounded-full bg-secondary" aria-hidden>
                             <span className="block h-full rounded-full" style={{ width: `${Math.max(share * 100, 2)}%`, background: item.color }} />
                           </span>
-                          <CategoryDelta now={item.value} before={before.get(item.name)} hasPrevious={previous != null && item.name !== "Everything else"} />
+                          <CategoryDelta now={currentComparison?.byCategory.find((category) => category.category === item.name)?.amount ?? 0} before={before.get(item.name)} hasPrevious={previous != null && item.name !== "Everything else"} />
                           <span className="w-9 shrink-0 text-right text-[13px] font-semibold text-muted-foreground tabular-nums">{Math.round(share * 100)}%</span>
                         </span>
                       </button>
@@ -530,16 +531,18 @@ export function Overview({
                 </div>
               ) : (
                 <ul className="mt-4 divide-y divide-border">
-                  {peopleRows.map(([name, net]) => (
-                    <li key={name} className="flex items-center gap-3 py-3">
-                      <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-secondary text-[13px] font-semibold text-foreground" aria-hidden>
-                        {initials(name)}
-                      </span>
-                      <span className="min-w-0 flex-1">
-                        <span className="block truncate text-[15px] font-semibold text-display">{name}</span>
-                        <span className="block text-[13px] text-muted-foreground">{net > 0 ? "owes you" : "you owe"}</span>
-                      </span>
-                      <span className={`figure shrink-0 text-[15px] ${net > 0 ? "text-credit" : "text-warning"}`}>{formatNpr(Math.abs(net))}</span>
+                  {peopleRows.map((person) => (
+                    <li key={person.key}>
+                      <Link href={person.href} className="flex items-center gap-3 py-3 outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                        <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-secondary text-[13px] font-semibold text-foreground" aria-hidden>
+                          {initials(person.name)}
+                        </span>
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate text-[15px] font-semibold text-display">{person.name}</span>
+                          <span className="block text-[13px] text-muted-foreground">{person.incoming ? "owes you" : "you owe"}</span>
+                        </span>
+                        <span className={`figure shrink-0 text-[15px] ${person.incoming ? "text-credit" : "text-warning"}`}>{formatNpr(person.amount)}</span>
+                      </Link>
                     </li>
                   ))}
                 </ul>
@@ -564,13 +567,13 @@ export function Overview({
             <ul className="mt-4 flex flex-col gap-4">
               {accounts.map((account) => (
                 <li key={account.account}>
-                  <div className="flex items-baseline justify-between gap-3">
+                  <Link href={ledgerHref({ account: account.account, to: today }, true)} className="flex items-baseline justify-between gap-3 outline-none focus-visible:ring-2 focus-visible:ring-ring">
                     <span className="min-w-0 truncate text-[15px] font-semibold text-display">{account.account}</span>
                     <span className={`figure shrink-0 text-[15px] ${account.balance < 0 ? "text-negative" : "text-display"}`}>
                       {account.balance < 0 ? "−" : ""}
                       {formatNpr(Math.abs(account.balance))}
                     </span>
-                  </div>
+                  </Link>
                   <SegmentBar className="mt-2" size="compact" tone={account.balance < 0 ? "over" : "neutral"} value={Math.abs(account.balance) / maxAccount} />
                   <p className="mt-1.5 text-[13px] text-muted-foreground">
                     {formatNpr(account.credits)} in · {formatNpr(account.spent)} out
@@ -603,25 +606,27 @@ export function Overview({
 
       <div className="grid grid-cols-1 gap-3 xl:grid-cols-12 2xl:gap-4">
         <section className="rounded-3xl bg-card shadow-card p-4 sm:p-5 2xl:p-6 xl:col-span-7">
-          <CardHead title={inPeriod.length ? "Recent transactions" : "Latest transactions"} hint={inPeriod.length ? "In this period" : "Nothing in this period yet"} action="See all" onAction={onLedger} />
+          <CardHead title={inPeriod.length ? "Recent transactions" : "Latest transactions"} hint={inPeriod.length ? "In this period" : "Nothing in this period yet"} action="See all" onAction={() => onLedger(ledgerHref({}, !inPeriod.length))} />
           <ul className="mt-3 divide-y divide-border">
             {recent.map((transaction) => {
               const incoming = transaction.type !== "expense";
               return (
-                <li key={transaction.id} className="flex items-center gap-3 py-2.5">
-                  <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-secondary text-[13px] font-semibold text-foreground" aria-hidden>
-                    {initials(transaction.merchant)}
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-[15px] font-semibold text-display">{transaction.merchant}</span>
-                    <span className="mt-0.5 block truncate text-[13px] text-muted-foreground">
-                      {transaction.category} · {transaction.account}
+                <li key={transaction.id}>
+                  <button type="button" onClick={() => onEdit(transaction)} className="flex w-full items-center gap-3 py-2.5 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                    <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-secondary text-[13px] font-semibold text-foreground" aria-hidden>
+                      {initials(transaction.merchant)}
                     </span>
-                  </span>
-                  <span className="deva hidden w-36 shrink-0 text-right text-[13px] text-muted-foreground sm:block">{dates.entry(transaction.date)}</span>
-                  <span className={incoming ? "figure min-w-32 shrink-0 text-right text-[15px] whitespace-nowrap text-credit" : "figure min-w-32 shrink-0 text-right text-[15px] whitespace-nowrap text-display"}>
-                    {formatNpr(transaction.amount, incoming ? "in" : "out")}
-                  </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-[15px] font-semibold text-display">{transaction.merchant}</span>
+                      <span className="mt-0.5 block truncate text-[13px] text-muted-foreground">
+                        {transaction.category} · {transaction.account}
+                      </span>
+                    </span>
+                    <span className="deva hidden w-36 shrink-0 text-right text-[13px] text-muted-foreground sm:block">{dates.entry(transaction.date)}</span>
+                    <span className={incoming ? "figure min-w-32 shrink-0 text-right text-[15px] whitespace-nowrap text-credit" : "figure min-w-32 shrink-0 text-right text-[15px] whitespace-nowrap text-display"}>
+                      {formatNpr(transaction.amount, incoming ? "in" : "out")}
+                    </span>
+                  </button>
                 </li>
               );
             })}
@@ -639,13 +644,13 @@ export function Overview({
               <ul className="mt-4 flex flex-col gap-3">
                 {stats.topMerchants.map((merchant) => (
                   <li key={merchant.merchant}>
-                    <div className="flex items-baseline justify-between gap-3">
+                    <Link href={ledgerHref({ merchant: merchant.merchant, type: "expense" })} className="flex items-baseline justify-between gap-3 outline-none focus-visible:ring-2 focus-visible:ring-ring">
                       <span className="flex min-w-0 items-baseline gap-2">
                         <span className="truncate text-[15px] font-semibold text-display">{merchant.merchant}</span>
                         <span className="shrink-0 text-[13px] font-medium text-muted-foreground">{merchant.count}×</span>
                       </span>
                       <span className="figure shrink-0 text-[15px] text-display">{formatNpr(merchant.amount)}</span>
-                    </div>
+                    </Link>
                     <SegmentBar className="mt-2" size="compact" value={maxMerchant ? merchant.amount / maxMerchant : 0} />
                   </li>
                 ))}
@@ -660,7 +665,8 @@ export function Overview({
             ) : (
               <ul className="mt-3 divide-y divide-border">
                 {groupRows.slice(0, 4).map((group) => (
-                  <li key={group.id} className="flex items-center gap-3 py-3">
+                  <li key={group.id}>
+                    <Link href={`/groups/${encodeURIComponent(group.id)}`} className="flex items-center gap-3 py-3 outline-none focus-visible:ring-2 focus-visible:ring-ring">
                     <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-accent text-[13px] font-semibold text-accent-foreground" aria-hidden>
                       {initials(group.name)}
                     </span>
@@ -669,8 +675,9 @@ export function Overview({
                       <span className="block text-[13px] text-muted-foreground">{group.members} members</span>
                     </span>
                     <span className={`shrink-0 ${Math.abs(group.net) < 0.005 ? "text-[13px] font-medium text-muted-foreground" : group.net > 0 ? "figure text-sm text-credit" : "figure text-sm text-warning"}`}>
-                      {Math.abs(group.net) < 0.005 ? "Settled" : `${group.net > 0 ? "+" : "−"}${formatNpr(Math.abs(group.net))}`}
+                      {Math.abs(group.net) < 0.005 ? (group.open ? "Payments to settle" : "Settled") : `${group.net > 0 ? "+" : "−"}${formatNpr(Math.abs(group.net))}`}
                     </span>
+                    </Link>
                   </li>
                 ))}
               </ul>

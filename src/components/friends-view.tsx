@@ -2,7 +2,7 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import { cn } from "cn";
-import { Plus, Search, Send, UserPlus, UsersRound } from "lucide-react";
+import { ChevronRight, Plus, Send, UserPlus, UsersRound } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useForm, useWatch } from "react-hook-form";
@@ -10,9 +10,10 @@ import { z } from "zod";
 import { InviteDialog, type InviteActions } from "@/components/invite-dialog";
 import { PageHeader } from "@/components/page-header";
 import { FriendDetail } from "@/components/splits/friend-detail";
-import { accountNote, friendEntries, friendPosition, type FriendEntry } from "@/components/splits/friend-entries";
+import { accountNote, friendBalanceTotals, friendEntries, friendHasOpenBalance, type FriendEntry } from "@/components/splits/friend-entries";
+import { DirectoryControls, DirectoryEmpty, type DirectoryFilter, type DirectorySort } from "@/components/splits/directory-controls";
 import { SETTLED, type Settlement } from "@/components/splits/ledger-math";
-import { BalanceStrip, EmptyNote, PersonAvatar, SplitCard, SplitCardHead } from "@/components/splits-ui";
+import { BalanceStrip, NetStack, PersonAvatar, SplitCard, SplitCardHead } from "@/components/splits-ui";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
@@ -24,9 +25,6 @@ import { toast } from "@/lib/status";
 type Person = ShareBook["people"][number];
 type Debt = BalanceScope["youOwe"][number];
 type Expense = ShareBook["expenses"][number];
-
-/** Show a search box once the list is long enough to need one. */
-const SEARCH_FROM = 7;
 
 const friendFormSchema = z.object({
   name: z.string().trim().min(1, "Give them a name").max(80, "Name is limited to 80 characters"),
@@ -73,11 +71,12 @@ export function FriendsView({
   inviteActions: InviteActions;
 }) {
   const entries = friendEntries(book);
-  // On a wide screen /friends still shows a friend beside the list; phones show only the list there.
-  const selected = entries.find((entry) => entry.id === selectedId) ?? entries[0];
   /** Phones show one pane at a time: the list, or the friend picked from it. */
   const showDetail = selectedId != null;
   const [query, setQuery] = useState("");
+  const [filter, setFilter] = useState<DirectoryFilter>("all");
+  const [sort, setSort] = useState<DirectorySort>("balance");
+  const [startingExpense, setStartingExpense] = useState(false);
 
   const [editing, setEditing] = useState<Person | "new" | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -111,15 +110,15 @@ export function FriendsView({
 
   const email = useWatch({ control: form.control, name: "email" });
 
-  const owedTotal = entries.reduce((total, entry) => total + Math.max(entry.net, 0), 0);
-  const oweTotal = entries.reduce((total, entry) => total + Math.max(-entry.net, 0), 0);
-  // The headline third cell used to be "Friends · 3 · 0 on Khata". Whether a friend
-  // has their own account is already shown next to their name in the detail pane, and
-  // as a headline it was a number nobody could act on. This one answers the only
-  // question this page raises: is there anything to settle?
-  const toSettle = entries.filter((entry) => Math.abs(entry.net) >= SETTLED).length;
+  const owedTotal = entries.reduce((total, entry) => total + friendBalanceTotals(entry).owed, 0);
+  const oweTotal = entries.reduce((total, entry) => total + friendBalanceTotals(entry).owe, 0);
+  const toSettle = entries.filter(friendHasOpenBalance).length;
   const needle = query.trim().toLowerCase();
-  const visible = needle ? entries.filter((entry) => entry.friend.name.toLowerCase().includes(needle)) : entries;
+  const latest = (entry: FriendEntry) => [...entry.expenses, ...entry.settlements].reduce((date, item) => item.date > date ? item.date : date, "");
+  const balanceSize = (entry: FriendEntry) => Math.max(friendBalanceTotals(entry).owed, friendBalanceTotals(entry).owe);
+  const visible = entries.filter((entry) => (!needle || entry.friend.name.toLowerCase().includes(needle)) && (filter === "all" || (filter === "open" ? friendHasOpenBalance(entry) : !friendHasOpenBalance(entry)))).sort((a, b) => sort === "name" ? a.friend.name.localeCompare(b.friend.name) : sort === "recent" ? latest(b).localeCompare(latest(a)) || a.friend.name.localeCompare(b.friend.name) : balanceSize(b) - balanceSize(a) || a.friend.name.localeCompare(b.friend.name));
+  const selected = selectedId ? entries.find((entry) => entry.id === selectedId) : visible[0];
+  function resetDirectory() { setQuery(""); setFilter("all"); }
 
   function startEdit(target: Person | "new") {
     setEditing(target);
@@ -152,11 +151,15 @@ export function FriendsView({
   }
 
   async function expenseWith(entry: FriendEntry) {
+    if (startingExpense) return;
+    setStartingExpense(true);
     try {
       const id = entry.directId ?? (await inviteActions.ensureDirect(entry.friend.id));
       onAddExpense(id);
     } catch (caught) {
       toast.error(caught instanceof Error ? caught.message : "Could not start an expense with that friend.");
+    } finally {
+      setStartingExpense(false);
     }
   }
 
@@ -176,11 +179,12 @@ export function FriendsView({
   }
 
   return (
-    <div className="rise flex flex-col gap-6">
+    <div className="flex flex-col gap-6">
       <PageHeader
-        eyebrow="Splits"
+        eyebrow={null}
         title="Friends"
-        description="Split one-to-one without making a group. Invite a friend and you both see the same expenses."
+        className={showDetail ? "hidden lg:flex" : undefined}
+        description="Every shared expense. Every friend. See where you stand and settle up."
         actions={
           <>
             <Button type="button" variant="outline" className="bg-card shadow-card" onClick={onGroups}>
@@ -203,8 +207,8 @@ export function FriendsView({
             <BalanceStrip
               owed={owedTotal}
               owe={oweTotal}
-              owedHint={plural(entries.filter((entry) => entry.net >= SETTLED).length, "from", "friend")}
-              oweHint={plural(entries.filter((entry) => entry.net <= -SETTLED).length, "to", "friend")}
+              owedHint={plural(entries.filter((entry) => friendBalanceTotals(entry).owed >= SETTLED).length, "from", "friend")}
+              oweHint={plural(entries.filter((entry) => friendBalanceTotals(entry).owe >= SETTLED).length, "to", "friend")}
               third={{
                 label: "To settle",
                 value: toSettle,
@@ -213,21 +217,18 @@ export function FriendsView({
             />
           </div>
 
-          <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(17rem,22rem)_minmax(0,1fr)] lg:items-start 2xl:gap-4">
+          <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(18rem,21rem)_minmax(0,1fr)] lg:items-start">
             <SplitCard className={cn("lg:sticky lg:top-6", showDetail && "hidden lg:block")}>
-              <SplitCardHead title="Everyone" hint={`${entries.length} ${entries.length === 1 ? "friend" : "friends"} · who owes you first`} />
-              {entries.length >= SEARCH_FROM ? (
-                <div className="relative mt-3">
-                  <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
-                  <Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Find a friend" aria-label="Find a friend" className="h-10 pl-9" />
-                </div>
-              ) : null}
-              <ul className="-mx-2 mt-2 flex flex-col">
+              <SplitCardHead title="Your friends" hint={`${entries.length} ${entries.length === 1 ? "friend" : "friends"}`}>
+                <Button type="button" variant="outline" size="icon-sm" aria-label="Add friend" onClick={() => startEdit("new")}><UserPlus /></Button>
+              </SplitCardHead>
+              <DirectoryControls noun="friends" query={query} onQuery={setQuery} filter={filter} onFilter={setFilter} sort={sort} onSort={setSort} counts={{ all: entries.length, open: toSettle, settled: entries.length - toSettle }} />
+              <ul aria-label="Friends" className="-mx-2 mt-2 flex flex-col lg:max-h-[60vh] lg:overflow-y-auto">
                 {visible.map((entry) => (
                   <FriendRow key={`${entry.own ? "own" : "joined"}:${entry.id}`} entry={entry} active={entry.id === selected?.id} />
                 ))}
-                {visible.length === 0 ? <EmptyNote>No friend matches “{query.trim()}”.</EmptyNote> : null}
               </ul>
+              {visible.length === 0 ? <DirectoryEmpty noun="friends" onReset={resetDirectory} /> : null}
             </SplitCard>
 
             {selected ? (
@@ -237,6 +238,7 @@ export function FriendsView({
                   entry={selected}
                   onSettle={onSettle}
                   onAddExpense={() => void expenseWith(selected)}
+                  addingExpense={startingExpense}
                   onEditExpense={onEditExpense}
                   onEditSettlement={onEditSettlement}
                   onRename={() => startEdit(selected.friend)}
@@ -244,12 +246,12 @@ export function FriendsView({
                   onRemove={() => setRemoving(selected.friend)}
                 />
               </div>
-            ) : null}
+            ) : selectedId ? <SplitCard><h2 className="text-lg font-semibold">Friend unavailable</h2><p className="mt-2 text-sm text-muted-foreground">This friend is no longer in your book.</p><Button variant="outline" className="mt-4" onClick={() => onSelect(null)}>All friends</Button></SplitCard> : <SplitCard className="hidden lg:block"><p className="py-12 text-center text-sm text-muted-foreground">Choose a friend to see your shared expenses.</p></SplitCard>}
           </div>
         </div>
       )}
 
-      <Dialog open={editing !== null} onOpenChange={(next) => !next && setEditing(null)}>
+      <Dialog open={editing !== null} onOpenChange={(next) => !pending && !next && setEditing(null)}>
         <DialogContent className="sm:max-w-sm">
           <DialogHeader>
             <DialogTitle>{editing === "new" ? "Add friend" : "Rename"}</DialogTitle>
@@ -265,7 +267,7 @@ export function FriendsView({
                     <FormItem>
                       <FormLabel>Name</FormLabel>
                       <FormControl>
-                        <Input autoFocus maxLength={80} required {...field} />
+                        <Input autoFocus autoComplete="name" placeholder="Your friend’s name" disabled={pending} maxLength={80} required {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -279,7 +281,7 @@ export function FriendsView({
                       <FormItem>
                         <FormLabel>Email (optional)</FormLabel>
                         <FormControl>
-                          <Input type="email" autoComplete="email" placeholder="friend@example.com" {...field} />
+                          <Input type="email" autoComplete="email" placeholder="friend@example.com" disabled={pending} {...field} />
                         </FormControl>
                         <FormDescription>With an email, the next step creates and emails their invite.</FormDescription>
                         <FormMessage />
@@ -290,8 +292,9 @@ export function FriendsView({
                 {error ? <FieldError>{error}</FieldError> : null}
               </FieldGroup>
               <DialogFooter className="mt-5">
+                <Button type="button" variant="outline" disabled={pending} onClick={() => setEditing(null)}>Cancel</Button>
                 <Button type="submit" disabled={pending}>
-                  {pending ? "Saving" : editing === "new" && email.trim() ? "Add and invite" : "Save"}
+                  {pending ? "Saving…" : editing === "new" ? email.trim() ? "Add and invite" : "Add friend" : "Save changes"}
                 </Button>
               </DialogFooter>
             </form>
@@ -299,14 +302,14 @@ export function FriendsView({
         </DialogContent>
       </Dialog>
 
-      <Dialog open={removing !== null} onOpenChange={(next) => !next && setRemoving(null)}>
+      <Dialog open={removing !== null} onOpenChange={(next) => !pending && !next && setRemoving(null)}>
         <DialogContent className="sm:max-w-sm">
           <DialogHeader>
             <DialogTitle>Remove {removing?.name}?</DialogTitle>
             <DialogDescription>They leave your friends list. If they are part of shared expenses, Khata keeps those and tells you why it cannot remove them.</DialogDescription>
           </DialogHeader>
           <DialogFooter className="mt-2">
-            <Button type="button" variant="outline" onClick={() => setRemoving(null)}>
+            <Button type="button" variant="outline" disabled={pending} onClick={() => setRemoving(null)}>
               Keep
             </Button>
             <Button type="button" variant="destructive" disabled={pending} onClick={() => void confirmRemove()}>
@@ -360,7 +363,7 @@ function FirstSteps({ onAdd }: { onAdd: () => void }) {
 }
 
 function FriendRow({ entry, active }: { entry: FriendEntry; active: boolean }) {
-  const position = friendPosition(entry.net);
+  const offsetting = Math.abs(entry.net) < SETTLED && friendHasOpenBalance(entry);
   return (
     <li>
       <Link
@@ -368,18 +371,17 @@ function FriendRow({ entry, active }: { entry: FriendEntry; active: boolean }) {
         scroll={false}
         aria-current={active ? "page" : undefined}
         className={cn(
-          "flex w-full items-center gap-3 rounded-2xl px-2 py-3 text-left transition-colors duration-200 outline-none focus-visible:ring-2 focus-visible:ring-ring",
+          "group flex w-full items-center gap-3 rounded-xl px-2 py-3.5 text-left transition-colors duration-200 outline-none focus-visible:ring-2 focus-visible:ring-ring",
           active ? "lg:bg-accent" : "hover:bg-secondary",
         )}
       >
         <PersonAvatar name={entry.friend.name} tone={active ? "brand" : "neutral"} linked={!entry.own || entry.friend.linkedUserId != null} />
         <span className="min-w-0 flex-1">
           <span className={cn("block truncate text-[15px] text-display", active ? "font-semibold" : "font-medium")}>{entry.friend.name}</span>
-          <span className="mt-0.5 block truncate text-[13px]">
-            <span className={cn("font-medium", position.tone)}>{position.text}</span>
-            {Math.abs(entry.net) < SETTLED ? <span className="text-disabled"> · {accountNote(entry)}</span> : null}
-          </span>
+          <span className="mt-1 block truncate text-xs text-muted-foreground">{accountNote(entry)}</span>
         </span>
+        {offsetting ? <span className="shrink-0 text-xs font-medium text-warning">To settle</span> : <NetStack value={entry.net} />}
+        <ChevronRight className="size-3.5 shrink-0 text-muted-foreground lg:hidden" aria-hidden />
       </Link>
     </li>
   );

@@ -59,6 +59,20 @@ export function previousRange(kind: RangeKind, range: DateRange, calendar: Calen
   return { start: addDays(range.start, -length), end: addDays(range.start, -1) };
 }
 
+/** Compare elapsed days with elapsed days, including in calendars with unequal months. */
+export function comparisonRanges(kind: RangeKind, range: DateRange, today: string, calendar: CalendarKind = "AD") {
+  if (kind === "all" || range.start > today) return null;
+  const before = previousRange(kind, range, calendar);
+  if (range.end <= today) return { current: range, previous: before, partial: false };
+  // A shorter preceding month limits both sides to the same number of days.
+  const days = Math.min(daysBetween(range.start, today), daysBetween(before.start, before.end));
+  return {
+    current: { start: range.start, end: addDays(range.start, days - 1) },
+    previous: { start: before.start, end: addDays(before.start, days - 1) },
+    partial: true,
+  };
+}
+
 /** A human label for a range: "5 – 11 Oct 2026", "October 2026", "2026"; BS reads "Ashwin 2083". */
 export function describeRange(kind: RangeKind, range: DateRange, style: DateStyle = AD_STYLE) {
   const from = dateView(range.start, style);
@@ -185,7 +199,8 @@ export function computeStats(rows: Money[], range: DateRange, today: string, sty
 
   const elapsedEnd = today < range.end ? today : range.end;
   const elapsed = elapsedEnd < range.start ? 0 : daysBetween(range.start, elapsedEnd);
-  const avgDaily = elapsed > 0 ? roundMoney(spent / elapsed) : 0;
+  const spentToDate = total(expenses.filter((row) => row.date <= today));
+  const avgDaily = elapsed > 0 ? roundMoney(spentToDate / elapsed) : 0;
   const remaining = days - elapsed;
 
   const { granularity, series } = buildSeries(expenses, creditRows, range, style);
@@ -202,7 +217,7 @@ export function computeStats(rows: Money[], range: DateRange, today: string, sty
     expenseCount: expenses.length,
     creditCount: creditRows.length,
     avgDaily,
-    projected: remaining > 0 && elapsed > 0 ? roundMoney(spent + avgDaily * remaining) : null,
+    projected: remaining > 0 && elapsed > 0 ? roundMoney(spentToDate + avgDaily * remaining) : null,
     biggest: expenses.reduce<Money | null>((best, row) => (!best || row.amount > best.amount ? row : best), null),
     byCategory: [...categories.entries()]
       .map(([category, value]) => ({ category, ...value, share: spent > 0 ? value.amount / spent : 0 }))

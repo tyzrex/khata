@@ -6,6 +6,7 @@ import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
 import { ExpenseFeed } from "@/components/splits/expense-feed";
+import { DetailTabs } from "@/components/splits/detail-tabs";
 import { GroupFeedFilterBar, useGroupFeedFilters } from "@/components/splits/group-feed-filters";
 import { feedOf, memberLines, SETTLED, totalsFor, type Expense, type Person, type Settlement } from "@/components/splits/ledger-math";
 import { toast } from "@/lib/status";
@@ -50,12 +51,6 @@ export function groupViewOf(book: ShareBook, entry: GroupEntry): GroupView {
     expenses: owned ? book.expenses.filter((expense) => expense.groupId === group.id) : entry.group.expenses,
     settlements: owned ? book.settlements.filter((settlement) => settlement.groupId === group.id) : entry.group.settlements,
   };
-}
-
-/** "you are owed NPR 1,200", "you owe NPR 300", or "settled up". */
-export function positionWords(net: number) {
-  if (Math.abs(net) < SETTLED) return { text: "settled up", tone: "text-muted-foreground" };
-  return net > 0 ? { text: `you are owed ${formatNpr(net)}`, tone: "text-credit" } : { text: `you owe ${formatNpr(-net)}`, tone: "text-warning" };
 }
 
 const TABS = [
@@ -111,9 +106,11 @@ export function GroupDetail({
   const [leaving, setLeaving] = useState(false);
   const [leaveError, setLeaveError] = useState<string | null>(null);
   const { youOwe, youAreOwed } = group.balances;
-  const yourDebts = [...youOwe, ...youAreOwed];
+  const yourDebts = [...youOwe, ...youAreOwed].filter((debt) => debt.amount >= SETTLED);
   const owner = group.entry.kind === "owned" ? "You manage this group" : `Owned by ${group.entry.group.ownerName}`;
-  const settled = Math.abs(group.net) < SETTLED;
+  const settled = yourDebts.length === 0;
+  const offsetting = !settled && Math.abs(group.net) < SETTLED;
+  const totals = totalsFor(group.expenses, group.selfId);
 
   function settleUp() {
     // One open balance: go straight to paying it. Several: show who, so the person picks.
@@ -136,8 +133,8 @@ export function GroupDetail({
   }
 
   return (
-    <div className="flex min-w-0 flex-col gap-3 2xl:gap-4">
-      <SplitCard className="overflow-hidden p-0 sm:p-0 2xl:p-0">
+    <div className="flex min-w-0 flex-col gap-5">
+      <SplitCard className="@container overflow-hidden p-0 sm:p-0 2xl:p-0">
         <div className="p-4 sm:p-5 2xl:p-6">
           <Link
             href={backHref}
@@ -150,7 +147,7 @@ export function GroupDetail({
             <div className="flex min-w-0 items-center gap-4">
               <GroupTile name={group.name} size="lg" />
               <div className="min-w-0">
-                <h2 className="truncate text-xl font-semibold tracking-[-0.02em] text-display sm:text-2xl">{group.name}</h2>
+                <h2 className="break-words text-xl font-semibold tracking-[-0.02em] text-display sm:text-2xl">{group.name}</h2>
                 <p className="mt-0.5 truncate text-[13px] text-muted-foreground">
                   {group.members.length} {group.members.length === 1 ? "person" : "people"} · {owner}
                 </p>
@@ -183,7 +180,7 @@ export function GroupDetail({
             {group.members.map((member) => (
               <li key={member.id} className="flex items-center gap-1.5 rounded-full bg-secondary py-0.5 pr-2.5 pl-0.5 text-[13px] font-medium text-foreground">
                 <PersonAvatar name={member.name} size="sm" tone={member.id === group.selfId ? "brand" : "neutral"} linked={member.linkedUserId != null && member.id !== group.selfId} />
-                {member.id === group.selfId ? "You" : member.name}
+                <span className="max-w-40 truncate" title={member.name}>{member.id === group.selfId ? "You" : member.name}</span>
               </li>
             ))}
           </ul>
@@ -209,19 +206,19 @@ export function GroupDetail({
           ) : null}
         </div>
 
-        <div className={cn("flex flex-col gap-4 border-t border-border px-4 py-4 sm:flex-row sm:items-end sm:justify-between sm:px-5 2xl:px-6", settled ? "bg-secondary/50" : group.net > 0 ? "bg-credit/6" : "bg-warning/6")}>
+        <div className={cn("flex flex-col gap-4 border-t border-border px-4 py-5 sm:px-5 @min-[720px]:flex-row @min-[720px]:items-end @min-[720px]:justify-between 2xl:px-6", settled ? "bg-secondary/50" : group.net > 0 ? "bg-credit/6" : "bg-warning/6")}>
           <div className="min-w-0">
             <p className={cn("text-[13px] font-medium", settled ? "text-muted-foreground" : group.net > 0 ? "text-credit" : "text-warning")}>
-              {settled ? "You are settled up" : group.net > 0 ? "You are owed" : "You owe"}
+              {settled ? "You are settled up" : offsetting ? "Payments still to settle" : group.net > 0 ? "You are owed" : "You owe"}
             </p>
             {settled ? (
               <p className="display mt-1 text-[28px] leading-none text-display sm:text-[32px]">All square</p>
-            ) : (
+            ) : offsetting ? <p className="display mt-1 text-[28px] leading-none sm:text-[32px]">{yourDebts.length} open balances</p> : (
               <p className={cn("figure mt-1 text-[32px] leading-none sm:text-[40px]", group.net > 0 ? "text-credit" : "text-warning")}>{formatNpr(Math.abs(group.net))}</p>
             )}
             {!settled && yourDebts.length > 1 ? <p className="mt-1.5 text-[13px] text-muted-foreground">Across {yourDebts.length} people in this group</p> : null}
           </div>
-          <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
+          <div className="grid grid-cols-2 gap-2 @min-[720px]:flex @min-[720px]:flex-wrap">
             <Button type="button" onClick={onAddExpense}>
               <Plus />
               Add expense
@@ -231,7 +228,7 @@ export function GroupDetail({
               Settle up
             </Button>
             {onInvite ? (
-              <Button type="button" variant="outline" className="col-span-2 bg-card sm:col-span-1" onClick={onInvite}>
+              <Button type="button" variant="outline" className="col-span-2 bg-card" onClick={onInvite}>
                 <Send />
                 Invite
               </Button>
@@ -239,34 +236,19 @@ export function GroupDetail({
           </div>
         </div>
 
-        <div role="tablist" aria-label={`${group.name} views`} className="flex gap-1 border-t border-border px-2 sm:px-3">
-          {TABS.map((item) => {
-            const active = item.id === tab;
-            return (
-              <button
-                key={item.id}
-                type="button"
-                role="tab"
-                id={`group-tab-${item.id}`}
-                aria-selected={active}
-                aria-controls={`group-panel-${item.id}`}
-                onClick={() => setTab(item.id)}
-                className={cn(
-                  "relative h-11 flex-1 rounded-t-lg px-3 text-[13px] font-semibold transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring sm:flex-none sm:px-4",
-                  active ? "text-display after:absolute after:inset-x-3 after:bottom-0 after:h-0.5 after:rounded-full after:bg-primary" : "text-muted-foreground hover:text-display",
-                )}
-              >
-                {item.label}
-              </button>
-            );
-          })}
+        <div className="flex flex-wrap gap-x-6 gap-y-2 border-t border-border px-4 py-3 text-xs text-muted-foreground sm:px-5 2xl:px-6">
+          <span>Group spend <span className="figure ml-1 text-foreground">{formatNpr(totals.spend)}</span></span>
+          <span>Your share <span className="figure ml-1 text-foreground">{formatNpr(totals.yourShare)}</span></span>
+          <span>{group.expenses.length} {group.expenses.length === 1 ? "expense" : "expenses"}</span>
         </div>
       </SplitCard>
 
-      <div role="tabpanel" id={`group-panel-${tab}`} aria-labelledby={`group-tab-${tab}`} className="min-w-0">
+      <div>
+        <DetailTabs label={`${group.name} views`} value={tab} onChange={setTab} tabs={TABS.map((item) => ({ ...item, count: item.id === "expenses" ? group.expenses.length + group.settlements.length : item.id === "balances" ? yourDebts.length : undefined }))}>
         {tab === "expenses" ? <ExpensesPanel group={group} onEditExpense={onEditExpense} onEditSettlement={onEditSettlement} onAddExpense={onAddExpense} /> : null}
         {tab === "balances" ? <BalancesPanel group={group} onSettle={onSettle} /> : null}
         {tab === "totals" ? <TotalsPanel group={group} /> : null}
+        </DetailTabs>
       </div>
     </div>
   );

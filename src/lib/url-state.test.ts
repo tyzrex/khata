@@ -26,7 +26,7 @@ function row(partial: Partial<TransactionDto>): TransactionDto {
 
 test("ledger filters round-trip through the URL and drop junk", () => {
   const filters = readLedgerFilters(new URLSearchParams("q=momo&from=2026-10-01&to=bad&type=refund&category=Food&account=NIMB"));
-  assert.deepEqual(filters, { q: "momo", from: "2026-10-01", to: "", type: "", category: "Food", account: "NIMB" });
+  assert.deepEqual(filters, { q: "momo", from: "2026-10-01", to: "", type: "", category: "Food", account: "NIMB", merchant: "" });
   assert.equal(ledgerQuery(filters), "?q=momo&from=2026-10-01&category=Food&account=NIMB");
   assert.equal(ledgerQuery(EMPTY_LEDGER_FILTERS), "");
 });
@@ -60,4 +60,17 @@ test("dashboard period lives in the URL, with defaults left out", () => {
   assert.equal(dashboardQuery(picked, "2026-10-08"), "?range=custom&from=2026-01-01&to=2026-02-01");
 
   assert.equal(readDashboardState(new URLSearchParams("range=decade"), "2026-10-08", custom).kind, "month");
+});
+
+test("dashboard money-in links show income and transfers within the selected dates", () => {
+  const filters = readLedgerFilters(new URLSearchParams("type=credit&from=2026-10-01&to=2026-10-13"));
+  const rows = [row({ id: "expense" }), row({ id: "income", type: "income" }), row({ id: "transfer", type: "transfer" }), row({ id: "outside", type: "income", date: "2026-09-30" })];
+  assert.deepEqual(filterTransactions(rows, filters).map((entry) => entry.id), ["income", "transfer"]);
+  assert.equal(ledgerQuery(filters), "?from=2026-10-01&to=2026-10-13&type=credit");
+});
+
+test("merchant drill-down matches the named merchant without matching other notes or names", () => {
+  const filters = readLedgerFilters(new URLSearchParams(ledgerQuery({ ...EMPTY_LEDGER_FILTERS, merchant: "Cafe & Co" })));
+  const rows = [row({ id: "match", merchant: "Cafe & Co" }), row({ id: "other", merchant: "Cafe & Co Express" }), row({ id: "note", note: "Cafe & Co" })];
+  assert.deepEqual(filterTransactions(rows, filters).map((entry) => entry.id), ["match"]);
 });

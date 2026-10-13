@@ -10,6 +10,7 @@ import { SignOutDialog } from "@/components/sign-out-dialog";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Drawer, DrawerContent, DrawerHeader, DrawerTitle } from "@/components/ui/drawer";
 import { useDateFormat } from "@/components/use-date-style";
 
 export const views = [
@@ -203,14 +204,28 @@ export function AppShell({
                 </li>
               );
             })}
+          {/*
+            The one raised element in the bar, so it is built like a floating action
+            button rather than a nav item:
+
+            - `-translate-y-6` lifts it clear of the nav's top edge. The nav is z-40 and
+              the sticky header z-30, so it still paints above content scrolling under.
+            - `ring-4 ring-card` is the notch: a card-coloured ring that hides the nav's
+              border and background where the circle crosses them, which is what makes
+              the circle read as floating instead of cropped.
+            - The coloured shadow is brand-tinted rather than the neutral `--elevation-lift`
+              so the button lights the surface it sits on, in either theme.
+            - The `after:` sheen is a light source at the top of the circle. At 10% white it
+              is felt rather than seen, and it keeps the fill from reading as flat.
+          */}
           <li className="flex items-center justify-center">
             <button
               type="button"
               aria-label="Quick actions"
               onClick={() => setActionsOpen(true)}
-              className="flex size-14 items-center justify-center rounded-full bg-brand text-brand-foreground shadow-lift outline-none transition-transform duration-200 outline-none active:scale-95 focus-visible:ring-2 focus-visible:ring-ring"
+              className="group relative flex size-16 -translate-y-6 items-center justify-center rounded-full bg-brand text-brand-foreground shadow-[0_10px_24px_-8px_color-mix(in_oklab,var(--brand)_65%,transparent)] ring-4 ring-card outline-none transition duration-200 ease-out after:pointer-events-none after:absolute after:inset-0 after:rounded-full after:bg-linear-to-b after:from-white/15 after:to-transparent hover:-translate-y-7 hover:shadow-[0_14px_30px_-8px_color-mix(in_oklab,var(--brand)_70%,transparent)] active:translate-y-6 active:scale-95 focus-visible:ring-4 focus-visible:ring-ring/40"
             >
-              <Plus className="size-6" strokeWidth={2.25} />
+              <Plus className="relative size-7 transition-transform duration-300 ease-out group-hover:rotate-90 group-active:rotate-180" strokeWidth={2.25} />
             </button>
           </li>
           {views
@@ -303,13 +318,17 @@ export function AppShell({
 
       <SignOutDialog open={signOutOpen} onOpenChange={setSignOutOpen} onSignOut={signOut} />
 
-      <Dialog open={actionsOpen} onOpenChange={setActionsOpen}>
-        <DialogContent className="sm:max-w-sm">
-          <DialogHeader>
-            <DialogTitle>Quick actions</DialogTitle>
-          </DialogHeader>
-
-          <div className="grid gap-2">
+      {/*
+        A drawer, not a dialog: it opens from a button near the bottom of the screen,
+        so swiping down to dismiss is the gesture the thumb is already there for.
+        `showSwipeHandle` advertises it.
+      */}
+      <Drawer open={actionsOpen} onOpenChange={setActionsOpen} showSwipeHandle>
+        <DrawerContent className="max-h-[92dvh]">
+          <DrawerHeader>
+            <DrawerTitle>Quick actions</DrawerTitle>
+          </DrawerHeader>
+          <div className="grid gap-2 px-4 pb-[calc(1rem+env(safe-area-inset-bottom))]">
             <Button
               type="button"
               className="h-12 justify-start gap-3 px-4"
@@ -334,8 +353,8 @@ export function AppShell({
               Split expense
             </Button>
           </div>
-        </DialogContent>
-      </Dialog>
+        </DrawerContent>
+      </Drawer>
     </div>
   );
 }

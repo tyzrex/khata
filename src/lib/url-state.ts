@@ -20,12 +20,13 @@ export type LedgerFilters = {
   q: string;
   from: string;
   to: string;
-  type: "" | TxType;
+  type: "" | TxType | "credit";
   category: string;
   account: string;
+  merchant: string;
 };
 
-export const EMPTY_LEDGER_FILTERS: LedgerFilters = { q: "", from: "", to: "", type: "", category: "", account: "" };
+export const EMPTY_LEDGER_FILTERS: LedgerFilters = { q: "", from: "", to: "", type: "", category: "", account: "", merchant: "" };
 
 export function readLedgerFilters(params: Params): LedgerFilters {
   const type = params.get("type") ?? "";
@@ -33,16 +34,17 @@ export function readLedgerFilters(params: Params): LedgerFilters {
     q: (params.get("q") ?? "").slice(0, 120),
     from: isoOrEmpty(params.get("from")),
     to: isoOrEmpty(params.get("to")),
-    type: (TX_TYPES as readonly string[]).includes(type) ? (type as TxType) : "",
+    type: type === "credit" ? "credit" : (TX_TYPES as readonly string[]).includes(type) ? (type as TxType) : "",
     category: (params.get("category") ?? "").slice(0, 80),
     account: (params.get("account") ?? "").slice(0, 40),
+    merchant: (params.get("merchant") ?? "").slice(0, 160),
   };
 }
 
 /** Empty values are dropped so the plain page stays at a plain URL. */
 export function ledgerQuery(filters: LedgerFilters) {
   const params = new URLSearchParams();
-  for (const key of ["q", "from", "to", "type", "category", "account"] as const) {
+  for (const key of ["q", "from", "to", "type", "category", "account", "merchant"] as const) {
     const value = filters[key].trim();
     if (value) params.set(key, value);
   }
@@ -50,15 +52,16 @@ export function ledgerQuery(filters: LedgerFilters) {
   return text ? `?${text}` : "";
 }
 
-/** Same rules as the database filter in listTransactions, applied to rows already on the client. */
+/** Client ledger filters, including dashboard links for credits and exact merchants. */
 export function filterTransactions(rows: TransactionDto[], filters: LedgerFilters) {
   const needle = filters.q.trim().toLowerCase();
   return rows.filter((row) => {
     if (filters.from && row.date < filters.from) return false;
     if (filters.to && row.date > filters.to) return false;
-    if (filters.type && row.type !== filters.type) return false;
+    if (filters.type === "credit" ? row.type === "expense" : filters.type && row.type !== filters.type) return false;
     if (filters.category && row.category !== filters.category) return false;
     if (filters.account && row.account !== filters.account) return false;
+    if (filters.merchant && row.merchant !== filters.merchant) return false;
     if (!needle) return true;
     return [row.merchant, row.note, row.account, row.category, row.externalId ?? ""].some((field) => field.toLowerCase().includes(needle));
   });

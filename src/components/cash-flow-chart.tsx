@@ -185,6 +185,7 @@ function Tip({ center, anchor, children }: { center: number; anchor: number; chi
     if (!tip || !plot) return;
     const width = tip.offsetWidth;
     const span = plot.clientWidth;
+    tip.style.maxWidth = `${span}px`;
     const at = (center / 100) * span;
     const right = at + MAX_BAR;
     const leftSide = at - MAX_BAR - width;
@@ -194,7 +195,7 @@ function Tip({ center, anchor, children }: { center: number; anchor: number; chi
   return (
     <div
       ref={ref}
-      className="pointer-events-none absolute z-10 rounded-xl bg-display px-3 py-2 text-[13px] whitespace-nowrap text-background shadow-[0_8px_24px_-8px_rgba(0,0,0,0.35)]"
+      className="pointer-events-none absolute z-10 max-w-full break-words rounded-xl bg-display px-3 py-2 text-[13px] text-background shadow-[0_8px_24px_-8px_rgba(0,0,0,0.35)]"
       style={{ left: `${center}%`, top: `clamp(0px, calc(${100 - anchor}% - 24px), calc(100% - 72px))` }}
     >
       {children}

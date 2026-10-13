@@ -1,6 +1,5 @@
 import { SETTLED, type Expense, type Person, type Settlement } from "@/components/splits/ledger-math";
 import type { BalanceScope, JoinedGroup, ShareBook } from "@/db/shares";
-import { formatNpr } from "@/lib/format";
 
 type Debt = BalanceScope["youOwe"][number];
 
@@ -24,6 +23,20 @@ export type FriendEntry = {
   expenses: Expense[];
   settlements: Settlement[];
 };
+
+/** Equal debts in different books still need to be settled separately. */
+export function friendHasOpenBalance(entry: Pick<FriendEntry, "net" | "rows">) {
+  return Math.abs(entry.net) >= SETTLED || entry.rows.some((row) => Math.abs(row.net) >= SETTLED);
+}
+
+/** Balances in separate books cannot be cancelled by the page summary. */
+export function friendBalanceTotals(entry: Pick<FriendEntry, "net" | "rows">) {
+  const amounts = entry.rows.length ? entry.rows.map((row) => row.net) : [entry.net];
+  return {
+    owed: amounts.reduce((total, amount) => total + Math.max(amount, 0), 0),
+    owe: amounts.reduce((total, amount) => total + Math.max(-amount, 0), 0),
+  };
+}
 
 function netWith(scope: BalanceScope, friendId: string) {
   const owed = scope.youAreOwed.filter((debt) => debt.fromId === friendId).reduce((total, debt) => total + debt.amount, 0);
@@ -85,12 +98,6 @@ export function friendEntries(book: ShareBook): FriendEntry[] {
     ...book.people.filter((person) => !person.isSelf).map((friend) => ownEntry(book, friend)),
     ...book.joinedGroups.filter((group) => group.kind === "direct").map(joinedEntry).filter((entry): entry is FriendEntry => entry !== null),
   ].sort(byWhoOwes);
-}
-
-/** "owes you NPR 1,425", "you owe NPR 300", or "settled up". */
-export function friendPosition(net: number) {
-  if (Math.abs(net) < SETTLED) return { text: "settled up", tone: "text-muted-foreground" };
-  return net > 0 ? { text: `owes you ${formatNpr(net)}`, tone: "text-credit" } : { text: `you owe ${formatNpr(-net)}`, tone: "text-warning" };
 }
 
 export function accountNote(entry: FriendEntry) {

@@ -2,7 +2,7 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import { cn } from "cn";
-import { Check } from "lucide-react";
+import { Check, Search, UsersRound } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useForm, useWatch } from "react-hook-form";
 import { PersonAvatar } from "@/components/splits-ui";
@@ -45,6 +45,7 @@ export function GroupFormDialog({
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [memberQuery, setMemberQuery] = useState("");
 
   if (session !== sessionKey) {
     setSession(sessionKey);
@@ -52,6 +53,7 @@ export function GroupFormDialog({
       setDefaults(fromGroup(group, book.self.id));
       setError(null);
       setConfirmDelete(false);
+      setMemberQuery("");
     }
   }
 
@@ -96,11 +98,11 @@ export function GroupFormDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
+    <Dialog open={open} onOpenChange={(next) => { if (!pending) onOpenChange(next); }}>
+      <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>{group ? "Edit group" : "New group"}</DialogTitle>
-          <DialogDescription>Pick who splits in it. People can join later, and past expenses stay if someone leaves.</DialogDescription>
+          <DialogDescription>{group ? "Update the name or members. Members with expense history must stay in the group." : "Give your shared plans a name, then choose who’s splitting with you. You can invite members after creating the group."}</DialogDescription>
         </DialogHeader>
         <Form {...form}>
           <form noValidate onSubmit={form.handleSubmit(submit)}>
@@ -110,9 +112,9 @@ export function GroupFormDialog({
                 name="name"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Name</FormLabel>
+                    <FormLabel>Group name</FormLabel>
                     <FormControl>
-                      <Input autoComplete="off" maxLength={80} placeholder="Pokhara trip" autoFocus {...field} />
+                      <Input autoComplete="off" maxLength={80} placeholder="e.g. Pokhara trip, Our flat" disabled={pending} autoFocus {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -124,30 +126,34 @@ export function GroupFormDialog({
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>
-                      Who&apos;s in <span className="font-normal text-muted-foreground">· {picked.length} picked</span>
+                      Members <span className="font-normal text-muted-foreground">· {picked.length} selected</span>
                     </FormLabel>
-                    <ul className="flex max-h-64 flex-wrap gap-2 overflow-y-auto" aria-label="Members">
-                      {book.people.map((person) => {
+                    <div className="relative"><Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden /><Input type="search" value={memberQuery} onChange={(event) => setMemberQuery(event.target.value)} placeholder="Find a friend" aria-label="Find group members" className="pl-9" /></div>
+                    <ul className="max-h-64 overflow-y-auto rounded-xl border border-border p-1" aria-label="Members">
+                      {book.people.filter((person) => (person.isSelf ? "You" : person.name).toLowerCase().includes(memberQuery.trim().toLowerCase())).map((person) => {
                         const on = picked.includes(person.id);
                         return (
                           <li key={person.id}>
                             <button
                               type="button"
                               aria-pressed={on}
+                              disabled={pending}
                               onClick={() => field.onChange(on ? picked.filter((item) => item !== person.id) : [...picked, person.id])}
                               className={cn(
-                                "flex h-9 items-center gap-2 rounded-full py-1 pr-3 pl-1 text-sm font-medium transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                                on ? "bg-accent text-accent-foreground" : "bg-secondary text-muted-foreground hover:text-display",
+                                "flex min-h-12 w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50",
+                                on ? "bg-accent/60 text-accent-foreground" : "text-foreground hover:bg-secondary",
                               )}
                             >
                               <PersonAvatar name={person.name} size="sm" tone={on ? "brand" : "neutral"} linked={person.linkedUserId != null && !person.isSelf} />
-                              {person.isSelf ? "You" : person.name}
-                              {on ? <Check className="size-3.5" aria-hidden /> : null}
+                              <span className="min-w-0 flex-1 truncate text-left">{person.isSelf ? "You" : person.name}</span>
+                              <span className={cn("flex size-5 shrink-0 items-center justify-center rounded-md", on ? "bg-primary text-primary-foreground" : "border border-input")} aria-hidden>{on ? <Check className="size-3.5" /> : null}</span>
                             </button>
                           </li>
                         );
                       })}
                     </ul>
+                    {memberQuery && !book.people.some((person) => (person.isSelf ? "You" : person.name).toLowerCase().includes(memberQuery.trim().toLowerCase())) ? <p className="text-sm text-muted-foreground">No friends match this name.</p> : null}
+                    {book.people.filter((person) => !person.isSelf).length === 0 ? <p className="flex items-start gap-2 text-[13px] leading-5 text-muted-foreground"><UsersRound className="mt-0.5 size-4 shrink-0" aria-hidden />Add friends from the Friends page, or create your group and invite them with a link.</p> : null}
                     <FormMessage>{error}</FormMessage>
                   </FormItem>
                 )}
@@ -172,9 +178,7 @@ export function GroupFormDialog({
               ) : (
                 <span />
               )}
-              <Button type="submit" disabled={pending}>
-                {pending ? "Saving" : "Save group"}
-              </Button>
+              <span className="flex justify-end gap-2"><Button type="button" variant="outline" disabled={pending} onClick={() => onOpenChange(false)}>Cancel</Button><Button type="submit" disabled={pending}>{pending ? "Saving…" : group ? "Save changes" : "Create group"}</Button></span>
             </DialogFooter>
           </form>
         </Form>

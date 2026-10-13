@@ -37,8 +37,8 @@ export function PageHeader({
     >
       <div className="flex min-w-0 items-start justify-between gap-4">
         <div className="min-w-0">
-          <p className="deva text-[13px] leading-5 font-medium text-muted-foreground">{eyebrow}</p>
-          <h1 className="display mt-1 text-[24px] sm:text-[32px] 2xl:text-[36px]">{title}</h1>
+          {eyebrow ? <p className="deva text-[13px] leading-5 font-medium text-muted-foreground">{eyebrow}</p> : null}
+          <h1 className={cn("display text-[24px] sm:text-[32px] 2xl:text-[36px]", eyebrow && "mt-1")}>{title}</h1>
           {description ? <p className="mt-2 max-w-xl text-[13px] leading-5 text-pretty text-muted-foreground sm:text-sm sm:leading-6">{description}</p> : null}
         </div>
         {aside ? <div className="flex shrink-0 items-center gap-2">{aside}</div> : null}

@@ -1,4 +1,4 @@
-import type { ShareBook } from "@/db/shares";
+import type { BalanceScope, ShareBook } from "@/db/shares";
 
 /** Pure arithmetic for the split screens. No React here, so the numbers can be checked in isolation. */
 
@@ -8,6 +8,10 @@ export type Person = ShareBook["people"][number];
 
 /** Below this a balance counts as settled; amounts are rounded to paisa. */
 export const SETTLED = 0.005;
+
+export function hasOpenBalance(scope: BalanceScope) {
+  return [...scope.youOwe, ...scope.youAreOwed].some((debt) => debt.amount >= SETTLED);
+}
 
 const paisa = (value: number) => Math.round(value * 100) / 100;
 
