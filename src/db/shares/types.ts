@@ -1,4 +1,5 @@
 import type { SplitMode } from "@/lib/split";
+import type { ExpenseItem } from "@/lib/itemized-split";
 
 /**
  * The shapes a share book is read as.
@@ -27,6 +28,7 @@ export type BalanceScope = {
 };
 
 export type ExpenseRevisionSnapshot = {
+  items?: ExpenseItem[] | null;
   description: string;
   amount: number;
   date: string;
@@ -44,6 +46,7 @@ export type ExpenseRevisionDto = {
 };
 
 export type ExpenseDto = {
+  items?: ExpenseItem[] | null;
   id: string;
   groupId: string | null;
   groupName: string | null;
@@ -141,6 +144,7 @@ export type SharedWriteActivity =
     };
 
 export type SharedExpenseInput = {
+  items?: ExpenseItem[] | null;
   description: string;
   date: string;
   amount: number;

@@ -15,6 +15,8 @@ import {
   uniqueIndex,
 } from "drizzle-orm/pg-core";
 import { user } from "@/db/auth-schema";
+import type { ExpenseItem } from "@/lib/itemized-split";
+import type { AgentScope } from "@/lib/agent-permissions";
 
 export * from "@/db/auth-schema";
 
@@ -152,6 +154,7 @@ export const sharedExpenses = pgTable(
       .notNull()
       .references(() => people.id, { onDelete: "restrict" }),
     splitMode: text("split_mode").notNull(),
+    items: jsonb("items").$type<ExpenseItem[]>(),
     /** One of `SHARED_CATEGORIES`, or null when the author did not pick one. */
     category: text("category"),
     note: text("note").notNull().default(""),
@@ -187,6 +190,7 @@ export const sharedExpenseRevisions = pgTable(
         paidByName: string;
         splitMode: string;
         note: string;
+        items?: ExpenseItem[] | null;
       }>()
       .notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -369,9 +373,22 @@ export const apiKeys = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
     revokedAt: timestamp("revoked_at", { withTimezone: true }),
+    scopes: jsonb("scopes").$type<AgentScope[]>().notNull().default(["read", "write", "delete"]),
+    expiresAt: timestamp("expires_at", { withTimezone: true }),
   },
   (table) => [index("api_keys_user_idx").on(table.userId)],
 );
+
+/** Per-bot mutation history. No tokens or request bodies. */
+export const agentOperations = pgTable("agent_operations", {
+  id: text("id").primaryKey(), userId: ownerId(),
+  apiKeyId: text("api_key_id").references(() => apiKeys.id, { onDelete: "set null" }),
+  agentName: text("agent_name").notNull(), tool: text("tool").notNull(),
+  status: text("status").notNull().default("pending"), targetId: text("target_id"),
+  replayed: boolean("replayed").notNull().default(false), errorStatus: integer("error_status"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  completedAt: timestamp("completed_at", { withTimezone: true }),
+}, (table) => [index("agent_operations_user_created_idx").on(table.userId, table.createdAt)]);
 
 /**
  * A write that must not happen twice. A bot retrying after a timeout, or a double-click,

@@ -9,6 +9,7 @@ export function llmsText(origin: string) {
 
 Base URL: ${base}
 OpenAPI: ${base}/openapi.json
+MCP endpoint: ${origin}/api/mcp (Streamable HTTP; one scoped key per bot).
 Auth: send the user's personal key as \`Authorization: Bearer khata_...\` (or \`X-API-Key: khata_...\`). Keys are made in Khata → Settings → API keys.
 
 ## Rules
@@ -21,7 +22,7 @@ Auth: send the user's personal key as \`Authorization: Bearer khata_...\` (or \`
 - Amounts are NPR. An entry that was really made in another currency carries that too: send
   {"currency": "USD", "foreignAmount": 20, "fxRate": 134.25} instead of "amount" and the NPR value
   is computed from those two. Dates are YYYY-MM-DD, "today" or "yesterday", in Asia/Kathmandu. Date defaults to today.
-- Confirm with the user before any DELETE.
+- Work only within the user's delegated task and the key's read/write/delete permissions. Deletion needs its own scope and an authorized task that includes removal.
 - When retrying a POST /expenses or POST /settlements after a timeout, resend it with the same Idempotency-Key header (any unique string, or an "externalId" in the body). The first answer comes back instead of a second entry.
 
 ## Endpoints
@@ -50,6 +51,10 @@ POST /expenses {"description": "Movie ticket", "amount": 500, "splitWith": ["Ani
 
 "Groceries 900: my share 600, Anita 300"
 POST /expenses {"description": "Groceries", "amount": 900, "splitMode": "exact", "split": {"me": 600, "Anita": 300}}
+
+"Food 300 shared by all three; drinks 200 shared only by Anita and Sameer"
+POST /expenses/preview {"description":"Dinner","items":[{"description":"Food","amount":300,"splitWith":["Anita","Sameer"]},{"description":"Drinks","amount":200,"split":[{"person":"Anita"},{"person":"Sameer"}]}]}
+Send the same body to POST /expenses with an externalId when ready. The total is derived from the items. A split array selects exactly who shares a line; splitWith also includes the user and payer. Receipt details are returned by GET /expenses/:id. Edits need the current version; receipt details are preserved unless replaced or clearItems:true.
 
 "Sameer paid me back 1425"
 POST /settlements {"from": "Sameer", "amount": 1425}

@@ -2,6 +2,7 @@ import { z } from "zod";
 import { SHARED_CATEGORIES } from "@/lib/constants";
 import { dateSchema, MAX_AMOUNT, moneySchema } from "@/lib/schemas";
 import { SPLIT_MODES } from "@/lib/split";
+import { expenseItemsSchema } from "@/lib/itemized-split";
 
 const money = moneySchema;
 const id = z.string().trim().min(1).max(100);
@@ -40,6 +41,7 @@ export const expenseWriteSchema = z.object({
     .min(1)
     .max(40),
   transactionIds: z.array(id).max(20).optional().default([]),
+  items: expenseItemsSchema.nullable().optional(),
   version: z.number().int().positive().optional(),
 });
 

@@ -65,6 +65,7 @@ function toExpenseDtos(
     paidById: expense.paidById,
     paidByName: nameOf(ctx.roster, expense.paidById),
     splitMode: expense.splitMode as SplitMode,
+    items: expense.items,
     category: expense.category,
     note: expense.note,
     createdByName: expense.createdByUserId ? ctx.accountNames.get(expense.createdByUserId) ?? null : null,

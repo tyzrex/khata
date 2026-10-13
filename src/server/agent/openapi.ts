@@ -1,4 +1,4 @@
-import { TX_TYPES } from "@/lib/constants";
+import { SHARED_CATEGORIES, TX_TYPES } from "@/lib/constants";
 import { SPLIT_MODES } from "@/lib/split";
 
 /**
@@ -7,7 +7,11 @@ import { SPLIT_MODES } from "@/lib/split";
  * call each operation, so those are written as instructions to a model.
  */
 
-const DATE = { type: "string", description: 'A date as YYYY-MM-DD, or "today", "yesterday", "tomorrow". Defaults to today in Asia/Kathmandu.', examples: ["2026-10-08", "yesterday"] };
+const DATE = {
+  type: "string",
+  description: 'A date as YYYY-MM-DD, or "today", "yesterday", "tomorrow". Defaults to today in Asia/Kathmandu.',
+  examples: ["2026-10-08", "yesterday"],
+};
 const AMOUNT = {
   oneOf: [{ type: "number", exclusiveMinimum: 0 }, { type: "string" }],
   description: 'Amount in Nepalese rupees (NPR). A number, or a string like "1,200" or "Rs 450". Rounded to the paisa.',
@@ -15,7 +19,8 @@ const AMOUNT = {
 };
 const NAMES = {
   oneOf: [{ type: "array", items: { type: "string" } }, { type: "string" }],
-  description: 'People by name, as a list or a comma/"and" separated string. "me" means the caller. Names match case-insensitively; a unique first name is enough ("Sameer" for "Sameer Shrestha"). Ids from /context also work.',
+  description:
+    'People by name, as a list or a comma/"and" separated string. "me" means the caller. Names match case-insensitively; a unique first name is enough ("Sameer" for "Sameer Shrestha"). Ids from /context also work.',
   examples: [["Sameer", "Anita"], "Sameer and Anita"],
 };
 const ID = { type: "string", description: "Id returned by an earlier call." };
@@ -29,7 +34,11 @@ const envelope = (data: Record<string, unknown>, example?: string) => ({
         required: ["ok", "message", "data"],
         properties: {
           ok: { const: true },
-          message: { type: "string", description: "One or two plain sentences describing what happened, safe to relay verbatim.", ...(example ? { examples: [example] } : {}) },
+          message: {
+            type: "string",
+            description: "One or two plain sentences describing what happened, safe to relay verbatim.",
+            ...(example ? { examples: [example] } : {}),
+          },
           data,
         },
       },
@@ -51,8 +60,14 @@ const transactionSchema = {
     date: { type: "string" },
     type: { enum: TX_TYPES },
     amount: { type: "number", description: "The NPR value. Always NPR, whatever currency the entry was typed in." },
-    currency: { type: "string", description: "The currency the entry was typed in; NPR for everything that is not foreign." },
-    foreignAmount: { type: ["number", "null"], description: "What was typed, in `currency`; null for a plain NPR entry." },
+    currency: {
+      type: "string",
+      description: "The currency the entry was typed in; NPR for everything that is not foreign.",
+    },
+    foreignAmount: {
+      type: ["number", "null"],
+      description: "What was typed, in `currency`; null for a plain NPR entry.",
+    },
     fxRate: { type: ["number", "null"], description: "NPR per one unit of `currency`; null for a plain NPR entry." },
     category: { type: "string" },
     merchant: { type: "string" },
@@ -65,18 +80,118 @@ const transactionSchema = {
 const transactionInput = {
   type: "object",
   properties: {
-    amount: { ...AMOUNT, description: "The NPR value. Omit it only when `currency`, `foreignAmount` and `fxRate` are sent together; the NPR amount is then computed from them." },
-    currency: { type: "string", pattern: "^[A-Za-z]{3}$", description: "Three-letter code the amount was typed in, e.g. USD or AED. Defaults to NPR." },
-    foreignAmount: { ...AMOUNT, description: "The amount in `currency`. Send it with `currency` and `fxRate` instead of `amount`." },
-    fxRate: { type: "number", exclusiveMinimum: 0, description: "NPR per one unit of `currency`, e.g. 134.25 for a dollar." },
-    type: { enum: TX_TYPES, default: "expense", description: "expense = money out (counts as spent). income = money in. transfer = moving money between your own accounts or a friend paying you back." },
-    merchant: { type: "string", maxLength: 160, description: "Who was paid or what it was, e.g. \"Bhatbhateni\". Either merchant or description is required." },
+    amount: {
+      ...AMOUNT,
+      description:
+        "The NPR value. Omit it only when `currency`, `foreignAmount` and `fxRate` are sent together; the NPR amount is then computed from them.",
+    },
+    currency: {
+      type: "string",
+      pattern: "^[A-Za-z]{3}$",
+      description: "Three-letter code the amount was typed in, e.g. USD or AED. Defaults to NPR.",
+    },
+    foreignAmount: {
+      ...AMOUNT,
+      description: "The amount in `currency`. Send it with `currency` and `fxRate` instead of `amount`.",
+    },
+    fxRate: {
+      type: "number",
+      exclusiveMinimum: 0,
+      description: "NPR per one unit of `currency`, e.g. 134.25 for a dollar.",
+    },
+    type: {
+      enum: TX_TYPES,
+      default: "expense",
+      description:
+        "expense = money out (counts as spent). income = money in. transfer = moving money between your own accounts or a friend paying you back.",
+    },
+    merchant: {
+      type: "string",
+      maxLength: 160,
+      description: 'Who was paid or what it was, e.g. "Bhatbhateni". Either merchant or description is required.',
+    },
     description: { type: "string", maxLength: 160, description: "Used as the merchant when merchant is missing." },
-    category: { type: "string", maxLength: 80, description: "Category name, e.g. Food, Transport, Bills. Matches existing categories case-insensitively; an unknown name creates a new category. Defaults to Other (Income / Transfer for those types)." },
-    account: { type: "string", maxLength: 40, description: "Bank, wallet or cash. Matches one of the caller's accounts from /context case-insensitively, and a partial like \"Nabil Bank\" works. An unknown name is rejected; omit it to use the first account." },
+    category: {
+      type: "string",
+      maxLength: 80,
+      description:
+        "Category name, e.g. Food, Transport, Bills. Matches existing categories case-insensitively; an unknown name creates a new category. Defaults to Other (Income / Transfer for those types).",
+    },
+    account: {
+      type: "string",
+      maxLength: 40,
+      description:
+        'Bank, wallet or cash. Matches one of the caller\'s accounts from /context case-insensitively, and a partial like "Nabil Bank" works. An unknown name is rejected; omit it to use the first account.',
+    },
     date: DATE,
     note: { type: "string", maxLength: 500 },
-    externalId: { type: "string", maxLength: 200, description: "Optional stable id from the source (an SMS or email id). Sending the same externalId again updates that row instead of adding a duplicate. Use it whenever the source has one." },
+    externalId: {
+      type: "string",
+      maxLength: 200,
+      description:
+        "Optional stable id from the source (an SMS or email id). Sending the same externalId again updates that row instead of adding a duplicate. Use it whenever the source has one.",
+    },
+  },
+};
+
+const SPLIT = {
+  oneOf: [
+    {
+      type: "array",
+      items: {
+        type: "object",
+        required: ["person"],
+        properties: { person: { type: "string" }, value: { type: "number" } },
+      },
+    },
+    { type: "object", additionalProperties: { type: "number" } },
+  ],
+};
+const EXPENSE_ITEM = {
+  type: "object",
+  required: ["description", "amount"],
+  properties: {
+    description: { type: "string", maxLength: 160 },
+    amount: AMOUNT,
+    splitWith: NAMES,
+    splitMode: { enum: SPLIT_MODES },
+    split: SPLIT,
+  },
+};
+const EXPENSE_INPUT = {
+  type: "object",
+  required: ["description"],
+  anyOf: [{ required: ["amount"] }, { required: ["items"] }],
+  properties: {
+    description: { type: "string", maxLength: 160 },
+    amount: AMOUNT,
+    date: DATE,
+    group: { type: ["string", "null"], description: "Group name or ID. Omit for direct friends." },
+    paidBy: { type: "string", default: "me" },
+    splitWith: NAMES,
+    excludeMe: { type: "boolean", default: false },
+    splitMode: { enum: SPLIT_MODES },
+    split: SPLIT,
+    items: {
+      type: "array",
+      minItems: 1,
+      maxItems: 50,
+      items: EXPENSE_ITEM,
+      description:
+        "Itemized receipt. Give split instructions on each item, not simultaneously on the overall expense. Amount defaults to the item sum.",
+    },
+    category: { type: ["string", "null"], enum: [...SHARED_CATEGORIES, null] },
+    note: { type: "string", maxLength: 500 },
+    externalId: { type: "string", maxLength: 200 },
+  },
+};
+const SHARE = {
+  type: "object",
+  properties: {
+    personId: { type: "string" },
+    name: { type: "string" },
+    amount: { type: "number" },
+    weight: { type: ["number", "null"] },
   },
 };
 
@@ -91,8 +206,8 @@ export function openApiSpec(origin: string) {
         "",
         "How to use it well:",
         "1. Call getContext first. It returns the user's friends, groups, categories and accounts, so you can use the right names.",
-        "2. Refer to people and groups by name. \"me\" is the user. If a name is ambiguous or unknown, the error lists `candidates`: ask the user which one they meant, do not guess.",
-        "3. Personal spending (\"I paid 450 for lunch\") is a transaction. Money shared with friends (\"split dinner 1200 with Sameer\") is an expense. A friend paying back is a settlement.",
+        '2. Refer to people and groups by name. "me" is the user. If a name is ambiguous or unknown, the error lists `candidates`: ask the user which one they meant, do not guess.',
+        '3. Personal spending ("I paid 450 for lunch") is a transaction. Money shared with friends ("split dinner 1200 with Sameer") is an expense. A friend paying back is a settlement.',
         "4. Every response has `message`, a sentence you can read back to the user.",
         "",
         "All amounts are Nepalese rupees (NPR). Dates are YYYY-MM-DD in Asia/Kathmandu.",
@@ -111,8 +226,12 @@ export function openApiSpec(origin: string) {
           operationId: "getContext",
           tags: ["Context"],
           summary: "Everything needed to resolve names, in one call",
-          description: "Returns the user (me), today's date, friends with balances, groups with members, categories, accounts, this week's and this month's totals, and plain-language balance lines. Call this before writing so names match.",
-          responses: { "200": envelope({ type: "object" }, "Khata for Sulav. Today is 2026-10-08. Sameer owes you NPR 1,425."), ...errors },
+          description:
+            "Returns the user (me), today's date, friends with balances, groups with members, categories, accounts, this week's and this month's totals, and plain-language balance lines. Call this before writing so names match.",
+          responses: {
+            "200": envelope({ type: "object" }, "Khata for Sulav. Today is 2026-10-08. Sameer owes you NPR 1,425."),
+            ...errors,
+          },
         },
       },
       "/transactions": {
@@ -120,12 +239,33 @@ export function openApiSpec(origin: string) {
           operationId: "listTransactions",
           tags: ["Ledger"],
           summary: "Search the personal ledger",
-          description: "Lists transactions newest first with totals. Use from/to for a period (\"how much did I spend on food this month\" → category=Food, from=first of month, to=today, read totals.spent).",
+          description:
+            'Lists transactions newest first with totals. Use from/to for a period ("how much did I spend on food this month" → category=Food, from=first of month, to=today, read totals.spent).',
           parameters: [
-            { name: "q", in: "query", schema: { type: "string" }, description: "Text search over merchant, note, account and category." },
-            { name: "account", in: "query", schema: { type: "string" }, description: "Only entries in one of the caller's accounts, matched case-insensitively." },
-            { name: "from", in: "query", schema: { type: "string", format: "date" }, description: "First date, inclusive (YYYY-MM-DD)." },
-            { name: "to", in: "query", schema: { type: "string", format: "date" }, description: "Last date, inclusive (YYYY-MM-DD)." },
+            {
+              name: "q",
+              in: "query",
+              schema: { type: "string" },
+              description: "Text search over merchant, note, account and category.",
+            },
+            {
+              name: "account",
+              in: "query",
+              schema: { type: "string" },
+              description: "Only entries in one of the caller's accounts, matched case-insensitively.",
+            },
+            {
+              name: "from",
+              in: "query",
+              schema: { type: "string", format: "date" },
+              description: "First date, inclusive (YYYY-MM-DD).",
+            },
+            {
+              name: "to",
+              in: "query",
+              schema: { type: "string", format: "date" },
+              description: "Last date, inclusive (YYYY-MM-DD).",
+            },
             { name: "type", in: "query", schema: { enum: TX_TYPES } },
             { name: "category", in: "query", schema: { type: "string" }, description: "Exact category name." },
             { name: "limit", in: "query", schema: { type: "integer", minimum: 1, maximum: 500, default: 50 } },
@@ -135,7 +275,17 @@ export function openApiSpec(origin: string) {
               type: "object",
               properties: {
                 transactions: { type: "array", items: transactionSchema },
-                totals: { type: "object", properties: { count: { type: "integer" }, spent: { type: "number", description: "Sum of expenses over all matches, not just the returned page." }, credited: { type: "number", description: "Income plus transfers." } } },
+                totals: {
+                  type: "object",
+                  properties: {
+                    count: { type: "integer" },
+                    spent: {
+                      type: "number",
+                      description: "Sum of expenses over all matches, not just the returned page.",
+                    },
+                    credited: { type: "number", description: "Income plus transfers." },
+                  },
+                },
                 truncated: { type: "boolean" },
               },
             }),
@@ -146,23 +296,58 @@ export function openApiSpec(origin: string) {
           operationId: "addTransactions",
           tags: ["Ledger"],
           summary: "Add one or more personal transactions",
-          description: "Records money the user spent or received in their own ledger. Send one object, an array, or { transactions: [...] } (up to 100). This does not involve friends; for a shared bill use addExpense.",
+          description:
+            "Records money the user spent or received in their own ledger. Send one object, an array, or { transactions: [...] } (up to 100). This does not involve friends; for a shared bill use addExpense.",
           requestBody: {
             required: true,
             content: {
               "application/json": {
-                schema: { oneOf: [transactionInput, { type: "array", items: transactionInput }, { type: "object", properties: { transactions: { type: "array", items: transactionInput } } }] },
+                schema: {
+                  oneOf: [
+                    transactionInput,
+                    { type: "array", items: transactionInput },
+                    { type: "object", properties: { transactions: { type: "array", items: transactionInput } } },
+                  ],
+                },
                 examples: {
                   lunch: { value: { amount: 450, merchant: "Bajeko Sekuwa", category: "Food", account: "Nabil" } },
-                  salary: { value: { amount: "85,000", type: "income", merchant: "Salary", account: "NIMB", date: "2026-10-01" } },
-                  subscription: { value: { currency: "USD", foreignAmount: 20, fxRate: 134.25, merchant: "Figma", category: "Bills", account: "Nabil" } },
+                  salary: {
+                    value: {
+                      amount: "85,000",
+                      type: "income",
+                      merchant: "Salary",
+                      account: "NIMB",
+                      date: "2026-10-01",
+                    },
+                  },
+                  subscription: {
+                    value: {
+                      currency: "USD",
+                      foreignAmount: 20,
+                      fxRate: 134.25,
+                      merchant: "Figma",
+                      category: "Bills",
+                      account: "Nabil",
+                    },
+                  },
                 },
               },
             },
           },
           responses: {
             "201": envelope(
-              { type: "object", properties: { transactions: { type: "array", items: transactionSchema }, created: { type: "integer" }, updated: { type: "integer" }, invalid: { type: "array", items: { type: "object", properties: { index: { type: "integer" }, error: { type: "string" } } } } } },
+              {
+                type: "object",
+                properties: {
+                  transactions: { type: "array", items: transactionSchema },
+                  created: { type: "integer" },
+                  updated: { type: "integer" },
+                  invalid: {
+                    type: "array",
+                    items: { type: "object", properties: { index: { type: "integer" }, error: { type: "string" } } },
+                  },
+                },
+              },
               "Saved: Spent NPR 450 — Bajeko Sekuwa (Food, Nabil) on 2026-10-08.",
             ),
             ...errors,
@@ -171,21 +356,41 @@ export function openApiSpec(origin: string) {
       },
       "/transactions/{id}": {
         parameters: [{ name: "id", in: "path", required: true, schema: ID }],
-        get: { operationId: "getTransaction", tags: ["Ledger"], summary: "One transaction", responses: { "200": envelope({ type: "object", properties: { transaction: transactionSchema } }), "404": { $ref: "#/components/responses/NotFound" }, ...errors } },
+        get: {
+          operationId: "getTransaction",
+          tags: ["Ledger"],
+          summary: "One transaction",
+          responses: {
+            "200": envelope({ type: "object", properties: { transaction: transactionSchema } }),
+            "404": { $ref: "#/components/responses/NotFound" },
+            ...errors,
+          },
+        },
         patch: {
           operationId: "updateTransaction",
           tags: ["Ledger"],
           summary: "Change some fields of a transaction",
           description: "Only the fields sent change. Find the id with listTransactions first.",
-          requestBody: { required: true, content: { "application/json": { schema: { ...transactionInput, required: [] } } } },
-          responses: { "200": envelope({ type: "object", properties: { transaction: transactionSchema } }), "404": { $ref: "#/components/responses/NotFound" }, ...errors },
+          requestBody: {
+            required: true,
+            content: { "application/json": { schema: { ...transactionInput, required: [] } } },
+          },
+          responses: {
+            "200": envelope({ type: "object", properties: { transaction: transactionSchema } }),
+            "404": { $ref: "#/components/responses/NotFound" },
+            ...errors,
+          },
         },
         delete: {
           operationId: "deleteTransaction",
           tags: ["Ledger"],
           summary: "Delete a transaction",
-          description: "Permanent. Confirm with the user before calling.",
-          responses: { "200": envelope({ type: "object", properties: { id: { type: "string" } } }), "404": { $ref: "#/components/responses/NotFound" }, ...errors },
+          description: "Permanent. Requires delete scope and an authorized task that includes removal.",
+          responses: {
+            "200": envelope({ type: "object", properties: { id: { type: "string" } } }),
+            "404": { $ref: "#/components/responses/NotFound" },
+            ...errors,
+          },
         },
       },
       "/friends": {
@@ -194,14 +399,28 @@ export function openApiSpec(origin: string) {
           tags: ["Splits"],
           summary: "Friends with your balance with each",
           description: "net > 0: they owe the user. net < 0: the user owes them. `summary` is a ready sentence.",
-          responses: { "200": envelope({ type: "object", properties: { friends: { type: "array", items: { $ref: "#/components/schemas/FriendBalance" } } } }), ...errors },
+          responses: {
+            "200": envelope({
+              type: "object",
+              properties: { friends: { type: "array", items: { $ref: "#/components/schemas/FriendBalance" } } },
+            }),
+            ...errors,
+          },
         },
         post: {
           operationId: "addFriends",
           tags: ["Splits"],
           summary: "Add friends by name",
           description: "Creates friends. A name that already exists is returned unchanged, so this is safe to retry.",
-          requestBody: { required: true, content: { "application/json": { schema: { type: "object", properties: { name: { type: "string" }, names: NAMES } }, examples: { one: { value: { name: "Sameer" } }, many: { value: { names: ["Anita", "Rajan"] } } } } } },
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: { type: "object", properties: { name: { type: "string" }, names: NAMES } },
+                examples: { one: { value: { name: "Sameer" } }, many: { value: { names: ["Anita", "Rajan"] } } },
+              },
+            },
+          },
           responses: { "201": envelope({ type: "object" }, "Added Anita, Rajan."), ...errors },
         },
       },
@@ -211,32 +430,74 @@ export function openApiSpec(origin: string) {
           tags: ["Splits"],
           summary: "Groups with members and balances",
           description: "Includes groups the user owns and groups other people invited them to (owned: false).",
-          responses: { "200": envelope({ type: "object", properties: { groups: { type: "array", items: { $ref: "#/components/schemas/Group" } } } }), ...errors },
+          responses: {
+            "200": envelope({
+              type: "object",
+              properties: { groups: { type: "array", items: { $ref: "#/components/schemas/Group" } } },
+            }),
+            ...errors,
+          },
         },
         post: {
           operationId: "createGroup",
           tags: ["Splits"],
           summary: "Create a group",
-          description: "The user is always a member. Members must already be friends unless createMissing is true, which adds unknown names as new friends. Without it, an unknown name returns an error with close matches: ask the user before retrying with createMissing.",
+          description:
+            "The user is always a member. Members must already be friends unless createMissing is true, which adds unknown names as new friends. Without it, an unknown name returns an error with close matches: ask the user before retrying with createMissing.",
           requestBody: {
             required: true,
             content: {
               "application/json": {
-                schema: { type: "object", required: ["name"], properties: { name: { type: "string", maxLength: 80 }, members: NAMES, createMissing: { type: "boolean", default: false } } },
-                examples: { trip: { value: { name: "Pokhara trip", members: ["Sameer", "Anita"], createMissing: true } } },
+                schema: {
+                  type: "object",
+                  required: ["name"],
+                  properties: {
+                    name: { type: "string", maxLength: 80 },
+                    members: NAMES,
+                    createMissing: { type: "boolean", default: false },
+                  },
+                },
+                examples: {
+                  trip: { value: { name: "Pokhara trip", members: ["Sameer", "Anita"], createMissing: true } },
+                },
               },
             },
           },
-          responses: { "201": envelope({ type: "object", properties: { group: { $ref: "#/components/schemas/Group" } } }, 'Created "Pokhara trip" with You, Anita, Sameer.'), "409": { $ref: "#/components/responses/Conflict" }, ...errors },
+          responses: {
+            "201": envelope(
+              { type: "object", properties: { group: { $ref: "#/components/schemas/Group" } } },
+              'Created "Pokhara trip" with You, Anita, Sameer.',
+            ),
+            "409": { $ref: "#/components/responses/Conflict" },
+            ...errors,
+          },
         },
       },
       "/groups/{group}": {
-        parameters: [{ name: "group", in: "path", required: true, schema: { type: "string" }, description: "Group id or name (URL-encoded)." }],
+        parameters: [
+          {
+            name: "group",
+            in: "path",
+            required: true,
+            schema: { type: "string" },
+            description: "Group id or name (URL-encoded).",
+          },
+        ],
         get: {
           operationId: "getGroup",
           tags: ["Splits"],
           summary: "One group with balances and recent expenses",
-          responses: { "200": envelope({ type: "object", properties: { group: { $ref: "#/components/schemas/Group" }, recentExpenses: { type: "array", items: { $ref: "#/components/schemas/Expense" } } } }), "404": { $ref: "#/components/responses/NotFound" }, ...errors },
+          responses: {
+            "200": envelope({
+              type: "object",
+              properties: {
+                group: { $ref: "#/components/schemas/Group" },
+                recentExpenses: { type: "array", items: { $ref: "#/components/schemas/Expense" } },
+              },
+            }),
+            "404": { $ref: "#/components/responses/NotFound" },
+            ...errors,
+          },
         },
         patch: {
           operationId: "updateGroup",
@@ -247,12 +508,24 @@ export function openApiSpec(origin: string) {
             required: true,
             content: {
               "application/json": {
-                schema: { type: "object", properties: { name: { type: "string" }, addMembers: NAMES, removeMembers: NAMES, createMissing: { type: "boolean", default: false } } },
+                schema: {
+                  type: "object",
+                  properties: {
+                    name: { type: "string" },
+                    addMembers: NAMES,
+                    removeMembers: NAMES,
+                    createMissing: { type: "boolean", default: false },
+                  },
+                },
                 examples: { add: { value: { addMembers: ["Rajan"] } } },
               },
             },
           },
-          responses: { "200": envelope({ type: "object", properties: { group: { $ref: "#/components/schemas/Group" } } }), "403": { $ref: "#/components/responses/Forbidden" }, ...errors },
+          responses: {
+            "200": envelope({ type: "object", properties: { group: { $ref: "#/components/schemas/Group" } } }),
+            "403": { $ref: "#/components/responses/Forbidden" },
+            ...errors,
+          },
         },
       },
       "/expenses": {
@@ -267,7 +540,13 @@ export function openApiSpec(origin: string) {
             { name: "to", in: "query", schema: { type: "string", format: "date" } },
             { name: "limit", in: "query", schema: { type: "integer", minimum: 1, maximum: 200, default: 50 } },
           ],
-          responses: { "200": envelope({ type: "object", properties: { expenses: { type: "array", items: { $ref: "#/components/schemas/Expense" } } } }), ...errors },
+          responses: {
+            "200": envelope({
+              type: "object",
+              properties: { expenses: { type: "array", items: { $ref: "#/components/schemas/Expense" } } },
+            }),
+            ...errors,
+          },
         },
         post: {
           operationId: "addExpense",
@@ -279,7 +558,7 @@ export function openApiSpec(origin: string) {
             "Who shares the cost:",
             "- With `group` and no `splitWith`: every member of the group, split equally.",
             "- With `splitWith`: those people, plus the user and the payer, split equally.",
-            "- `excludeMe: true` leaves the user out of the cost. If the user paid, the others owe the whole amount (\"I paid 500 for Anita\" → paidBy me, splitWith [Anita], excludeMe true).",
+            '- `excludeMe: true` leaves the user out of the cost. If the user paid, the others owe the whole amount ("I paid 500 for Anita" → paidBy me, splitWith [Anita], excludeMe true).',
             "- For unequal splits send `split` with one entry per person and set `splitMode`: exact (amounts that add up to the total), percent (adds up to 100) or shares (weights like 2 and 1). Only the people in `split` take part; the payer is added with a zero share if missing.",
             "",
             "Without `group`, a split with one friend goes to your direct book with them; with several friends it is recorded outside any group. Names that only exist in a group another user owns pick that group automatically.",
@@ -288,68 +567,153 @@ export function openApiSpec(origin: string) {
             required: true,
             content: {
               "application/json": {
-                schema: {
-                  type: "object",
-                  required: ["description", "amount"],
-                  properties: {
-                    description: { type: "string", maxLength: 160, description: "What it was for, e.g. \"Dinner at Thakali\"." },
-                    amount: AMOUNT,
-                    date: DATE,
-                    group: { type: "string", description: "Group name or id. Optional." },
-                    paidBy: { type: "string", default: "me", description: "Who paid. Defaults to the user." },
-                    splitWith: NAMES,
-                    excludeMe: { type: "boolean", default: false },
-                    splitMode: { enum: SPLIT_MODES, default: "equal" },
-                    split: {
-                      oneOf: [
-                        { type: "array", items: { type: "object", required: ["person"], properties: { person: { type: "string" }, value: { type: "number", description: "Amount, percent or share count, depending on splitMode." } } } },
-                        { type: "object", additionalProperties: { type: "number" }, description: 'Map of name → value, e.g. { "me": 600, "Anita": 300 }.' },
-                      ],
-                    },
-                    note: { type: "string", maxLength: 500 },
-                  },
-                },
+                schema: EXPENSE_INPUT,
                 examples: {
-                  equalWithFriends: { summary: "I paid, split equally with two friends", value: { description: "Dinner", amount: 1200, splitWith: ["Sameer", "Anita"] } },
-                  wholeGroup: { summary: "Whole group, someone else paid", value: { description: "Fuel", amount: 3000, group: "Biker Gang", paidBy: "Rajan" } },
-                  paidForFriend: { summary: "I covered a friend completely", value: { description: "Movie ticket", amount: 500, splitWith: "Anita", excludeMe: true } },
-                  exact: { summary: "Unequal amounts", value: { description: "Groceries", amount: 900, splitMode: "exact", split: { me: 600, Anita: 300 } } },
+                  equalWithFriends: {
+                    summary: "I paid, split equally with two friends",
+                    value: { description: "Dinner", amount: 1200, splitWith: ["Sameer", "Anita"] },
+                  },
+                  wholeGroup: {
+                    summary: "Whole group, someone else paid",
+                    value: { description: "Fuel", amount: 3000, group: "Biker Gang", paidBy: "Rajan" },
+                  },
+                  paidForFriend: {
+                    summary: "I covered a friend completely",
+                    value: { description: "Movie ticket", amount: 500, splitWith: "Anita", excludeMe: true },
+                  },
+                  exact: {
+                    summary: "Unequal amounts",
+                    value: {
+                      description: "Groceries",
+                      amount: 900,
+                      splitMode: "exact",
+                      split: { me: 600, Anita: 300 },
+                    },
+                  },
                 },
               },
             },
           },
           responses: {
             "201": envelope(
-              { type: "object", properties: { id: { type: "string" }, groupId: { type: ["string", "null"] }, shares: { type: "array", items: { type: "object", properties: { name: { type: "string" }, amount: { type: "number" } } } } } },
+              {
+                type: "object",
+                properties: {
+                  id: { type: "string" },
+                  groupId: { type: ["string", "null"] },
+                  shares: {
+                    type: "array",
+                    items: { type: "object", properties: { name: { type: "string" }, amount: { type: "number" } } },
+                  },
+                },
+              },
               'Added "Dinner" NPR 1,200 outside any group, paid by you. Split equally: Sameer NPR 400, Anita NPR 400, you NPR 400.',
             ),
             ...errors,
           },
         },
       },
-      "/expenses/{id}": {
-        parameters: [{ name: "id", in: "path", required: true, schema: ID }],
-        get: { operationId: "getExpense", tags: ["Splits"], summary: "One shared expense", responses: { "200": envelope({ type: "object", properties: { expense: { $ref: "#/components/schemas/Expense" } } }), "404": { $ref: "#/components/responses/NotFound" }, ...errors } },
-        delete: {
-          operationId: "deleteExpense",
+      "/expenses/preview": {
+        post: {
+          operationId: "previewExpense",
           tags: ["Splits"],
-          summary: "Delete a shared expense",
-          description: "Permanent, and changes everyone's balances. Confirm with the user first.",
-          responses: { "200": envelope({ type: "object" }), "404": { $ref: "#/components/responses/NotFound" }, ...errors },
+          summary: "Preview detailed splits without saving",
+          requestBody: { required: true, content: { "application/json": { schema: EXPENSE_INPUT } } },
+          responses: { "200": envelope({ type: "object" }), ...errors },
         },
       },
-      "/settlements": {
-        post: {
-          operationId: "recordPayment",
+      "/expenses/{id}": {
+        parameters: [{ name: "id", in: "path", required: true, schema: ID }],
+        patch: {
+          operationId: "updateExpense",
           tags: ["Splits"],
-          summary: "Record that someone paid someone back",
-          description: "Settles some or all of a balance (\"Sameer paid me 500\" → from Sameer; \"I paid Anita 2000\" → to Anita). Either side defaults to the user. Without `group`, it is recorded in the group where that debt is open; if it is open in several, the error asks for a group.",
+          summary: "Update a shared expense using its current version",
+          description:
+            "Read the current expense first. Send version, description and amount/split or items. Receipt details are preserved unless replaced or clearItems:true.",
           requestBody: {
             required: true,
             content: {
               "application/json": {
-                schema: { type: "object", required: ["amount"], properties: { from: { type: "string", default: "me", description: "Who paid." }, to: { type: "string", default: "me", description: "Who received." }, amount: AMOUNT, date: DATE, group: { type: "string" }, note: { type: "string" } } },
-                examples: { paidMe: { value: { from: "Sameer", amount: 1425 } }, iPaid: { value: { to: "Anita", amount: "2,000" } } },
+                schema: {
+                  ...EXPENSE_INPUT,
+                  required: ["version", "description"],
+                  properties: {
+                    ...EXPENSE_INPUT.properties,
+                    version: { type: "integer", minimum: 1 },
+                    clearItems: { type: "boolean" },
+                  },
+                },
+              },
+            },
+          },
+          responses: {
+            "200": envelope({ type: "object" }),
+            "409": { $ref: "#/components/responses/Conflict" },
+            ...errors,
+          },
+        },
+        get: {
+          operationId: "getExpense",
+          tags: ["Splits"],
+          summary: "One shared expense",
+          responses: {
+            "200": envelope({ type: "object", properties: { expense: { $ref: "#/components/schemas/Expense" } } }),
+            "404": { $ref: "#/components/responses/NotFound" },
+            ...errors,
+          },
+        },
+        delete: {
+          operationId: "deleteExpense",
+          tags: ["Splits"],
+          summary: "Delete a shared expense",
+          description:
+            "Permanent, and changes everyone's balances. Requires delete scope and an authorized task that includes removal.",
+          responses: {
+            "200": envelope({ type: "object" }),
+            "404": { $ref: "#/components/responses/NotFound" },
+            ...errors,
+          },
+        },
+      },
+      "/settlements": {
+        get: {
+          operationId: "listSettlements",
+          tags: ["Splits"],
+          summary: "List recorded payments with versions",
+          parameters: [
+            { name: "group", in: "query", schema: { type: "string" } },
+            { name: "from", in: "query", schema: { type: "string", format: "date" } },
+            { name: "to", in: "query", schema: { type: "string", format: "date" } },
+            { name: "limit", in: "query", schema: { type: "integer", minimum: 1, maximum: 200, default: 50 } },
+          ],
+          responses: { "200": envelope({ type: "object" }), ...errors },
+        },
+        post: {
+          operationId: "recordPayment",
+          tags: ["Splits"],
+          summary: "Record that someone paid someone back",
+          description:
+            'Settles some or all of a balance ("Sameer paid me 500" → from Sameer; "I paid Anita 2000" → to Anita). Either side defaults to the user. Without `group`, it is recorded in the group where that debt is open; if it is open in several, the error asks for a group.',
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  required: ["amount"],
+                  properties: {
+                    from: { type: "string", default: "me", description: "Who paid." },
+                    to: { type: "string", default: "me", description: "Who received." },
+                    amount: AMOUNT,
+                    date: DATE,
+                    group: { type: "string" },
+                    note: { type: "string" },
+                  },
+                },
+                examples: {
+                  paidMe: { value: { from: "Sameer", amount: 1425 } },
+                  iPaid: { value: { to: "Anita", amount: "2,000" } },
+                },
               },
             },
           },
@@ -357,23 +721,84 @@ export function openApiSpec(origin: string) {
         },
       },
       "/settlements/{id}": {
+        get: {
+          operationId: "getSettlement",
+          tags: ["Splits"],
+          summary: "Read a payment and its version",
+          responses: { "200": envelope({ type: "object" }), ...errors },
+        },
+        patch: {
+          operationId: "updateSettlement",
+          tags: ["Splits"],
+          summary: "Update a recorded payment using its current version",
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  required: ["version", "amount"],
+                  properties: {
+                    version: { type: "integer", minimum: 1 },
+                    from: { type: "string" },
+                    to: { type: "string" },
+                    amount: AMOUNT,
+                    date: DATE,
+                    group: { type: ["string", "null"] },
+                    note: { type: "string", maxLength: 500 },
+                  },
+                },
+              },
+            },
+          },
+          responses: {
+            "200": envelope({ type: "object" }),
+            "409": { $ref: "#/components/responses/Conflict" },
+            ...errors,
+          },
+        },
         parameters: [{ name: "id", in: "path", required: true, schema: ID }],
-        delete: { operationId: "deletePayment", tags: ["Splits"], summary: "Remove a recorded payment", responses: { "200": envelope({ type: "object" }), "404": { $ref: "#/components/responses/NotFound" }, ...errors } },
+        delete: {
+          operationId: "deletePayment",
+          tags: ["Splits"],
+          summary: "Remove a recorded payment",
+          responses: {
+            "200": envelope({ type: "object" }),
+            "404": { $ref: "#/components/responses/NotFound" },
+            ...errors,
+          },
+        },
       },
       "/balances": {
         get: {
           operationId: "getBalances",
           tags: ["Splits"],
           summary: "Who owes whom",
-          description: "Overall net (positive = the user is owed), per-friend and per-group balances, plain sentences in `lines`, and `simplest`: the fewest payments that settle the user's own book.",
-          responses: { "200": envelope({ type: "object" }, "Overall you are owed NPR 1,725. Sameer owes you NPR 1,425. You owe Anita NPR 2,000."), ...errors },
+          description:
+            "Overall net (positive = the user is owed), per-friend and per-group balances, plain sentences in `lines`, and `simplest`: the fewest payments that settle the user's own book.",
+          responses: {
+            "200": envelope(
+              { type: "object" },
+              "Overall you are owed NPR 1,725. Sameer owes you NPR 1,425. You owe Anita NPR 2,000.",
+            ),
+            ...errors,
+          },
         },
       },
     },
     components: {
       securitySchemes: {
-        bearerAuth: { type: "http", scheme: "bearer", description: "A personal API key (khata_...) from Khata → Settings → API keys." },
-        apiKeyHeader: { type: "apiKey", in: "header", name: "X-API-Key", description: "The same key in a header, for clients that cannot send Authorization." },
+        bearerAuth: {
+          type: "http",
+          scheme: "bearer",
+          description: "A personal API key (khata_...) from Khata → Settings → API keys.",
+        },
+        apiKeyHeader: {
+          type: "apiKey",
+          in: "header",
+          name: "X-API-Key",
+          description: "The same key in a header, for clients that cannot send Authorization.",
+        },
       },
       schemas: {
         Error: {
@@ -382,13 +807,23 @@ export function openApiSpec(origin: string) {
           properties: {
             ok: { const: false },
             error: { type: "string", description: "What went wrong and how to fix it. Safe to show the user." },
-            candidates: { type: "array", items: { type: "string" }, description: "Close or valid names. Ask the user to pick one, then retry with it." },
+            candidates: {
+              type: "array",
+              items: { type: "string" },
+              description: "Close or valid names. Ask the user to pick one, then retry with it.",
+            },
             hint: { type: "string" },
           },
         },
         FriendBalance: {
           type: "object",
-          properties: { id: { type: "string" }, name: { type: "string" }, onKhata: { type: "boolean" }, net: { type: "number", description: "Positive: they owe the user." }, summary: { type: "string" } },
+          properties: {
+            id: { type: "string" },
+            name: { type: "string" },
+            onKhata: { type: "boolean" },
+            net: { type: "number", description: "Positive: they owe the user." },
+            summary: { type: "string" },
+          },
         },
         Group: {
           type: "object",
@@ -415,19 +850,51 @@ export function openApiSpec(origin: string) {
             group: { type: ["string", "null"] },
             paidBy: { type: "string" },
             splitMode: { enum: SPLIT_MODES },
-            shares: { type: "array", items: { type: "object", properties: { name: { type: "string" }, amount: { type: "number" } } } },
+            version: { type: "integer" },
+            paidById: { type: "string" },
+            items: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: {
+                  description: { type: "string" },
+                  amount: { type: "number" },
+                  splitMode: { enum: SPLIT_MODES },
+                  shares: { type: "array", items: SHARE },
+                },
+              },
+            },
+            shares: { type: "array", items: SHARE },
             yourShare: { type: "number" },
             summary: { type: "string" },
           },
         },
       },
       responses: {
-        BadRequest: { description: "The request needs fixing. `error` says how; `candidates` lists names to choose from.", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
-        Unauthorized: { description: "Missing, unknown or revoked API key.", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
-        Forbidden: { description: "Only the group's owner can do that.", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
-        NotFound: { description: "No such id for this user.", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
-        Conflict: { description: "Already exists.", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
-        TooMany: { description: "Rate limited. Wait `Retry-After` seconds.", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+        BadRequest: {
+          description: "The request needs fixing. `error` says how; `candidates` lists names to choose from.",
+          content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } },
+        },
+        Unauthorized: {
+          description: "Missing, unknown or revoked API key.",
+          content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } },
+        },
+        Forbidden: {
+          description: "This key lacks the required scope, or shared-book ownership rules do not permit the operation.",
+          content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } },
+        },
+        NotFound: {
+          description: "No such id for this user.",
+          content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } },
+        },
+        Conflict: {
+          description: "Already exists.",
+          content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } },
+        },
+        TooMany: {
+          description: "Rate limited. Wait `Retry-After` seconds.",
+          content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } },
+        },
       },
     },
   };
@@ -437,7 +904,11 @@ export function openApiSpec(origin: string) {
 export const ENDPOINTS = [
   ["GET", "/context", "Me, friends, groups, categories, accounts, today's date and balances. Call first."],
   ["GET", "/transactions", "Search the personal ledger with totals (q, from, to, type, category, limit)."],
-  ["POST", "/transactions", "Add personal transactions (one, an array, or { transactions }). externalId makes it idempotent."],
+  [
+    "POST",
+    "/transactions",
+    "Add personal transactions (one, an array, or { transactions }). externalId makes it idempotent.",
+  ],
   ["GET", "/transactions/{id}", "One transaction."],
   ["PATCH", "/transactions/{id}", "Change some fields of a transaction."],
   ["DELETE", "/transactions/{id}", "Delete a transaction."],
@@ -448,9 +919,14 @@ export const ENDPOINTS = [
   ["GET", "/groups/{group}", "One group by id or name, with recent expenses."],
   ["PATCH", "/groups/{group}", "Rename, addMembers, removeMembers."],
   ["GET", "/expenses", "Shared expenses (group, with, from, to, limit)."],
-  ["POST", "/expenses", "Split a bill by names: equal, exact, percent or shares."],
+  ["POST", "/expenses", "Split a bill by names, including item-by-item receipts."],
+  ["POST", "/expenses/preview", "Preview detailed shares without saving."],
+  ["PATCH", "/expenses/{id}", "Update a shared split using the current version."],
   ["GET", "/expenses/{id}", "One shared expense with its split."],
   ["DELETE", "/expenses/{id}", "Delete a shared expense."],
+  ["GET", "/settlements", "List recorded payments with versions."],
+  ["GET", "/settlements/{id}", "Read a recorded payment."],
+  ["PATCH", "/settlements/{id}", "Update a payment using the current version."],
   ["POST", "/settlements", "Record a payment between two people."],
   ["DELETE", "/settlements/{id}", "Remove a recorded payment."],
   ["GET", "/balances", "Who owes whom, with ready-to-read sentences."],

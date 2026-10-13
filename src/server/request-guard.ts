@@ -118,4 +118,6 @@ export const limits = {
   pushTests: createRateLimiter({ limit: 5, windowMs: HOUR }),
   /** Writes through the /api/v1 agent API per user. Generous for a chat bot, tight for a runaway loop. */
   agentWrites: createRateLimiter({ limit: 300, windowMs: HOUR }),
+  agentKeyWrites: createRateLimiter({ limit: 120, windowMs: HOUR }),
+  mcpRequests: createRateLimiter({ limit: 600, windowMs: 10 * 60 * 1000 }),
 };

@@ -12,6 +12,7 @@ export type GroupView = {
   owned: boolean;
   owner: string | null;
   members: string[];
+  memberDetails: { id: string; name: string }[];
   net: number;
   summary: string;
   balances: string[];
@@ -54,8 +55,9 @@ function view(
     owned,
     owner,
     members: members.map((member) => (member.id === selfId ? "You" : member.name)),
+    memberDetails: members.map((member) => ({ id: member.id, name: member.id === selfId ? "You" : member.name })),
     net,
-    summary: Math.abs(net) < 0.005 ? `You are settled up in "${name}"` : net > 0 ? `You are owed ${formatNpr(net)} in "${name}"` : `You owe ${formatNpr(-net)} in "${name}"`,
+    summary: Math.abs(net) < 0.005 ? balances.youOwe.length || balances.youAreOwed.length ? `Your net balance is zero in "${name}"; payments remain open` : `You are settled up in "${name}"` : net > 0 ? `You are owed ${formatNpr(net)} in "${name}"` : `You owe ${formatNpr(-net)} in "${name}"`,
     balances: lines,
     totalSpent: roundMoney(expenses.reduce((total, expense) => total + expense.amount, 0)),
     expenseCount: expenses.length,
@@ -71,8 +73,11 @@ export type ExpenseView = {
   groupId: string | null;
   paidBy: string;
   splitMode: string;
+  version: number;
+  paidById: string;
+  items: { description: string; amount: number; splitMode: string; shares: { personId: string; name: string; amount: number; weight: number | null }[] }[];
   category: string | null;
-  shares: { name: string; amount: number }[];
+  shares: { personId: string; name: string; amount: number; weight: number | null }[];
   yourShare: number;
   note: string;
   summary: string;
@@ -99,8 +104,11 @@ export function expenseView(expense: ShareBook["expenses"][number], selfId: stri
     groupId: expense.groupId,
     paidBy,
     splitMode: expense.splitMode,
+    version: expense.version,
+    paidById: expense.paidById,
+    items: (expense.items ?? []).map((item) => ({ description: item.description, amount: item.amount, splitMode: item.splitMode, shares: item.splits.map((share) => ({ ...share, name: label(share.personId, expense.splits.find((split) => split.personId === share.personId)?.name ?? "Someone") })) })),
     category: expense.category,
-    shares: expense.splits.map((split) => ({ name: label(split.personId, split.name), amount: split.amount })),
+    shares: expense.splits.map((split) => ({ personId: split.personId, name: label(split.personId, split.name), amount: split.amount, weight: split.weight })),
     yourShare,
     note: expense.note,
     summary: `${expense.date}: ${paidBy} paid ${formatNpr(expense.amount)} for "${expense.description}"${expense.groupName ? ` in ${expense.groupName}` : ""}; your share ${formatNpr(yourShare)}`,

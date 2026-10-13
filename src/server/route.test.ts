@@ -24,7 +24,7 @@ function stub(overrides: Partial<RouteRuntime> = {}) {
     },
     agent: async () => {
       calls.push("agent");
-      return { userId: "user-1", viaApiKey: true };
+      return { userId: "user-1", viaApiKey: true, scopes: ["read", "write", "delete"] };
     },
     body: async () => {
       calls.push("body");
@@ -272,4 +272,21 @@ test("a refusal can carry the full answer at the top level of its body", async (
     updated: 0,
     invalid: [{ index: 0, message: "Date must be YYYY-MM-DD" }],
   });
+});
+
+test("read-only API keys cannot bypass scope checks through REST writes", async () => {
+  const { runtime, calls } = stub({ agent: async () => ({ userId: "user-1", viaApiKey: true, scopes: ["read"] }) });
+  const handlers = defineAgentRoute()({ POST: { auth: "agent", body: z.object({ name: z.string() }), handle: () => new Response(null, { status: 204 }) } }, { runtime });
+  const response = await handlers.POST!(post({ name: "Groceries" }));
+  assert.equal(response.status, 403);
+  assert.ok(!calls.includes("body"));
+  assert.ok(!calls.some((call) => call.startsWith("expire:")));
+});
+
+test("a read-scoped POST preview is allowed without invalidating a snapshot", async () => {
+  const { runtime, calls } = stub({ agent: async () => ({ userId: "user-1", viaApiKey: true, scopes: ["read"] }) });
+  const handlers = defineAgentRoute()({ POST: { auth: "agent", scope: "read", snapshot: false, body: z.object({ name: z.string() }), handle: () => new Response(null, { status: 204 }) } }, { runtime });
+  assert.equal((await handlers.POST!(post({ name: "Preview" }))).status, 204);
+  assert.ok(calls.includes("body"));
+  assert.ok(!calls.some((call) => call.startsWith("expire:")));
 });

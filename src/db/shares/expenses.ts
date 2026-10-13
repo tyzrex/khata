@@ -2,6 +2,7 @@ import { and, eq, inArray, sql } from "drizzle-orm";
 import { getDb } from "@/db/client";
 import { expenseTransactions, people, settlements, sharedExpenseRevisions, sharedExpenses, sharedSplits, transactions } from "@/db/schema";
 import { buildSplits, ShareInputError, type SplitMode } from "@/lib/split";
+import { validateExpenseItems, type ExpenseItem } from "@/lib/itemized-split";
 import { ConflictError, NotFoundError } from "@/server/errors";
 import { groupScope, mutationScope, requireGroupMembers, requirePeople } from "@/db/shares/permissions";
 import { loadUserNames } from "@/db/shares/names";
@@ -74,6 +75,7 @@ async function expenseRevision(
       splitMode: expense.splitMode,
       category: expense.category,
       note: expense.note,
+      items: expense.items,
     },
   };
 }
@@ -93,6 +95,7 @@ async function writeExpense(
     participants: { personId: string; amount?: number; weight?: number }[];
     transactionIds: string[];
     version?: number;
+    items?: ExpenseItem[] | null;
   },
   existing: typeof sharedExpenses.$inferSelect | null,
 ) {
@@ -133,6 +136,12 @@ async function writeExpense(
     participants: input.participants,
   });
   const links = scope.isOwner ? await assertExpenseLinks(scope.ownerId, input.transactionIds, existing ? id : undefined) : [];
+  const items = input.items === undefined ? existing?.items ?? null : input.items;
+  if (items) {
+    validateExpenseItems(items, input.amount, splits);
+    await requirePeople(scope.ownerId, items.flatMap((item) => item.splits.map((share) => share.personId)));
+    if (input.groupId) await requireGroupMembers(input.groupId, items.flatMap((item) => item.splits.map((share) => share.personId)));
+  }
   const revision = existing ? await expenseRevision(actorId, existing, "updated") : null;
   const now = new Date();
   await getDb().transaction(async (tx) => {
@@ -147,6 +156,7 @@ async function writeExpense(
           amount: input.amount,
           paidById: input.paidById,
           splitMode: input.splitMode,
+          items,
           category: input.category ?? null,
           note: input.note,
           updatedByUserId: actorId,
@@ -171,6 +181,7 @@ async function writeExpense(
         currency: "NPR",
         paidById: input.paidById,
         splitMode: input.splitMode,
+        items,
         category: input.category ?? null,
         note: input.note,
       });

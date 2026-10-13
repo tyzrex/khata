@@ -273,11 +273,17 @@ Every response is `{ ok: true, message, data }` or `{ ok: false, error, candidat
 | `GET/POST /transactions`, `GET/PATCH/DELETE /transactions/:id` | Personal ledger, with totals on search |
 | `GET/POST /friends` | Friends with net balances; add by name |
 | `GET/POST /groups`, `GET/PATCH /groups/:group` | Groups by id or name; rename, add or remove members |
-| `GET/POST /expenses`, `GET/DELETE /expenses/:id` | Shared expenses split equal, exact, by shares or percent |
-| `POST /settlements`, `DELETE /settlements/:id` | Record or remove a payment |
+| `GET/POST /expenses`, `GET/PATCH/DELETE /expenses/:id` | Shared expenses split equal, exact, by shares or percent |
+| `GET/POST /settlements`, `GET/PATCH/DELETE /settlements/:id` | Record or remove a payment |
 | `GET /balances` | Who owes whom, with ready-to-read sentences |
 
 Revoking a key in Settings takes effect on the bot's next call. Keys cannot list or create other keys; that needs a signed-in session. Migration `0006_agent_api_keys` adds the `api_keys` table. Run `bun run db:migrate`.
+
+## Native MCP and detailed receipts
+
+Khata now provides `/api/mcp` (Streamable HTTP), plus `bun run mcp:stdio` for local clients. Create one API key per bot in Settings, choosing read-only, read/write or read/write/delete access and optional expiry. Tools include item-by-item split previews, expense/payment edits with version checks, stable retry IDs and per-bot activity history. Receipt details persist with shared expenses and appear in their dialog.
+
+Run `bun run db:migrate` to apply migration `0015_robust_gideon`. Existing keys retain their previous full access; newly created keys default to read/write. See [MCP setup and receipt examples](docs/mcp.md) for connection configuration, permissions and tests.
 
 ## Other routes
 

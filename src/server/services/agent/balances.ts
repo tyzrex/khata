@@ -1,6 +1,7 @@
 import { roundMoney } from "@/lib/money";
 import { getShareBook } from "@/db/shares";
-import { balanceLines, friendBalances, netOf } from "@/server/agent/plan";
+import { dashboardDebts } from "@/components/dashboard-shares";
+import { friendBalances, netOf } from "@/server/agent/plan";
 import { groupViews } from "@/server/agent/views";
 import { formatNpr } from "@/lib/format";
 
@@ -11,6 +12,7 @@ const paisa = roundMoney;
 const settled = (amount: number) => Math.abs(amount) < 0.005;
 
 export type BalanceView = {
+  outstanding: ReturnType<typeof dashboardDebts>;
   net: number;
   youAreOwed: number;
   youOwe: number;
@@ -30,19 +32,37 @@ export type Rendered<T> = { data: T; message: string; status?: number };
  * headline net adds them together — being owed money by a group you joined is
  * still being owed money.
  */
-export async function balancesView(userId: string): Promise<Rendered<BalanceView>> {
+export async function balancesView(
+  userId: string,
+): Promise<Rendered<BalanceView>> {
   const book = await getShareBook(userId);
-  const sum = (list: { amount: number }[]) => list.reduce((total, debt) => total + debt.amount, 0);
-  const across = (pick: (group: (typeof book.joinedGroups)[number]) => number) => book.joinedGroups.reduce((total, group) => total + pick(group), 0);
+  const sum = (list: { amount: number }[]) =>
+    list.reduce((total, debt) => total + debt.amount, 0);
+  const across = (
+    pick: (group: (typeof book.joinedGroups)[number]) => number,
+  ) => book.joinedGroups.reduce((total, group) => total + pick(group), 0);
 
-  const youAreOwed = paisa(sum(book.overall.youAreOwed) + across((group) => sum(group.balances.youAreOwed)));
-  const youOwe = paisa(sum(book.overall.youOwe) + across((group) => sum(group.balances.youOwe)));
-  const net = paisa(netOf(book.overall) + across((group) => netOf(group.balances)));
-  const lines = balanceLines(book);
+  const outstanding = dashboardDebts(book);
+  const youAreOwed = paisa(sum(outstanding.filter((debt) => debt.incoming)));
+  const youOwe = paisa(sum(outstanding.filter((debt) => !debt.incoming)));
+  const net = paisa(
+    netOf(book.overall) + across((group) => netOf(group.balances)),
+  );
+  const lines = outstanding.map(
+    (debt) =>
+      `${debt.incoming ? `${debt.name} owes you` : `You owe ${debt.name}`} ${formatNpr(debt.amount)} (${debt.context})`,
+  );
 
-  const headline = settled(net) ? "Overall you are settled up." : net > 0 ? `Overall you are owed ${formatNpr(net)}.` : `Overall you owe ${formatNpr(-net)}.`;
+  const headline = settled(net)
+    ? outstanding.length
+      ? "Your net balance is zero, but payments remain open in separate books."
+      : "All balances are settled."
+    : net > 0
+      ? `Overall you are owed ${formatNpr(net)}.`
+      : `Overall you owe ${formatNpr(-net)}.`;
   return {
     data: {
+      outstanding,
       net,
       youAreOwed,
       youOwe,

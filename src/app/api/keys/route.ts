@@ -10,6 +10,6 @@ export const { GET, POST } = defineRoute()({
     snapshot: false,
     body: keyInput,
     limit: { limiter: limits.apiKeys, key: ({ userId }) => userId, message: (retryAfter) => `Too many keys created. Try again in ${retryAfter} seconds.` },
-    handle: async ({ userId, body }) => Response.json(await createApiKey(userId, body.name), { status: 201 }),
+    handle: async ({ userId, body }) => Response.json(await createApiKey(userId, body.name, body.scopes, body.expiresInDays), { status: 201 }),
   },
 });

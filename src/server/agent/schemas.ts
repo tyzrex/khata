@@ -1,8 +1,9 @@
 import { z } from "zod";
 import { SHARED_CATEGORIES, TX_TYPES } from "@/lib/constants";
-import { dateSchema, moneySchema } from "@/lib/schemas";
+import { dateSchema, MAX_AMOUNT, moneySchema } from "@/lib/schemas";
 import { SPLIT_MODES } from "@/lib/split";
 import { parseAmount, resolveDate } from "@/server/agent/match";
+import { AGENT_SCOPES, DEFAULT_AGENT_SCOPES } from "@/lib/agent-permissions";
 
 /**
  * Request shapes for the /api/v1 agent API. They are forgiving about how values
@@ -145,7 +146,7 @@ const splitEntries = z.preprocess(
 export function expenseInput(today: string) {
   return z.object({
     description: z.string().trim().min(1, "description is required, like \"Dinner at Thakali\".").max(160),
-    amount,
+    amount: amount.optional(),
     date: date(today),
     group: z.string().trim().max(100).nullable().optional(),
     paidBy: z.string().trim().max(80).nullable().optional(),
@@ -153,12 +154,24 @@ export function expenseInput(today: string) {
     excludeMe: z.boolean().optional().default(false),
     splitMode: z.preprocess(lower, z.enum(SPLIT_MODES, { error: "splitMode must be equal, exact, shares, or percent." })).optional(),
     split: splitEntries.optional(),
+    items: z.array(z.object({
+      description: z.string().trim().min(1).max(160),
+      amount,
+      splitWith: nameList.optional(),
+      splitMode: z.preprocess(lower, z.enum(SPLIT_MODES)).optional(),
+      split: splitEntries.optional(),
+    })).min(1).max(50).optional(),
     /** A retry key. Sending the same one again returns the first answer instead of adding a second expense. */
     externalId: externalId.optional(),
     /** One of the fixed shared categories. Omit it and the expense stays uncategorised. */
-    category: z.preprocess(lower, z.enum(SHARED_CATEGORIES, { error: `category must be one of: ${SHARED_CATEGORIES.join(", ")}.` })).optional(),
+    category: z.preprocess(lower, z.enum(SHARED_CATEGORIES, { error: `category must be one of: ${SHARED_CATEGORIES.join(", ")}.` })).nullable().optional(),
     note,
-  });
+  }).superRefine((value, ctx) => {
+    const total = value.amount ?? (value.items ?? []).reduce((sum, item) => sum + item.amount, 0);
+    if (total > MAX_AMOUNT) ctx.addIssue({ code: "custom", path: ["amount"], message: "Receipt total is too large." });
+    if (value.amount === undefined && !value.items?.length) ctx.addIssue({ code: "custom", path: ["amount"], message: "Give an amount, or receipt items with their amounts." });
+    if (value.items?.length && (value.split || value.splitWith || value.splitMode || value.excludeMe)) ctx.addIssue({ code: "custom", path: ["items"], message: "For an itemized expense, put splitWith, splitMode and split on each item, not on the overall expense." });
+  }).transform((value) => ({ ...value, amount: value.amount ?? Math.round(value.items!.reduce((total, item) => total + Math.round(item.amount * 100), 0)) / 100 }));
 }
 
 export const expenseQuery = z.object({
@@ -183,4 +196,8 @@ export function settlementInput(today: string) {
   });
 }
 
-export const keyInput = z.object({ name: z.string().trim().min(1, "Give the key a name, like \"Grok bot\".").max(60) });
+export const keyInput = z.object({
+  name: z.string().trim().min(1, "Give the key a name, like \"Grok bot\".").max(60),
+  scopes: z.array(z.enum(AGENT_SCOPES)).min(1).max(3).refine((scopes) => scopes.includes("read"), "Every agent needs read access to resolve context.").optional().default(DEFAULT_AGENT_SCOPES),
+  expiresInDays: z.number().int().min(1).max(365).nullable().optional().default(null),
+});

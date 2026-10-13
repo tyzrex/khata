@@ -1,4 +1,6 @@
 import { roundMoney } from "@/lib/money";
+import { type ExpenseItem, validateExpenseItems } from "@/lib/itemized-split";
+import { toPaisa, fromPaisa } from "@/lib/split";
 import type { BalanceScope, ShareBook } from "@/db/shares";
 import type { SharedCategory } from "@/lib/constants";
 import { formatNpr } from "@/lib/format";
@@ -139,6 +141,7 @@ export type ExpenseRequest = {
   excludeMe?: boolean;
   splitMode?: SplitMode;
   split?: SplitEntry[];
+  items?: { description: string; amount: number; splitWith?: string[]; splitMode?: SplitMode; split?: SplitEntry[] }[];
   /** One of `SHARED_CATEGORIES`, or null when the agent did not pick one. */
   category?: SharedCategory | null;
 };
@@ -158,6 +161,7 @@ export type ExpensePlan = {
     note: string;
     participants: SplitParticipant[];
     transactionIds: string[];
+    items?: ExpenseItem[];
   };
   splits: BuiltSplit[];
 };
@@ -189,6 +193,7 @@ function withPayer(mode: SplitMode, total: number, paidById: string, participant
 }
 
 export function planExpense(book: ShareBook, request: ExpenseRequest, opts: { accountName?: string } = {}): ExpensePlan {
+  if (request.items?.length) return planItemizedExpense(book, request, opts);
   const payerName = request.paidBy?.trim() || "me";
   const split = request.split?.filter((entry) => entry.person.trim()) ?? [];
   const splitWith = request.splitWith?.filter((name) => name.trim()) ?? [];
@@ -253,6 +258,32 @@ export function planExpense(book: ShareBook, request: ExpenseRequest, opts: { ac
       transactionIds: [],
     },
     splits,
+  };
+}
+
+function planItemizedExpense(book: ShareBook, request: ExpenseRequest, opts: { accountName?: string }): ExpensePlan {
+  const items = request.items!;
+  if (request.split || request.splitWith || request.splitMode || request.excludeMe) throw new AgentInputError("Put split instructions on each receipt item.");
+  if (items.reduce((total, item) => total + toPaisa(item.amount), 0) !== toPaisa(request.amount)) throw new AgentInputError("Receipt items must add up to the expense total.");
+  const names = [request.paidBy?.trim() || "me", ...items.flatMap((item) => [...(item.splitWith ?? []), ...(item.split ?? []).map((entry) => entry.person)])];
+  const scope = request.group?.trim() ? findGroup(book, request.group) : pickScope(book, names, opts.accountName).scope;
+  if (!request.group && items.some((item) => !item.splitWith?.length && !item.split?.length)) throw new AgentInputError("Each item needs splitWith or split, unless a group is supplied.");
+  const plans = items.map((item) => planExpense(book, {
+    description: item.description, amount: item.amount, date: request.date, note: "",
+    paidBy: request.paidBy, group: scope.groupId,
+    splitWith: item.splitWith, splitMode: item.splitMode, split: item.split,
+  }, opts));
+  const totals = new Map<string, number>();
+  for (const plan of plans) for (const split of plan.splits) totals.set(split.personId, (totals.get(split.personId) ?? 0) + toPaisa(split.amount));
+  if (totals.size > 40) throw new AgentInputError("An expense may involve at most 40 people.");
+  const splits = [...totals].map(([personId, paisa]) => ({ personId, amount: fromPaisa(paisa), weight: null }));
+  const receipt: ExpenseItem[] = plans.map((plan) => ({ description: plan.write.description, amount: plan.write.amount, splitMode: plan.write.splitMode, splits: plan.splits }));
+  validateExpenseItems(receipt, request.amount, splits);
+  const first = plans[0]!;
+  const others = splits.map((share) => share.personId).filter((id) => id !== scope.selfId);
+  return {
+    scope, splits, directWith: scope.kind === "outside" && others.length === 1 ? others[0]! : null,
+    write: { ...first.write, description: request.description, amount: request.amount, splitMode: "exact", note: request.note, category: request.category ?? null, participants: splits.map((share) => ({ personId: share.personId, amount: share.amount })), items: receipt },
   };
 }
 

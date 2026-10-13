@@ -9,6 +9,7 @@ export async function GET() {
       auth: "Authorization: Bearer khata_... (or X-API-Key). Create a key in Khata → Settings → API keys.",
       openapi: "/api/v1/openapi.json",
       guide: "/api/v1/llms.txt",
+      mcp: { endpoint: "/api/mcp", transport: "Streamable HTTP", auth: "One scoped API key per bot. Read/write keys operate autonomously within delegated tasks; delete requires a separate permission." },
       envelope: "Success: { ok: true, message, data }. Failure: { ok: false, error, candidates? }.",
       endpoints: ENDPOINTS.map(([method, path, description]) => ({ method, path: `/api/v1${path}`, description })),
     },

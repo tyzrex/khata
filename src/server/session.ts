@@ -1,7 +1,8 @@
 import { cacheLife } from "next/cache";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
-import { userIdForApiKey } from "@/db/api-keys";
+import { identityForApiKey } from "@/db/api-keys";
+import type { AgentIdentity } from "@/lib/agent-permissions";
 import { isApiKey, readApiKey } from "@/server/agent/keys";
 import { getAuth } from "@/server/auth";
 import { beginRequest } from "@/server/http";
@@ -86,13 +87,13 @@ export async function requireAgentUserId(request: Request) {
  * the actor you would never hear about the expense your own bot just added. So a
  * write made with an API key notifies you too.
  */
-export async function requireAgentIdentity(request: Request): Promise<{ userId: string; viaApiKey: boolean }> {
+export async function requireAgentIdentity(request: Request): Promise<AgentIdentity> {
   await beginRequest();
   const key = readApiKey(request.headers);
   if (key) {
-    const userId = isApiKey(key) ? await userIdForApiKey(key) : null;
-    if (!userId) throw new UnauthorizedError();
-    return { userId, viaApiKey: true };
+    const identity = isApiKey(key) ? await identityForApiKey(key) : null;
+    if (!identity) throw new UnauthorizedError();
+    return identity;
   }
   return { userId: await requireUserId(request), viaApiKey: false };
 }

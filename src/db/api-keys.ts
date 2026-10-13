@@ -1,4 +1,5 @@
-import { and, asc, eq, isNull, lt, or } from "drizzle-orm";
+import { and, asc, eq, gt, isNull, lt, or } from "drizzle-orm";
+import { DEFAULT_AGENT_SCOPES, type AgentScope } from "@/lib/agent-permissions";
 import { getDb } from "@/db/client";
 import { apiKeys } from "@/db/schema";
 import { generateApiKey, hashApiKey } from "@/server/agent/keys";
@@ -10,7 +11,7 @@ export const MAX_ACTIVE_KEYS = 10;
 /** last_used_at is refreshed at most this often, so a busy bot does not write on every call. */
 const TOUCH_EVERY_MS = 60_000;
 
-export type ApiKeyDto = { id: string; name: string; prefix: string; createdAt: string; lastUsedAt: string | null };
+export type ApiKeyDto = { id: string; name: string; prefix: string; createdAt: string; lastUsedAt: string | null; scopes: AgentScope[]; expiresAt: string | null };
 
 function toDto(row: typeof apiKeys.$inferSelect): ApiKeyDto {
   return {
@@ -19,6 +20,8 @@ function toDto(row: typeof apiKeys.$inferSelect): ApiKeyDto {
     prefix: row.prefix,
     createdAt: row.createdAt.toISOString(),
     lastUsedAt: row.lastUsedAt?.toISOString() ?? null,
+    scopes: row.scopes,
+    expiresAt: row.expiresAt?.toISOString() ?? null,
   };
 }
 
@@ -32,13 +35,13 @@ export async function listApiKeys(userId: string) {
 }
 
 /** Creates a key and returns the plaintext once. Only its hash is stored. */
-export async function createApiKey(userId: string, name: string) {
+export async function createApiKey(userId: string, name: string, scopes: AgentScope[] = DEFAULT_AGENT_SCOPES, expiresInDays: number | null = null) {
   const active = await listApiKeys(userId);
-  if (active.length >= MAX_ACTIVE_KEYS) throw new ShareInputError(`You already have ${MAX_ACTIVE_KEYS} keys. Revoke one first.`);
+  if (active.filter((key) => !key.expiresAt || new Date(key.expiresAt).getTime() > Date.now()).length >= MAX_ACTIVE_KEYS) throw new ShareInputError(`You already have ${MAX_ACTIVE_KEYS} keys. Revoke one first.`);
   const { token, prefix, hash } = generateApiKey();
   const [row] = await getDb()
     .insert(apiKeys)
-    .values({ id: crypto.randomUUID(), userId, name, prefix, keyHash: hash })
+    .values({ id: crypto.randomUUID(), userId, name, prefix, keyHash: hash, scopes: [...new Set(scopes)], expiresAt: expiresInDays ? new Date(Date.now() + expiresInDays * 86_400_000) : null })
     .returning();
   return { key: toDto(row!), token };
 }
@@ -54,11 +57,15 @@ export async function revokeApiKey(userId: string, id: string) {
 
 /** The account behind an active key, or null. */
 export async function userIdForApiKey(token: string) {
+  return (await identityForApiKey(token))?.userId ?? null;
+}
+
+export async function identityForApiKey(token: string) {
   const db = getDb();
   const [row] = await db
-    .select({ id: apiKeys.id, userId: apiKeys.userId, lastUsedAt: apiKeys.lastUsedAt })
+    .select({ id: apiKeys.id, userId: apiKeys.userId, name: apiKeys.name, scopes: apiKeys.scopes, lastUsedAt: apiKeys.lastUsedAt })
     .from(apiKeys)
-    .where(and(eq(apiKeys.keyHash, hashApiKey(token)), isNull(apiKeys.revokedAt)))
+    .where(and(eq(apiKeys.keyHash, hashApiKey(token)), isNull(apiKeys.revokedAt), or(isNull(apiKeys.expiresAt), gt(apiKeys.expiresAt, new Date()))))
     .limit(1);
   if (!row) return null;
   const now = new Date();
@@ -69,5 +76,5 @@ export async function userIdForApiKey(token: string) {
       .set({ lastUsedAt: now })
       .where(and(eq(apiKeys.id, row.id), or(isNull(apiKeys.lastUsedAt), lt(apiKeys.lastUsedAt, stale))));
   }
-  return row.userId;
+  return { userId: row.userId, viaApiKey: true as const, apiKeyId: row.id, agentName: row.name, scopes: row.scopes };
 }

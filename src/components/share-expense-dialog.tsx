@@ -22,6 +22,7 @@ import { SHARED_CATEGORIES } from "@/lib/constants";
 import { formatNpr } from "@/lib/format";
 import { shareExpenseSchema, splitParticipantSchema, type ShareExpenseValues } from "@/lib/schemas";
 import { buildSplits, ShareInputError, type SplitMode } from "@/lib/split";
+import { validateExpenseItems } from "@/lib/itemized-split";
 import type { TransactionDto } from "@/lib/types";
 
 type Expense = ShareBook["expenses"][number];
@@ -184,6 +185,10 @@ export function ShareExpenseDialog({
   } catch (caught) {
     previewError = amount.trim() && caught instanceof ShareInputError ? caught.message : null;
   }
+  let replacesItems = false;
+  if (expense?.items?.length && !previewError) {
+    try { validateExpenseItems(expense.items, total, preview); } catch { replacesItems = true; }
+  }
 
   function setParticipants(next: Row[]) {
     form.setValue("participants", next, { shouldValidate: true });
@@ -218,6 +223,7 @@ export function ShareExpenseDialog({
           participants: values.participants,
           transactionIds: values.transactionIds,
           category: values.category === "" ? null : values.category,
+          ...(expense?.items?.length ? { items: replacesItems ? null : expense.items } : {}),
           ...(editing ? { version: expense!.version } : {}),
         },
         editing ? expense!.id : undefined,
@@ -578,6 +584,17 @@ export function ShareExpenseDialog({
                 />
               ) : null}
               {expense ? (
+                <>
+                {expense.items?.length ? (
+                  <section aria-label="Receipt item breakdown" className="rounded-xl bg-secondary/70 px-3 py-3 text-[13px]">
+                    <h3 className="font-semibold text-foreground">Receipt breakdown</h3>
+                    <ul className="mt-2 divide-y divide-border">{expense.items.map((item, index) => <li key={index} className="py-2">
+                      <div className="flex items-baseline justify-between gap-3"><span className="min-w-0 break-words font-medium">{item.description}</span><span className="figure shrink-0">{formatNpr(item.amount)}</span></div>
+                      <p className="mt-1 leading-5 text-muted-foreground">{item.splits.filter((share) => share.amount > 0).map((share) => `${book.people.find((person) => person.id === share.personId)?.name ?? "Someone"} ${formatNpr(share.amount)}`).join(" · ")}</p>
+                    </li>)}</ul>
+                    {replacesItems ? <p className="mt-2 text-warning" role="status">Saving these changed shares will replace the receipt breakdown with a total-only split. To change individual items, use your AI tool.</p> : <p className="mt-2 text-muted-foreground">The item breakdown is kept when you edit the description, date or notes.</p>}
+                  </section>
+                ) : null}
                 <section aria-labelledby="expense-audit-title" className="rounded-xl bg-secondary/70 px-3 py-2.5 text-[13px] text-muted-foreground">
                   <h3 id="expense-audit-title" className="font-semibold text-foreground">History</h3>
                   <p className="mt-1">
@@ -612,6 +629,7 @@ export function ShareExpenseDialog({
                     )}
                   </details>
                 </section>
+                </>
               ) : null}
               {error ? <FieldError>{error}</FieldError> : null}
             </FieldGroup>

@@ -6,8 +6,9 @@ import { describeSplits, findGroup, planExpense, whereText } from "@/server/agen
 import { expenseInput, type expenseQuery } from "@/server/agent/schemas";
 import { expenseView, expenseViews, type ExpenseView } from "@/server/agent/views";
 import { formatNpr } from "@/lib/format";
-import { NotFoundError } from "@/server/errors";
-import { addSharedExpense, removeSharedExpense } from "@/server/services/shared-writes";
+import { ConflictError, NotFoundError, ValidationError } from "@/server/errors";
+import { addSharedExpense, editSharedExpense, removeSharedExpense } from "@/server/services/shared-writes";
+import { todayInKathmandu } from "@/lib/period";
 import type { Rendered } from "@/server/services/agent/balances";
 import type { z } from "zod";
 
@@ -97,9 +98,36 @@ export async function addExpense(userId: string, draft: ExpenseDraft, viaApiKey:
       date: plan.write.date,
       paidBy: payer,
       splitMode: plan.write.splitMode,
+      version: 1,
+      items: (plan.write.items ?? []).map((item) => ({ description: item.description, amount: item.amount, splitMode: item.splitMode, shares: item.splits.map((share) => ({ ...share, name: memberName(share.personId) })) })),
       shares: plan.splits.map((share) => ({ personId: share.personId, name: memberName(share.personId), amount: share.amount })),
     },
     message: `Added "${plan.write.description}" ${formatNpr(plan.write.amount)} ${where}, paid by ${payer}. ${describeSplits(plan.scope, plan.write.splitMode, plan.splits)}`,
     status: 201,
   };
+}
+
+/** Resolves names and computes every share without creating a friend, group, or expense. */
+export async function previewExpense(userId: string, draft: ExpenseDraft): Promise<Rendered<unknown>> {
+  const [book, account] = await Promise.all([getShareBook(userId), accountOf(userId)]);
+  const plan = planExpense(book, draft, { accountName: account.name });
+  const name = (id: string) => id === plan.scope.selfId ? "You" : plan.scope.members.find((person) => person.id === id)?.name ?? "Someone";
+  return { data: { preview: true, groupId: plan.scope.groupId, amount: plan.write.amount, paidBy: name(plan.write.paidById), splitMode: plan.write.splitMode, shares: plan.splits.map((share) => ({ ...share, name: name(share.personId) })), items: (plan.write.items ?? []).map((item) => ({ description: item.description, amount: item.amount, splitMode: item.splitMode, shares: item.splits.map((share) => ({ ...share, name: name(share.personId) })) })) }, message: describeSplits(plan.scope, plan.write.splitMode, plan.splits) };
+}
+
+/** Full split replacement, guarded by the version the agent read. */
+export async function editExpense(userId: string, id: string, payload: Record<string, unknown>, viaApiKey: boolean): Promise<Rendered<unknown>> {
+  const found = await findSharedExpense(userId, id);
+  if (!found) throw new NotFoundError(MISSING);
+  const version = payload.version;
+  if (payload.clearItems === true && payload.items !== undefined) throw new ValidationError("Choose updated receipt items or clearItems, not both.");
+  if (!Number.isInteger(version) || Number(version) <= 0) throw new ValidationError("Read the expense first and supply its current version.");
+  if (version !== found.expense.version) throw new ConflictError("This shared expense changed. Read it again before updating.");
+  const parsed = expenseInput(todayInKathmandu()).safeParse({ ...payload, date: payload.date ?? found.expense.date, paidBy: payload.paidBy ?? found.expense.paidById, note: payload.note ?? found.expense.note, category: payload.category === undefined ? found.expense.category ?? undefined : payload.category, group: payload.group === undefined ? found.expense.groupId : payload.group });
+  if (!parsed.success) throw new ValidationError(parsed.error.issues[0]?.message ?? "Invalid expense");
+  const [book, account] = await Promise.all([getShareBook(userId), accountOf(userId)]);
+  const plan = planExpense(book, parsed.data, { accountName: account.name });
+  const groupId = plan.directWith ? await ensureDirectGroup(userId, plan.directWith) : plan.write.groupId;
+  await editSharedExpense(userId, id, { ...plan.write, groupId, version: Number(version), items: payload.clearItems === true ? null : plan.write.items }, { includeActor: viaApiKey });
+  return readExpense(userId, id);
 }

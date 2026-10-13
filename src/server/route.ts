@@ -1,7 +1,8 @@
 import type { z } from "zod";
 import { agentError } from "@/server/agent-http";
 import { expireSnapshot } from "@/server/cache-tags";
-import { RateLimitError, ValidationError, type Audience } from "@/server/errors";
+import { ForbiddenError, RateLimitError, ValidationError, type Audience } from "@/server/errors";
+import { canAgent, type AgentIdentity, type AgentScope } from "@/lib/agent-permissions";
 import { jsonError } from "@/server/http";
 import type { RateLimiter } from "@/server/request-guard";
 import { agentIssue, plainIssue } from "@/server/validation";
@@ -44,7 +45,7 @@ export type RequestContext<P extends RouteParams, Q, B> = {
 export type RouteRuntime = {
   begin(): Promise<void>;
   session(request: Request): Promise<string>;
-  agent(request: Request): Promise<{ userId: string; viaApiKey: boolean }>;
+  agent(request: Request): Promise<AgentIdentity>;
   body(request: Request): Promise<unknown>;
   optionalBody(request: Request): Promise<unknown>;
   /** Drop the caller's cached snapshot after a write lands. */
@@ -59,6 +60,8 @@ export type Method<P extends RouteParams, Q, B> = {
    * `public` — anonymous. The caller still gets past CSRF and rate limits.
    */
   auth?: "session" | "agent" | "public";
+  /** Read-only POST endpoints, such as a split preview, opt into the read scope. */
+  scope?: AgentScope;
   /**
    * A schema, or a factory for one. The factory form exists because some schemas
    * close over the current date — `"yesterday"` has to mean yesterday *in
@@ -152,6 +155,8 @@ function build<P extends RouteParams, Q, B>(verb: string, method: Method<P, Q, B
         const identity = await rt.agent(request);
         userId = identity.userId;
         viaApiKey = identity.viaApiKey;
+        const scope = method.scope ?? (verb === "GET" ? "read" : verb === "DELETE" ? "delete" : "write");
+        if (!canAgent(identity, scope)) throw new ForbiddenError(`This agent key does not have ${scope} access.`);
       }
 
       let query = undefined as Q;
